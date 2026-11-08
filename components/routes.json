@@ -1,0 +1,169 @@
+{
+  "routes": [
+    {
+      "id": 1,
+      "from": "San Fernando",
+      "to": "Sudipen",
+      "townsPassed": [
+        { "name": "San Fernando", "fare": 0 },
+        { "name": "San Juan", "fare": 30 },
+        { "name": "Bacnotan", "fare": 40 },
+        { "name": "Balaoan", "fare": 50 },
+        { "name": "Bangar", "fare": 70 },
+        { "name": "Sudipen", "fare": 90 }
+      ],
+      "buses": [
+        { "id": "SF-SUD-1", "bus": "Bus No.10984", "time": "6:00 AM" },
+        { "id": "SF-SUD-2", "bus": "Bus No.10237", "time": "9:00 AM" },
+        { "id": "SF-SUD-3", "bus": "Bus No.10756", "time": "12:00 PM" }
+      ]
+    },
+
+    {
+      "id": 2,
+      "from": "Sudipen",
+      "to": "San Fernando",
+      "townsPassed": [
+        { "name": "Sudipen", "fare": 0 },
+        { "name": "Bangar", "fare": 20 },
+        { "name": "Balaoan", "fare": 40 },
+        { "name": "Bacnotan", "fare": 50 },
+        { "name": "San Juan", "fare": 60 },
+        { "name": "San Fernando", "fare": 90 }
+      ],
+      "buses": [
+        { "id": "SUD-SF-1", "bus": "Bus No.20984", "time": "6:00 AM" },
+        { "id": "SUD-SF-2", "bus": "Bus No.20237", "time": "9:00 AM" },
+        { "id": "SUD-SF-3", "bus": "Bus No.20756", "time": "12:00 PM" }
+      ]
+    },
+
+    {
+      "id": 3,
+      "from": "San Fernando",
+      "to": "Rosario",
+      "townsPassed": [
+        { "name": "San Fernando", "fare": 0 },
+        { "name": "Bauang", "fare": 30 },
+        { "name": "Caba", "fare": 40 },
+        { "name": "Aringay", "fare": 50 },
+        { "name": "Agoo", "fare": 60 },
+        { "name": "Santo Tomas", "fare": 70 },
+        { "name": "Rosario", "fare": 80 }
+      ],
+      "buses": [
+        { "id": "SF-ROS-1", "bus": "Bus No.10391", "time": "7:00 AM" },
+        { "id": "SF-ROS-2", "bus": "Bus No.10845", "time": "10:00 AM" },
+        { "id": "SF-ROS-3", "bus": "Bus No.10172", "time": "1:00 PM" }
+      ]
+    },
+
+    {
+      "id": 4,
+      "from": "Rosario",
+      "to": "San Fernando",
+      "townsPassed": [
+        { "name": "Rosario", "fare": 0 },
+        { "name": "Santo Tomas", "fare": 10 },
+        { "name": "Agoo", "fare": 20 },
+        { "name": "Aringay", "fare": 30 },
+        { "name": "Caba", "fare": 40 },
+        { "name": "Bauang", "fare": 50 },
+        { "name": "San Fernando", "fare": 80 }
+      ],
+      "buses": [
+        { "id": "ROS-SF-1", "bus": "Bus No.20391", "time": "7:00 AM" },
+        { "id": "ROS-SF-2", "bus": "Bus No.20845", "time": "10:00 AM" },
+        { "id": "ROS-SF-3", "bus": "Bus No.20172", "time": "1:00 PM" }
+      ]
+    },
+
+    {
+      "id": 5,
+      "from": "San Fernando",
+      "to": "Baguio",
+      "townsPassed": [
+        { "name": "San Fernando", "fare": 0 },
+        { "name": "Bauang", "fare": 30 },
+        { "name": "Naguilian", "fare": 60 },
+        { "name": "Sablan", "fare": 90 },
+        { "name": "La Trinidad", "fare": 120 },
+        { "name": "Baguio", "fare": 150 }
+      ],
+      "buses": [
+        { "id": "SF-BAG-1", "bus": "Bus No.10663", "time": "8:00 AM" },
+        { "id": "SF-BAG-2", "bus": "Bus No.10428", "time": "11:00 AM" },
+        { "id": "SF-BAG-3", "bus": "Bus No.10905", "time": "2:00 PM" }
+      ]
+    },
+
+    {
+      "id": 6,
+      "from": "Baguio",
+      "to": "San Fernando",
+      "townsPassed": [
+        { "name": "Baguio", "fare": 0 },
+        { "name": "La Trinidad", "fare": 30 },
+        { "name": "Sablan", "fare": 60 },
+        { "name": "Naguilian", "fare": 90 },
+        { "name": "Bauang", "fare": 120 },
+        { "name": "San Fernando", "fare": 150 }
+      ],
+      "buses": [
+        { "id": "BAG-SF-1", "bus": "Bus No.10518", "time": "8:00 AM" },
+        { "id": "BAG-SF-2", "bus": "Bus No.10792", "time": "11:00 AM" },
+        { "id": "BAG-SF-3", "bus": "Bus No.10266", "time": "2:00 PM" }
+      ]
+    },
+
+    {
+      "id": 7,
+      "from": "Rosario",
+      "to": "Sudipen",
+      "townsPassed": [
+        { "name": "Rosario", "fare": 0 },
+        { "name": "Santo Tomas", "fare": 10 },
+        { "name": "Agoo", "fare": 20 },
+        { "name": "Aringay", "fare": 30 },
+        { "name": "Caba", "fare": 40 },
+        { "name": "Bauang", "fare": 50 },
+        { "name": "San Fernando", "fare": 80 },
+        { "name": "San Juan", "fare": 110 },
+        { "name": "Bacnotan", "fare": 120 },
+        { "name": "Balaoan", "fare": 130 },
+        { "name": "Bangar", "fare": 150 },
+        { "name": "Sudipen", "fare": 170 }
+      ],
+      "buses": [
+        { "id": "ROS-SUD-1", "bus": "Bus No.30421", "time": "5:30 AM" },
+        { "id": "ROS-SUD-2", "bus": "Bus No.30765", "time": "9:30 AM" },
+        { "id": "ROS-SUD-3", "bus": "Bus No.30198", "time": "2:00 PM" }
+      ]
+    },
+
+    {
+      "id": 8,
+      "from": "Sudipen",
+      "to": "Rosario",
+      "townsPassed": [
+        { "name": "Sudipen", "fare": 0 },
+        { "name": "Bangar", "fare": 20 },
+        { "name": "Balaoan", "fare": 40 },
+        { "name": "Bacnotan", "fare": 50 },
+        { "name": "San Juan", "fare": 60 },
+        { "name": "San Fernando", "fare": 90 },
+        { "name": "Bauang", "fare": 120 },
+        { "name": "Caba", "fare": 130 },
+        { "name": "Aringay", "fare": 140 },
+        { "name": "Agoo", "fare": 150 },
+        { "name": "Santo Tomas", "fare": 160 },
+        { "name": "Rosario", "fare": 170 }
+      ],
+      "buses": [
+        { "id": "SUD-ROS-1", "bus": "Bus No.40421", "time": "5:30 AM" },
+        { "id": "SUD-ROS-2", "bus": "Bus No.40765", "time": "9:30 AM" },
+        { "id": "SUD-ROS-3", "bus": "Bus No.40198", "time": "2:00 PM" }
+      ]
+    }
+  ]
+}
