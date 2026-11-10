@@ -1,40 +1,44 @@
-
 import * as TaskManager from "expo-task-manager";
 import * as Location from "expo-location";
 import { supabase } from "../config/supabase";
 
-export const OPERATOR_LOCATION_TASK = "ROUTEX_OPERATOR_BACKGROUND_LOCATION";
-export const PASSENGER_LOCATION_TASK = "ROUTEX_PASSENGER_BACKGROUND_LOCATION";
+export const OPERATOR_LOCATION_TASK =
+  "ROUTEX_OPERATOR_BACKGROUND_LOCATION";
 
-// ------------------------------------------
-// SAVE OPERATOR LOCATION IN BACKGROUND
-// ------------------------------------------
+export const PASSENGER_LOCATION_TASK =
+  "ROUTEX_PASSENGER_BACKGROUND_LOCATION";
+
+// ==========================================
+// OPERATOR BACKGROUND LOCATION TASK
+// ==========================================
 
 TaskManager.defineTask(
   OPERATOR_LOCATION_TASK,
   async ({ data, error }) => {
     if (error) {
-      console.log("OPERATOR BACKGROUND GPS ERROR:", error.message);
+      console.log("OPERATOR GPS ERROR:", error.message);
       return;
     }
 
     const locations = data?.locations;
 
-    if (!locations || locations.length === 0) return;
+    if (!locations?.length) return;
 
     try {
+      // Get the authenticated operator.
       const {
         data: { session },
         error: sessionError,
       } = await supabase.auth.getSession();
 
-      if (sessionError || !session?.user) return;
+      if (sessionError) throw sessionError;
+      if (!session?.user) return;
 
       const operatorId = session.user.id;
       const position = locations[locations.length - 1];
       const coords = position.coords;
 
-      // Find the operator's active trip.
+      // Find the operator's latest active trip.
       const { data: trip, error: tripError } = await supabase
         .from("bus_trips")
         .select("trip_id, bus_id, operator_id")
@@ -45,9 +49,14 @@ TaskManager.defineTask(
         .maybeSingle();
 
       if (tripError) throw tripError;
-      if (!trip) return;
 
-      // Save the latest bus location.
+      // Do not save a location if the operator has no active trip.
+      if (!trip) {
+        console.log("NO ACTIVE OPERATOR TRIP FOUND");
+        return;
+      }
+
+      // Save the latest operator GPS location.
       const { error: saveError } = await supabase
         .from("bus_locations")
         .upsert(
@@ -59,56 +68,73 @@ TaskManager.defineTask(
             accuracy: coords.accuracy,
             speed: coords.speed,
             heading: coords.heading,
-            recorded_at: new Date(position.timestamp).toISOString(),
+            recorded_at: new Date(
+              position.timestamp
+            ).toISOString(),
           },
-          { onConflict: "bus_id" }
+          {
+            onConflict: "bus_id",
+          }
         );
 
       if (saveError) throw saveError;
 
-      // Check whether a passenger who hailed this bus is within 300 meters.
-      // The Edge Function verifies the operator and sends the push notification.
-      await supabase.functions.invoke("check-hail-proximity", {
-        body: {
-          bus_id: String(trip.bus_id),
-          trip_id: String(trip.trip_id),
-        },
+      console.log("OPERATOR LOCATION SAVED:", {
+        bus_id: trip.bus_id,
+        trip_id: trip.trip_id,
+        latitude: coords.latitude,
+        longitude: coords.longitude,
       });
 
+      /*
+       * HAIL PROXIMITY CHECK
+       *
+       * The proximity check is handled by
+       * OperatorHailRequests in HailingComponents.js.
+       *
+       * Do not invoke check-hail-proximity here because
+       * that Edge Function does not exist in your project.
+       */
     } catch (err) {
-      console.log("OPERATOR BACKGROUND TASK ERROR:", err.message);
+      console.log(
+        "OPERATOR BACKGROUND TASK ERROR:",
+        err.message
+      );
     }
   }
 );
 
-// ------------------------------------------
-// SAVE PASSENGER LOCATION IN BACKGROUND
-// ------------------------------------------
+// ==========================================
+// PASSENGER BACKGROUND LOCATION TASK
+// ==========================================
 
 TaskManager.defineTask(
   PASSENGER_LOCATION_TASK,
   async ({ data, error }) => {
     if (error) {
-      console.log("PASSENGER BACKGROUND GPS ERROR:", error.message);
+      console.log("PASSENGER GPS ERROR:", error.message);
       return;
     }
 
     const locations = data?.locations;
 
-    if (!locations || locations.length === 0) return;
+    if (!locations?.length) return;
 
     try {
+      // Get the authenticated passenger.
       const {
         data: { session },
         error: sessionError,
       } = await supabase.auth.getSession();
 
-      if (sessionError || !session?.user) return;
+      if (sessionError) throw sessionError;
+      if (!session?.user) return;
 
       const passengerId = session.user.id;
       const position = locations[locations.length - 1];
       const coords = position.coords;
 
+      // Save the passenger's latest GPS location.
       const { error: saveError } = await supabase
         .from("passenger_locations")
         .upsert(
@@ -117,64 +143,138 @@ TaskManager.defineTask(
             latitude: coords.latitude,
             longitude: coords.longitude,
             accuracy: coords.accuracy,
-            recorded_at: new Date(position.timestamp).toISOString(),
+            recorded_at: new Date(
+              position.timestamp
+            ).toISOString(),
             sharing_enabled: true,
           },
-          { onConflict: "passenger_id" }
+          {
+            onConflict: "passenger_id",
+          }
         );
 
       if (saveError) throw saveError;
 
+      console.log(
+        "PASSENGER LOCATION SAVED:",
+        passengerId
+      );
     } catch (err) {
-      console.log("PASSENGER BACKGROUND TASK ERROR:", err.message);
+      console.log(
+        "PASSENGER BACKGROUND TASK ERROR:",
+        err.message
+      );
     }
   }
 );
 
-// ------------------------------------------
-// PERMISSION HELPER
-// ------------------------------------------
+// ==========================================
+// LOCATION PERMISSIONS
+// ==========================================
 
 export async function requestBackgroundLocationPermission() {
-  const foreground =
-    await Location.requestForegroundPermissionsAsync();
+  try {
+    // 1. Check whether GPS is enabled.
+    const enabled =
+      await Location.hasServicesEnabledAsync();
 
-  if (foreground.status !== "granted") {
-    throw new Error(
-      "RouteX needs location permission while the app is in use."
+    if (!enabled) {
+      throw new Error(
+        "Please turn on your phone's GPS."
+      );
+    }
+
+    // 2. Check foreground location permission.
+    let foreground =
+      await Location.getForegroundPermissionsAsync();
+
+    if (foreground.status !== "granted") {
+      foreground =
+        await Location.requestForegroundPermissionsAsync();
+    }
+
+    if (foreground.status !== "granted") {
+      throw new Error(
+        "Please allow RouteX to access your location while using the app."
+      );
+    }
+
+    // 3. Check background location permission.
+    let background =
+      await Location.getBackgroundPermissionsAsync();
+
+    if (background.status !== "granted") {
+      background =
+        await Location.requestBackgroundPermissionsAsync();
+    }
+
+    if (background.status !== "granted") {
+      throw new Error(
+        'Background location permission is required. Please select "Allow all the time" in your phone settings.'
+      );
+    }
+
+    console.log(
+      "FOREGROUND PERMISSION:",
+      foreground.status
     );
-  }
 
-  const background =
-    await Location.requestBackgroundPermissionsAsync();
-
-  if (background.status !== "granted") {
-    throw new Error(
-      'Please allow RouteX to access location "All the time" in your phone settings.'
+    console.log(
+      "BACKGROUND PERMISSION:",
+      background.status
     );
-  }
 
-  const enabled = await Location.hasServicesEnabledAsync();
+    console.log(
+      "GPS SERVICES ENABLED:",
+      enabled
+    );
 
-  if (!enabled) {
-    throw new Error("Please turn on your phone's GPS.");
+    return true;
+  } catch (error) {
+    console.log(
+      "LOCATION PERMISSION ERROR:",
+      error.message
+    );
+
+    throw error;
   }
 }
 
-// ------------------------------------------
-// START OPERATOR BACKGROUND GPS
-// ------------------------------------------
+// ==========================================
+// CHECK OPERATOR GPS
+// ==========================================
+
+export async function isOperatorBackgroundGPSRunning() {
+  return await Location.hasStartedLocationUpdatesAsync(
+    OPERATOR_LOCATION_TASK
+  );
+}
+
+// ==========================================
+// START OPERATOR GPS
+// ==========================================
 
 export async function startOperatorBackgroundGPS() {
-  await requestBackgroundLocationPermission();
+  // Verify location permissions.
+  const permissionGranted =
+    await requestBackgroundLocationPermission();
 
-  const alreadyStarted =
-    await Location.hasStartedLocationUpdatesAsync(
-      OPERATOR_LOCATION_TASK
+  if (!permissionGranted) {
+    throw new Error(
+      "Location permission is required to start bus tracking."
     );
+  }
 
-  if (alreadyStarted) return;
+  // Check whether tracking is already running.
+  const alreadyStarted =
+    await isOperatorBackgroundGPSRunning();
 
+  if (alreadyStarted) {
+    console.log("OPERATOR GPS IS ALREADY RUNNING");
+    return true;
+  }
+
+  // Start background GPS tracking.
   await Location.startLocationUpdatesAsync(
     OPERATOR_LOCATION_TASK,
     {
@@ -183,45 +283,61 @@ export async function startOperatorBackgroundGPS() {
       distanceInterval: 5,
       pausesUpdatesAutomatically: false,
       showsBackgroundLocationIndicator: true,
+
       foregroundService: {
         notificationTitle: "RouteX Bus Tracking",
-        notificationBody: "Your active bus trip is sharing its location.",
+        notificationBody:
+          "Your active bus trip is sharing its location.",
         notificationColor: "#0891B2",
       },
     }
   );
+
+  console.log("OPERATOR BACKGROUND GPS STARTED");
+
+  return true;
 }
 
-// ------------------------------------------
-// STOP OPERATOR BACKGROUND GPS
-// ------------------------------------------
+// ==========================================
+// STOP OPERATOR GPS
+// ==========================================
 
 export async function stopOperatorBackgroundGPS() {
   const started =
-    await Location.hasStartedLocationUpdatesAsync(
-      OPERATOR_LOCATION_TASK
-    );
+    await isOperatorBackgroundGPSRunning();
 
-  if (started) {
-    await Location.stopLocationUpdatesAsync(
-      OPERATOR_LOCATION_TASK
-    );
-  }
+  if (!started) return;
+
+  await Location.stopLocationUpdatesAsync(
+    OPERATOR_LOCATION_TASK
+  );
+
+  console.log("OPERATOR BACKGROUND GPS STOPPED");
 }
 
-// ------------------------------------------
-// START PASSENGER BACKGROUND GPS
-// ------------------------------------------
+// ==========================================
+// START PASSENGER GPS
+// ==========================================
 
 export async function startPassengerBackgroundGPS() {
-  await requestBackgroundLocationPermission();
+  const permissionGranted =
+    await requestBackgroundLocationPermission();
+
+  if (!permissionGranted) {
+    throw new Error(
+      "Location permission is required to share passenger location."
+    );
+  }
 
   const alreadyStarted =
     await Location.hasStartedLocationUpdatesAsync(
       PASSENGER_LOCATION_TASK
     );
 
-  if (alreadyStarted) return;
+  if (alreadyStarted) {
+    console.log("PASSENGER GPS IS ALREADY RUNNING");
+    return true;
+  }
 
   await Location.startLocationUpdatesAsync(
     PASSENGER_LOCATION_TASK,
@@ -231,18 +347,24 @@ export async function startPassengerBackgroundGPS() {
       distanceInterval: 5,
       pausesUpdatesAutomatically: false,
       showsBackgroundLocationIndicator: true,
+
       foregroundService: {
         notificationTitle: "RouteX Passenger Location",
-        notificationBody: "Your location is being shared with RouteX.",
+        notificationBody:
+          "Your location is being shared with RouteX.",
         notificationColor: "#0891B2",
       },
     }
   );
+
+  console.log("PASSENGER BACKGROUND GPS STARTED");
+
+  return true;
 }
 
-// ------------------------------------------
-// STOP PASSENGER BACKGROUND GPS
-// ------------------------------------------
+// ==========================================
+// STOP PASSENGER GPS
+// ==========================================
 
 export async function stopPassengerBackgroundGPS() {
   const started =
@@ -250,9 +372,11 @@ export async function stopPassengerBackgroundGPS() {
       PASSENGER_LOCATION_TASK
     );
 
-  if (started) {
-    await Location.stopLocationUpdatesAsync(
-      PASSENGER_LOCATION_TASK
-    );
-  }
+  if (!started) return;
+
+  await Location.stopLocationUpdatesAsync(
+    PASSENGER_LOCATION_TASK
+  );
+
+  console.log("PASSENGER BACKGROUND GPS STOPPED");
 }

@@ -2,6 +2,7 @@
 import React, {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -16,11 +17,16 @@ import {
   ScrollView,
 } from "react-native";
 
-import MapView, { Marker, Callout } from "react-native-maps";
+import { WebView } from "react-native-webview";
 import * as Location from "expo-location";
 import { Ionicons } from "@expo/vector-icons";
 
 import { supabase } from "../config/supabase";
+
+import {
+  PassengerHailButton,
+  OperatorHailRequests,
+} from "../components/HailingComponents";
 
 import {
   startPassengerBackgroundGPS,
@@ -28,14 +34,9 @@ import {
   requestBackgroundLocationPermission,
 } from "../tasks/backgroundLocation";
 
-const PASSENGER_LOCATION_TASK =
-  "ROUTEX_PASSENGER_BACKGROUND_LOCATION";
-
 const DEFAULT_REGION = {
   latitude: 16.6159,
   longitude: 120.3166,
-  latitudeDelta: 0.35,
-  longitudeDelta: 0.35,
 };
 
 const STATUS_COLORS = {
@@ -50,527 +51,734 @@ const STATUS_LABELS = {
   not_available: "Not Available",
 };
 
-export default function TrackingScreen() {
-  const mapRef = useRef(null);
-  const passengerSubscription = useRef(null);
-  const mounted = useRef(true);
-  const hasFittedMap = useRef(false);
+// --------------------------------------------------
+// OPENSTREETMAP + LEAFLET HTML
+// --------------------------------------------------
+
+const OPEN_STREET_MAP_HTML = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  />
+
+  <style>
+    html, body, #map {
+      height: 100%;
+      width: 100%;
+      margin: 0;
+      padding: 0;
+      background: #e2e8f0;
+    }
+
+    .leaflet-container {
+      font-family: Arial, sans-serif;
+    }
+
+    .bus-marker {
+      background: #06b6d4;
+      border: 3px solid white;
+      border-radius: 50%;
+      width: 34px;
+      height: 34px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 17px;
+      font-weight: bold;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+
+    .passenger-marker {
+      background: #7c3aed;
+      border: 3px solid white;
+      border-radius: 50%;
+      width: 26px;
+      height: 26px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 13px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+
+    .selected-marker {
+      background: #0891b2;
+      transform: scale(1.15);
+    }
+  </style>
+</head>
+
+<body>
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <script>
+    const map = L.map("map").setView(
+      [16.6159, 120.3166],
+      13
+    );
+
+    L.tileLayer(
+      "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+      {
+        maxZoom: 19,
+        attribution: "&copy; OpenStreetMap contributors"
+      }
+    ).addTo(map);
+
+    let busMarkers = {};
+    let passengerMarkers = {};
+    let currentLocationMarker = null;
+
+    function clearBusMarkers() {
+      Object.values(busMarkers).forEach(marker => {
+        map.removeLayer(marker);
+      });
+
+      busMarkers = {};
+    }
+
+    function clearPassengerMarkers() {
+      Object.values(passengerMarkers).forEach(marker => {
+        map.removeLayer(marker);
+      });
+
+      passengerMarkers = {};
+    }
+
+    function updateBuses(buses, selectedBusId) {
+      clearBusMarkers();
+
+      buses.forEach(bus => {
+        if (!bus.location) return;
+
+        const latitude = Number(bus.location.latitude);
+        const longitude = Number(bus.location.longitude);
+
+        if (!Number.isFinite(latitude) ||
+            !Number.isFinite(longitude)) {
+          return;
+        }
+
+        const icon = L.divIcon({
+          className: "",
+          html: '<div class="bus-marker ' +
+            (String(bus.bus_id) === String(selectedBusId)
+              ? "selected-marker"
+              : "") +
+            '">🚌</div>',
+          iconSize: [34, 34],
+          iconAnchor: [17, 17]
+        });
+
+        const marker = L.marker(
+          [latitude, longitude],
+          { icon }
+        ).addTo(map);
+
+        marker.bindPopup(
+          "<b>" + (bus.bus_name || "Bus") + "</b><br>" +
+          "Plate: " + (bus.plate_number || "Unavailable") +
+          "<br>Destination: " +
+          (bus.destination || "Not set")
+        );
+
+        busMarkers[bus.bus_id] = marker;
+      });
+    }
+
+    function updatePassengers(passengers) {
+      clearPassengerMarkers();
+
+      passengers.forEach(passenger => {
+        const latitude = Number(passenger.latitude);
+        const longitude = Number(passenger.longitude);
+
+        if (!Number.isFinite(latitude) ||
+            !Number.isFinite(longitude)) {
+          return;
+        }
+
+        const icon = L.divIcon({
+          className: "",
+          html: '<div class="passenger-marker">👤</div>',
+          iconSize: [26, 26],
+          iconAnchor: [13, 13]
+        });
+
+        const marker = L.marker(
+          [latitude, longitude],
+          { icon }
+        ).addTo(map);
+
+        marker.bindPopup("Passenger location");
+
+        passengerMarkers[passenger.passenger_id] = marker;
+      });
+    }
+
+    function updateCurrentLocation(latitude, longitude) {
+      if (currentLocationMarker) {
+        map.removeLayer(currentLocationMarker);
+      }
+
+      currentLocationMarker = L.circleMarker(
+        [latitude, longitude],
+        {
+          radius: 8,
+          color: "#ffffff",
+          weight: 3,
+          fillColor: "#2563eb",
+          fillOpacity: 1
+        }
+      ).addTo(map);
+
+      currentLocationMarker.bindPopup("Your location");
+    }
+
+    function centerMap(latitude, longitude) {
+      map.setView([latitude, longitude], 16);
+    }
+
+    function handleMessage(event) {
+      try {
+        const data = JSON.parse(event.data);
+
+        if (data.type === "UPDATE_BUSES") {
+          updateBuses(data.buses || [], data.selectedBusId);
+        }
+
+        if (data.type === "UPDATE_PASSENGERS") {
+          updatePassengers(data.passengers || []);
+        }
+
+        if (data.type === "CURRENT_LOCATION") {
+          updateCurrentLocation(
+            data.latitude,
+            data.longitude
+          );
+        }
+
+        if (data.type === "CENTER_MAP") {
+          centerMap(data.latitude, data.longitude);
+        }
+      } catch (error) {
+        console.log("Map message error:", error);
+      }
+    }
+
+    document.addEventListener("message", handleMessage);
+    window.addEventListener("message", handleMessage);
+  </script>
+</body>
+</html>
+`;
+
+// --------------------------------------------------
+// HELPER FUNCTIONS
+// --------------------------------------------------
+
+function getBusStatus(status) {
+  if (status === 1 || status === "1") {
+    return "available";
+  }
+
+  if (status === 2 || status === "2") {
+    return "standing";
+  }
+
+  if (
+    status === 0 ||
+    status === "0" ||
+    status === null ||
+    status === undefined
+  ) {
+    return "not_available";
+  }
+
+  const normalized = String(status).toLowerCase();
+
+  if (normalized.includes("available")) {
+    return "available";
+  }
+
+  if (normalized.includes("standing")) {
+    return "standing";
+  }
+
+  return "not_available";
+}
+
+function getBusStatusLabel(status) {
+  const normalized = getBusStatus(status);
+  return STATUS_LABELS[normalized] || "Not Available";
+}
+
+function getBusStatusColor(status) {
+  const normalized = getBusStatus(status);
+  return STATUS_COLORS[normalized] || "#DC2626";
+}
+
+// --------------------------------------------------
+// TRACKING SCREEN
+// --------------------------------------------------
+
+export default function TrackingScreen({ navigation }) {
+  const webViewRef = useRef(null);
+  const mountedRef = useRef(true);
 
   const [user, setUser] = useState(null);
-  const [userLevel, setUserLevel] = useState(null);
+  const [userLevel, setUserLevel] = useState("");
 
   const [buses, setBuses] = useState([]);
   const [passengers, setPassengers] = useState([]);
 
   const [selectedBusId, setSelectedBusId] = useState(null);
 
+  const [currentLocation, setCurrentLocation] = useState(null);
+
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const [sharingLocation, setSharingLocation] = useState(false);
-  const [myLocation, setMyLocation] = useState(null);
+  const [locationPermission, setLocationPermission] =
+    useState(false);
 
-  const [errorMessage, setErrorMessage] = useState("");
+  const selectedBus = useMemo(() => {
+    return buses.find(
+      bus => String(bus.bus_id) === String(selectedBusId)
+    ) || null;
+  }, [buses, selectedBusId]);
 
-  const selectedBus =
-    buses.find((item) => item.bus_id === selectedBusId) || null;
-
-  // ------------------------------------------
-  // STATUS HELPERS
-  // ------------------------------------------
-
-  const getBusStatus = (status) => {
-    const validStatuses = [
-      "available",
-      "standing",
-      "not_available",
-    ];
-
-    return validStatuses.includes(status) ? status : "available";
-  };
-
-  const getStatusLabel = (status) => {
-    return STATUS_LABELS[getBusStatus(status)];
-  };
-
-  const getStatusColor = (status) => {
-    return STATUS_COLORS[getBusStatus(status)];
-  };
-
-  const hasValidLocation = (location) => {
-    if (!location) return false;
-
-    const latitude = Number(location.latitude);
-    const longitude = Number(location.longitude);
-
-    return (
-      Number.isFinite(latitude) &&
-      Number.isFinite(longitude) &&
-      latitude >= -90 &&
-      latitude <= 90 &&
-      longitude >= -180 &&
-      longitude <= 180
-    );
-  };
-
-  // ------------------------------------------
-  // LOAD USER
-  // ------------------------------------------
+  // --------------------------------------------------
+  // LOAD SIGNED-IN USER
+  // --------------------------------------------------
 
   const loadUser = useCallback(async () => {
-    const {
-      data: { user: currentUser },
-      error: authError,
-    } = await supabase.auth.getUser();
+    try {
+      const {
+        data: { user: authUser },
+        error: authError,
+      } = await supabase.auth.getUser();
 
-    if (authError) throw authError;
+      if (authError) throw authError;
 
-    if (!currentUser) {
-      throw new Error("Please log in again.");
+      if (!authUser) {
+        if (mountedRef.current) {
+          setUser(null);
+          setUserLevel("");
+        }
+
+        return null;
+      }
+
+      const { data: profile, error: profileError } =
+        await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", authUser.id)
+          .maybeSingle();
+
+      if (profileError) throw profileError;
+
+      const level = profile?.user_level || "user";
+
+      if (mountedRef.current) {
+        setUser(authUser);
+        setUserLevel(level);
+      }
+
+      return {
+        ...authUser,
+        user_level: level,
+      };
+    } catch (error) {
+      console.log("LOAD USER ERROR:", error.message);
+      return null;
     }
-
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("user_level")
-      .eq("id", currentUser.id)
-      .single();
-
-    if (error) throw error;
-
-    if (mounted.current) {
-      setUser(currentUser);
-      setUserLevel(data.user_level);
-    }
-
-    return {
-      currentUser,
-      level: data.user_level,
-    };
   }, []);
 
-  // ------------------------------------------
-  // LOAD ACTIVE BUSES ONLY
-  // ------------------------------------------
+  // --------------------------------------------------
+  // LOAD ACTIVE BUSES
+  // --------------------------------------------------
 
   const loadLiveBuses = useCallback(async () => {
     try {
-      setErrorMessage("");
-
       const { data: activeTrips, error: tripError } =
         await supabase
           .from("bus_trips")
-          .select(`
-            trip_id,
-            bus_id,
-            operator_id,
-            destination,
-            status,
-            started_at
-          `)
-          .eq("status", "active");
+          .select(
+            "trip_id,bus_id,operator_id,destination,status,started_at"
+          )
+          .eq("status", "active")
+          .order("started_at", { ascending: false });
 
       if (tripError) throw tripError;
 
       if (!activeTrips || activeTrips.length === 0) {
-        if (mounted.current) {
+        if (mountedRef.current) {
           setBuses([]);
           setSelectedBusId(null);
-          hasFittedMap.current = false;
         }
 
-        return;
+        return [];
       }
 
-      const activeBusIds = [
-        ...new Set(activeTrips.map((trip) => trip.bus_id)),
+      const busIds = [
+        ...new Set(activeTrips.map(trip => trip.bus_id)),
       ];
 
       const { data: busData, error: busError } =
         await supabase
           .from("buses")
-          .select(`
-            bus_id,
-            bus_name,
-            plate_number,
-            operator_id,
-            availability_status
-          `)
-          .in("bus_id", activeBusIds);
+          .select("*")
+          .in("bus_id", busIds);
 
       if (busError) throw busError;
 
       const { data: locationData, error: locationError } =
         await supabase
           .from("bus_locations")
-          .select(`
-            bus_id,
-            trip_id,
-            latitude,
-            longitude,
-            accuracy,
-            speed,
-            heading,
-            recorded_at
-          `)
-          .in("bus_id", activeBusIds);
+          .select("*")
+          .in("bus_id", busIds)
+          .order("recorded_at", { ascending: false });
 
       if (locationError) throw locationError;
 
-      const combined = (busData || [])
-        .map((bus) => {
-          const activeTrip = activeTrips.find(
-            (trip) => trip.bus_id === bus.bus_id
-          );
+      const combined = (busData || []).map(bus => {
+        const activeTrip = activeTrips.find(
+          trip => String(trip.bus_id) === String(bus.bus_id)
+        );
 
-          if (!activeTrip) return null;
+        const latestLocation = (locationData || []).find(
+          location =>
+            String(location.bus_id) === String(bus.bus_id) &&
+            String(location.trip_id) === String(activeTrip?.trip_id)
+        );
 
-          const latestLocation = (locationData || [])
-            .filter(
-              (location) =>
-                location.bus_id === bus.bus_id &&
-                location.trip_id === activeTrip.trip_id
-            )
-            .sort(
-              (a, b) =>
-                new Date(b.recorded_at) -
-                new Date(a.recorded_at)
-            )[0] || null;
+        return {
+          ...bus,
+          availability_status: getBusStatus(
+            bus.availability_status
+          ),
+          trip: activeTrip,
+          trip_id: activeTrip?.trip_id,
+          destination: activeTrip?.destination,
+          operator_id: activeTrip?.operator_id,
+          location: latestLocation || null,
+        };
+      });
 
-          return {
-            ...bus,
-            availability_status: getBusStatus(
-              bus.availability_status
-            ),
-            trip: activeTrip,
-            trip_id: activeTrip.trip_id,
-            destination: activeTrip.destination,
-            operator_id: activeTrip.operator_id,
-            location: latestLocation,
-          };
-        })
-        .filter(Boolean);
-
-      if (mounted.current) {
+      if (mountedRef.current) {
         setBuses(combined);
 
-        setSelectedBusId((previousId) => {
-          if (
-            previousId &&
-            !combined.some(
-              (item) => item.bus_id === previousId
-            )
-          ) {
-            return null;
-          }
-
-          return previousId;
-        });
-
-        if (combined.length === 0) {
-          hasFittedMap.current = false;
+        if (
+          selectedBusId &&
+          !combined.some(
+            bus => String(bus.bus_id) === String(selectedBusId)
+          )
+        ) {
+          setSelectedBusId(null);
         }
       }
+
+      return combined;
     } catch (error) {
       console.log("LOAD LIVE BUSES ERROR:", error.message);
-
-      if (mounted.current) {
-        setErrorMessage(
-          "Unable to load active buses. Please try again."
-        );
-      }
+      return [];
     }
-  }, []);
+  }, [selectedBusId]);
 
-  // ------------------------------------------
-  // LOAD SHARED PASSENGERS
-  // ------------------------------------------
+  // --------------------------------------------------
+  // LOAD SHARED PASSENGER LOCATIONS
+  // --------------------------------------------------
 
-  const loadSharedPassengers = useCallback(async () => {
+  const loadPassengers = useCallback(async () => {
     try {
-      const oneMinuteAgo = new Date(
-        Date.now() - 60 * 1000
-      ).toISOString();
-
       const { data, error } = await supabase
         .from("passenger_locations")
-        .select(`
-          passenger_id,
-          latitude,
-          longitude,
-          accuracy,
-          recorded_at,
-          sharing_enabled
-        `)
+        .select(
+          "passenger_id,latitude,longitude,accuracy,recorded_at,sharing_enabled"
+        )
         .eq("sharing_enabled", true)
-        .gte("recorded_at", oneMinuteAgo);
+        .order("recorded_at", { ascending: false });
 
       if (error) throw error;
 
-      if (mounted.current) {
-        setPassengers(data || []);
+      const recentPassengers = (data || []).filter(item => {
+        if (!item.recorded_at) return false;
+
+        const age =
+          Date.now() - new Date(item.recorded_at).getTime();
+
+        return age >= 0 && age <= 60000;
+      });
+
+      if (mountedRef.current) {
+        setPassengers(recentPassengers);
       }
     } catch (error) {
       console.log("LOAD PASSENGERS ERROR:", error.message);
     }
   }, []);
 
-  // ------------------------------------------
-  // REFRESH MAP
-  // ------------------------------------------
+  // --------------------------------------------------
+  // LOAD ALL TRACKING DATA
+  // --------------------------------------------------
 
-  const refreshMap = useCallback(async () => {
-    setRefreshing(true);
+  const loadTrackingData = useCallback(async () => {
+    try {
+      setRefreshing(true);
 
-    await loadLiveBuses();
-
-    if (userLevel === "operator") {
-      await loadSharedPassengers();
+      await Promise.all([
+        loadLiveBuses(),
+        loadPassengers(),
+      ]);
+    } catch (error) {
+      console.log("LOAD TRACKING DATA ERROR:", error.message);
+    } finally {
+      if (mountedRef.current) {
+        setRefreshing(false);
+        setLoading(false);
+      }
     }
+  }, [loadLiveBuses, loadPassengers]);
 
-    if (mounted.current) {
-      setRefreshing(false);
+  // --------------------------------------------------
+  // GET CURRENT LOCATION
+  // --------------------------------------------------
+
+  const getCurrentLocation = useCallback(async () => {
+    try {
+      const permission =
+        await Location.requestForegroundPermissionsAsync();
+
+      if (permission.status !== "granted") {
+        if (mountedRef.current) {
+          setLocationPermission(false);
+        }
+
+        return;
+      }
+
+      if (mountedRef.current) {
+        setLocationPermission(true);
+      }
+
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
+
+      const coords = {
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+      };
+
+      if (mountedRef.current) {
+        setCurrentLocation(coords);
+      }
+    } catch (error) {
+      console.log("CURRENT LOCATION ERROR:", error.message);
     }
-  }, [
-    loadLiveBuses,
-    loadSharedPassengers,
-    userLevel,
-  ]);
+  }, []);
 
-  // ------------------------------------------
-  // PASSENGER BACKGROUND LOCATION SHARING
-  // ------------------------------------------
+  // --------------------------------------------------
+  // START PASSENGER LOCATION SHARING
+  // --------------------------------------------------
 
-  const disablePassengerSharing = useCallback(async () => {
+  const startPassengerLocationSharing = useCallback(async () => {
+    if (!user?.id || userLevel !== "user") return;
+
+    try {
+      const permission =
+        await Location.requestForegroundPermissionsAsync();
+
+      if (permission.status !== "granted") {
+        Alert.alert(
+          "Location Permission",
+          "Please allow location access to share your location."
+        );
+
+        return;
+      }
+
+      if (mountedRef.current) {
+        setLocationPermission(true);
+      }
+
+      const backgroundPermission =
+        await requestBackgroundLocationPermission();
+
+      if (!backgroundPermission) {
+        console.log("Background permission was not granted.");
+      }
+
+      await startPassengerBackgroundGPS(user.id);
+
+      console.log("PASSENGER LOCATION SHARING STARTED");
+    } catch (error) {
+      console.log(
+        "START PASSENGER LOCATION ERROR:",
+        error.message
+      );
+    }
+  }, [user, userLevel]);
+
+  // --------------------------------------------------
+  // STOP PASSENGER LOCATION SHARING
+  // --------------------------------------------------
+
+  const stopPassengerLocationSharing = useCallback(async () => {
     try {
       await stopPassengerBackgroundGPS();
 
-      if (user) {
+      if (user?.id) {
         const { error } = await supabase
           .from("passenger_locations")
-          .update({
-            sharing_enabled: false,
-            recorded_at: new Date().toISOString(),
-          })
+          .update({ sharing_enabled: false })
           .eq("passenger_id", user.id);
 
-        if (error) throw error;
+        if (error) {
+          console.log(
+            "STOP LOCATION DATABASE ERROR:",
+            error.message
+          );
+        }
       }
 
-      if (mounted.current) {
-        setSharingLocation(false);
-        setMyLocation(null);
-      }
-
-      Alert.alert(
-        "Location Sharing Stopped",
-        "Your live location is no longer being shared."
-      );
-    } catch (error) {
-      console.log("STOP SHARING ERROR:", error.message);
-
-      Alert.alert(
-        "Unable to Stop Sharing",
-        error.message || "Please try again."
-      );
-    }
-  }, [user]);
-
-  const startPassengerSharing = useCallback(async () => {
-    if (!user) return;
-
-    try {
-      // Request the permissions required for background tracking.
-      const permissionResult =
-        await requestBackgroundLocationPermission();
-
-      if (permissionResult === false) {
-        throw new Error(
-          "Location permission was not granted. Please allow location access in your phone settings."
-        );
-      }
-
-      // Get the initial location.
-      const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
-
-      const coords = location.coords;
-
-      // Save the initial passenger location.
-      const { error } = await supabase
-        .from("passenger_locations")
-        .upsert(
-          {
-            passenger_id: user.id,
-            latitude: coords.latitude,
-            longitude: coords.longitude,
-            accuracy: coords.accuracy,
-            recorded_at: new Date().toISOString(),
-            sharing_enabled: true,
-          },
-          {
-            onConflict: "passenger_id",
-          }
-        );
-
-      if (error) throw error;
-
-      // Start background GPS updates.
-      await startPassengerBackgroundGPS();
-
-      if (mounted.current) {
-        setMyLocation({
-          latitude: coords.latitude,
-          longitude: coords.longitude,
-        });
-
-        setSharingLocation(true);
-      }
-
-      Alert.alert(
-        "Location Sharing Enabled",
-        "Your location is now being shared. RouteX can continue updating it while minimized if background permission is enabled."
-      );
+      console.log("PASSENGER LOCATION SHARING STOPPED");
     } catch (error) {
       console.log(
-        "START PASSENGER SHARING ERROR:",
+        "STOP PASSENGER LOCATION ERROR:",
         error.message
-      );
-
-      Alert.alert(
-        "Location Error",
-        error.message || "Unable to share your location."
       );
     }
   }, [user]);
 
-  const togglePassengerSharing = () => {
-    if (sharingLocation) {
-      Alert.alert(
-        "Stop Sharing?",
-        "Operators will no longer see your live location.",
-        [
-          {
-            text: "Cancel",
-            style: "cancel",
-          },
-          {
-            text: "Stop Sharing",
-            style: "destructive",
-            onPress: disablePassengerSharing,
-          },
-        ]
-      );
-    } else {
-      startPassengerSharing();
-    }
-  };
+  // --------------------------------------------------
+  // UPDATE MAP
+  // --------------------------------------------------
 
-  // ------------------------------------------
+  const sendMapMessage = useCallback(message => {
+    if (!webViewRef.current) return;
+
+    webViewRef.current.postMessage(
+      JSON.stringify(message)
+    );
+  }, []);
+
+  const updateMap = useCallback(() => {
+    sendMapMessage({
+      type: "UPDATE_BUSES",
+      buses,
+      selectedBusId,
+    });
+
+    sendMapMessage({
+      type: "UPDATE_PASSENGERS",
+      passengers,
+    });
+
+    if (currentLocation) {
+      sendMapMessage({
+        type: "CURRENT_LOCATION",
+        latitude: currentLocation.latitude,
+        longitude: currentLocation.longitude,
+      });
+    }
+  }, [
+    buses,
+    passengers,
+    selectedBusId,
+    currentLocation,
+    sendMapMessage,
+  ]);
+
+  // --------------------------------------------------
+  // SELECT BUS
+  // --------------------------------------------------
+
+  const handleSelectBus = useCallback(bus => {
+    setSelectedBusId(bus.bus_id);
+
+    if (bus.location) {
+      sendMapMessage({
+        type: "CENTER_MAP",
+        latitude: bus.location.latitude,
+        longitude: bus.location.longitude,
+      });
+    }
+  }, [sendMapMessage]);
+
+  // --------------------------------------------------
+  // REFRESH
+  // --------------------------------------------------
+
+  const handleRefresh = useCallback(async () => {
+    await loadTrackingData();
+  }, [loadTrackingData]);
+
+  // --------------------------------------------------
   // INITIAL LOAD
-  // ------------------------------------------
+  // --------------------------------------------------
 
   useEffect(() => {
-    mounted.current = true;
+    mountedRef.current = true;
 
-    async function initialize() {
-      try {
-        const account = await loadUser();
-
-        // Restore passenger sharing status.
-        if (account.level === "user") {
-          try {
-            const isTracking =
-              await Location.hasStartedLocationUpdatesAsync(
-                PASSENGER_LOCATION_TASK
-              );
-
-            if (isTracking && mounted.current) {
-              setSharingLocation(true);
-
-              const { data: locationData } = await supabase
-                .from("passenger_locations")
-                .select("latitude, longitude")
-                .eq("passenger_id", account.currentUser.id)
-                .maybeSingle();
-
-              if (locationData && mounted.current) {
-                setMyLocation({
-                  latitude: Number(locationData.latitude),
-                  longitude: Number(locationData.longitude),
-                });
-              }
-            }
-          } catch (trackingError) {
-            console.log(
-              "CHECK PASSENGER GPS ERROR:",
-              trackingError.message
-            );
-          }
-        }
-
-        await loadLiveBuses();
-
-        if (account.level === "operator") {
-          await loadSharedPassengers();
-        }
-
-        if (mounted.current) {
-          setLoading(false);
-        }
-      } catch (error) {
-        console.log(
-          "TRACKING INITIALIZATION ERROR:",
-          error.message
-        );
-
-        if (mounted.current) {
-          setErrorMessage(error.message);
-          setLoading(false);
-        }
-      }
-    }
+    const initialize = async () => {
+      await loadUser();
+      await getCurrentLocation();
+      await loadTrackingData();
+    };
 
     initialize();
 
     return () => {
-      mounted.current = false;
-
-      if (passengerSubscription.current) {
-        supabase.removeChannel(
-          passengerSubscription.current
-        );
-
-        passengerSubscription.current = null;
-      }
-
-      // Do not stop background GPS here.
-      // It must continue when the screen closes.
+      mountedRef.current = false;
     };
   }, [
     loadUser,
-    loadLiveBuses,
-    loadSharedPassengers,
+    getCurrentLocation,
+    loadTrackingData,
   ]);
 
-  // ------------------------------------------
-  // REALTIME UPDATES
-  // ------------------------------------------
+  // --------------------------------------------------
+  // PASSENGER GPS SHARING
+  // --------------------------------------------------
 
   useEffect(() => {
-    if (!userLevel) return;
+    if (userLevel !== "user" || !user?.id) {
+      return;
+    }
 
-    const busChannel = supabase
-      .channel("live-bus-tracking")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "buses",
-        },
-        loadLiveBuses
-      )
+    startPassengerLocationSharing();
+
+    return () => {
+      stopPassengerLocationSharing();
+    };
+  }, [
+    user?.id,
+    userLevel,
+    startPassengerLocationSharing,
+    stopPassengerLocationSharing,
+  ]);
+
+  // --------------------------------------------------
+  // REALTIME SUBSCRIPTIONS
+  // --------------------------------------------------
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("tracking-screen-live-updates")
+
       .on(
         "postgres_changes",
         {
@@ -578,8 +786,11 @@ export default function TrackingScreen() {
           schema: "public",
           table: "bus_locations",
         },
-        loadLiveBuses
+        () => {
+          loadLiveBuses();
+        }
       )
+
       .on(
         "postgres_changes",
         {
@@ -587,163 +798,149 @@ export default function TrackingScreen() {
           schema: "public",
           table: "bus_trips",
         },
-        loadLiveBuses
+        () => {
+          loadLiveBuses();
+        }
       )
+
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "buses",
+        },
+        () => {
+          loadLiveBuses();
+        }
+      )
+
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "passenger_locations",
+        },
+        () => {
+          if (userLevel === "operator") {
+            loadPassengers();
+          }
+        }
+      )
+
       .subscribe();
 
-    if (userLevel === "operator") {
-      passengerSubscription.current = supabase
-        .channel("live-passenger-tracking")
-        .on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table: "passenger_locations",
-          },
-          loadSharedPassengers
-        )
-        .subscribe();
-    }
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [
+    loadLiveBuses,
+    loadPassengers,
+    userLevel,
+  ]);
 
+  // --------------------------------------------------
+  // PERIODIC REFRESH
+  // --------------------------------------------------
+
+  useEffect(() => {
     const interval = setInterval(() => {
       loadLiveBuses();
 
       if (userLevel === "operator") {
-        loadSharedPassengers();
+        loadPassengers();
       }
     }, 10000);
 
-    return () => {
-      clearInterval(interval);
-      supabase.removeChannel(busChannel);
-
-      if (passengerSubscription.current) {
-        supabase.removeChannel(
-          passengerSubscription.current
-        );
-
-        passengerSubscription.current = null;
-      }
-    };
+    return () => clearInterval(interval);
   }, [
-    userLevel,
     loadLiveBuses,
-    loadSharedPassengers,
+    loadPassengers,
+    userLevel,
   ]);
 
-  // ------------------------------------------
-  // FIT MAP TO BUS LOCATIONS
-  // ------------------------------------------
+  // --------------------------------------------------
+  // UPDATE MAP WHEN DATA CHANGES
+  // --------------------------------------------------
 
   useEffect(() => {
-    if (buses.length === 0) {
-      hasFittedMap.current = false;
-      return;
-    }
+    updateMap();
+  }, [updateMap]);
 
-    if (hasFittedMap.current) return;
+  // --------------------------------------------------
+  // RENDER BUS CARD
+  // --------------------------------------------------
 
-    const coordinates = buses
-      .filter((item) => hasValidLocation(item.location))
-      .map((item) => ({
-        latitude: Number(item.location.latitude),
-        longitude: Number(item.location.longitude),
-      }));
+  const renderBusCard = bus => {
+    const isSelected =
+      String(selectedBusId) === String(bus.bus_id);
 
-    if (coordinates.length === 0) return;
-
-    hasFittedMap.current = true;
-
-    const timer = setTimeout(() => {
-      mapRef.current?.fitToCoordinates(coordinates, {
-        edgePadding: {
-          top: 100,
-          right: 60,
-          bottom: 180,
-          left: 60,
-        },
-        animated: true,
-      });
-    }, 500);
-
-    return () => clearTimeout(timer);
-  }, [buses]);
-
-  // ------------------------------------------
-  // SELECT BUS
-  // ------------------------------------------
-
-  const handleSelectBus = (item) => {
-    setSelectedBusId(item.bus_id);
-
-    if (hasValidLocation(item.location)) {
-      mapRef.current?.animateToRegion(
-        {
-          latitude: Number(item.location.latitude),
-          longitude: Number(item.location.longitude),
-          latitudeDelta: 0.04,
-          longitudeDelta: 0.04,
-        },
-        700
-      );
-    }
-  };
-
-  // ------------------------------------------
-  // HELPERS
-  // ------------------------------------------
-
-  const formatLastUpdate = (date) => {
-    if (!date) return "No GPS update";
-
-    const seconds = Math.floor(
-      (Date.now() - new Date(date).getTime()) / 1000
+    const statusColor = getBusStatusColor(
+      bus.availability_status
     );
 
-    if (!Number.isFinite(seconds) || seconds < 0) {
-      return "Recently updated";
-    }
+    return (
+      <TouchableOpacity
+        key={String(bus.bus_id)}
+        style={[
+          styles.busCard,
+          isSelected && styles.selectedBusCard,
+        ]}
+        onPress={() => handleSelectBus(bus)}
+        activeOpacity={0.8}
+      >
+        <View style={styles.busIconContainer}>
+          <Ionicons
+            name="bus"
+            size={26}
+            color="#0891B2"
+          />
+        </View>
 
-    if (seconds < 60) {
-      return `${seconds}s ago`;
-    }
+        <View style={styles.busInfo}>
+          <Text style={styles.busName}>
+            {bus.bus_name || "Unnamed Bus"}
+          </Text>
 
-    const minutes = Math.floor(seconds / 60);
+          <Text style={styles.busPlate}>
+            {bus.plate_number || "Plate number unavailable"}
+          </Text>
 
-    if (minutes < 60) {
-      return `${minutes}m ago`;
-    }
+          <Text style={styles.busDestination}>
+            Destination: {bus.destination || "Not set"}
+          </Text>
 
-    return `${Math.floor(minutes / 60)}h ago`;
+          <Text
+            style={[
+              styles.busStatus,
+              { color: statusColor },
+            ]}
+          >
+            {getBusStatusLabel(bus.availability_status)}
+          </Text>
+        </View>
+
+        <Ionicons
+          name="chevron-forward"
+          size={20}
+          color="#94A3B8"
+        />
+      </TouchableOpacity>
+    );
   };
 
-  const totalBusCount = buses.length;
-
-  const availableCount = buses.filter(
-    (item) => item.availability_status === "available"
-  ).length;
-
-  const standingCount = buses.filter(
-    (item) => item.availability_status === "standing"
-  ).length;
-
-  const notAvailableCount = buses.filter(
-    (item) => item.availability_status === "not_available"
-  ).length;
-
-  const validBusCount = buses.filter(
-    (item) => hasValidLocation(item.location)
-  ).length;
-
-  // ------------------------------------------
-  // LOADING
-  // ------------------------------------------
+  // --------------------------------------------------
+  // MAIN UI
+  // --------------------------------------------------
 
   if (loading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color="#06B6D4" />
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator
+          size="large"
+          color="#06B6D4"
+        />
 
         <Text style={styles.loadingText}>
           Loading live tracking...
@@ -752,53 +949,34 @@ export default function TrackingScreen() {
     );
   }
 
-  if (errorMessage && !user) {
-    return (
-      <View style={styles.center}>
-        <Ionicons
-          name="alert-circle-outline"
-          size={45}
-          color="#DC2626"
-        />
-
-        <Text style={styles.errorText}>
-          {errorMessage}
-        </Text>
-      </View>
-    );
-  }
-
-  // ------------------------------------------
-  // MAIN SCREEN
-  // ------------------------------------------
-
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <View style={{ flex: 1 }}>
+        <View>
           <Text style={styles.headerTitle}>
             Live Tracking
           </Text>
 
           <Text style={styles.headerSubtitle}>
-            {userLevel === "operator"
-              ? "Monitor active buses and shared passenger locations"
-              : "Find buses and check their availability"}
+            Track buses and passengers in real time
           </Text>
         </View>
 
         <TouchableOpacity
           style={styles.refreshButton}
-          onPress={refreshMap}
+          onPress={handleRefresh}
           disabled={refreshing}
         >
           {refreshing ? (
-            <ActivityIndicator color="#FFFFFF" size="small" />
+            <ActivityIndicator
+              color="#0891B2"
+              size="small"
+            />
           ) : (
             <Ionicons
               name="refresh"
-              size={21}
-              color="#FFFFFF"
+              size={22}
+              color="#0891B2"
             />
           )}
         </TouchableOpacity>
@@ -808,296 +986,174 @@ export default function TrackingScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {/* PASSENGER LOCATION SHARING */}
-
-        {userLevel === "user" && (
-          <TouchableOpacity
-            style={[
-              styles.shareButton,
-              sharingLocation && styles.stopShareButton,
-            ]}
-            onPress={togglePassengerSharing}
-          >
-            <Ionicons
-              name={
-                sharingLocation
-                  ? "location"
-                  : "location-outline"
-              }
-              size={20}
-              color="#FFFFFF"
-            />
-
-            <Text style={styles.shareButtonText}>
-              {sharingLocation
-                ? "Stop Sharing My Location"
-                : "Share My Location"}
-            </Text>
-          </TouchableOpacity>
-        )}
-
-        {/* BUS STATISTICS */}
-
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.statsRow}
-        >
-          <View style={styles.statCard}>
-            <Ionicons name="bus" size={22} color="#0891B2" />
-            <View>
-              <Text style={styles.statNumber}>
-                {totalBusCount}
-              </Text>
-              <Text style={styles.statLabel}>Active Buses</Text>
-            </View>
-          </View>
-
-          <View style={styles.statCard}>
-            <Ionicons
-              name="checkmark-circle"
-              size={22}
-              color={STATUS_COLORS.available}
-            />
-            <View>
-              <Text style={styles.statNumber}>
-                {availableCount}
-              </Text>
-              <Text style={styles.statLabel}>Available</Text>
-            </View>
-          </View>
-
-          <View style={styles.statCard}>
-            <Ionicons
-              name="people"
-              size={22}
-              color={STATUS_COLORS.standing}
-            />
-            <View>
-              <Text style={styles.statNumber}>
-                {standingCount}
-              </Text>
-              <Text style={styles.statLabel}>Standing</Text>
-            </View>
-          </View>
-
-          <View style={styles.statCard}>
-            <Ionicons
-              name="close-circle"
-              size={22}
-              color={STATUS_COLORS.not_available}
-            />
-            <View>
-              <Text style={styles.statNumber}>
-                {notAvailableCount}
-              </Text>
-              <Text style={styles.statLabel}>Not Available</Text>
-            </View>
-          </View>
-        </ScrollView>
-
         {/* MAP */}
 
         <View style={styles.mapContainer}>
-          <MapView
-            ref={mapRef}
+          <WebView
+            ref={webViewRef}
+            source={{ html: OPEN_STREET_MAP_HTML }}
+            javaScriptEnabled
+            domStorageEnabled
+            originWhitelist={["*"]}
             style={styles.map}
-            initialRegion={DEFAULT_REGION}
-            showsUserLocation={userLevel === "user"}
-            showsMyLocationButton={userLevel === "user"}
-            mapType="standard"
+            onLoadEnd={updateMap}
+          />
+
+          <TouchableOpacity
+            style={styles.myLocationButton}
+            onPress={getCurrentLocation}
           >
-            {/* ACTIVE BUS MARKERS */}
-
-            {buses.map((item) => {
-              if (!hasValidLocation(item.location)) {
-                return null;
-              }
-
-              const status = getBusStatus(
-                item.availability_status
-              );
-
-              const markerColor = getStatusColor(status);
-
-              return (
-                <Marker
-                  key={`bus-${item.bus_id}`}
-                  coordinate={{
-                    latitude: Number(item.location.latitude),
-                    longitude: Number(item.location.longitude),
-                  }}
-                  onPress={() => handleSelectBus(item)}
-                  title={item.bus_name || "RouteX Bus"}
-                  description={getStatusLabel(status)}
-                >
-                  <View
-                    style={[
-                      styles.busMarker,
-                      { backgroundColor: markerColor },
-                    ]}
-                  >
-                    <Ionicons
-                      name="bus"
-                      size={21}
-                      color="#FFFFFF"
-                    />
-                  </View>
-
-                  <Callout
-                    onPress={() => handleSelectBus(item)}
-                  >
-                    <View style={styles.callout}>
-                      <Text style={styles.calloutTitle}>
-                        {item.bus_name || "RouteX Bus"}
-                      </Text>
-
-                      <Text style={styles.calloutText}>
-                        {item.plate_number || "Plate unavailable"}
-                      </Text>
-
-                      <Text
-                        style={[
-                          styles.calloutStatus,
-                          { color: markerColor },
-                        ]}
-                      >
-                        {getStatusLabel(status)}
-                      </Text>
-
-                      <Text style={styles.calloutText}>
-                        To: {item.destination || "Not specified"}
-                      </Text>
-                    </View>
-                  </Callout>
-                </Marker>
-              );
-            })}
-
-            {/* SHARED PASSENGER MARKERS */}
-
-            {userLevel === "operator" &&
-              passengers.map((passenger) => {
-                if (!hasValidLocation(passenger)) {
-                  return null;
-                }
-
-                return (
-                  <Marker
-                    key={`passenger-${passenger.passenger_id}`}
-                    coordinate={{
-                      latitude: Number(passenger.latitude),
-                      longitude: Number(passenger.longitude),
-                    }}
-                    title="Sharing Passenger"
-                    description="Passenger location sharing is enabled"
-                  >
-                    <View style={styles.passengerMarker}>
-                      <Ionicons
-                        name="person"
-                        size={17}
-                        color="#FFFFFF"
-                      />
-                    </View>
-                  </Marker>
-                );
-              })}
-          </MapView>
-
-          {/* MAP LEGEND */}
-
-          <View style={styles.mapLegend}>
-            <View style={styles.legendItem}>
-              <View
-                style={[
-                  styles.legendDot,
-                  { backgroundColor: STATUS_COLORS.available },
-                ]}
-              />
-              <Text style={styles.legendText}>Available</Text>
-            </View>
-
-            <View style={styles.legendItem}>
-              <View
-                style={[
-                  styles.legendDot,
-                  { backgroundColor: STATUS_COLORS.standing },
-                ]}
-              />
-              <Text style={styles.legendText}>Standing</Text>
-            </View>
-
-            <View style={styles.legendItem}>
-              <View
-                style={[
-                  styles.legendDot,
-                  { backgroundColor: STATUS_COLORS.not_available },
-                ]}
-              />
-              <Text style={styles.legendText}>Not Available</Text>
-            </View>
-
-            {userLevel === "operator" && (
-              <View style={styles.legendItem}>
-                <View
-                  style={[
-                    styles.legendDot,
-                    { backgroundColor: "#7C3AED" },
-                  ]}
-                />
-                <Text style={styles.legendText}>
-                  Shared passenger
-                </Text>
-              </View>
-            )}
-          </View>
-        </View>
-
-        {/* GPS NOTICE */}
-
-        {buses.length > 0 && validBusCount === 0 && (
-          <View style={styles.notice}>
             <Ionicons
-              name="information-circle-outline"
-              size={19}
-              color="#B45309"
-            />
-
-            <Text style={styles.noticeText}>
-              Active trips are available, but no GPS
-              locations have been received yet. Buses
-              will appear on the map after GPS updates.
-            </Text>
-          </View>
-        )}
-
-        {/* BUS LIST */}
-
-        <View style={styles.busListContainer}>
-          <View style={styles.sectionHeader}>
-            <View>
-              <Text style={styles.sectionTitle}>
-                Active Buses
-              </Text>
-
-              <Text style={styles.sectionSubtitle}>
-                {totalBusCount} active bus
-                {totalBusCount === 1 ? "" : "es"}
-              </Text>
-            </View>
-
-            <Ionicons
-              name="list"
+              name="locate"
               size={22}
               color="#0891B2"
             />
+          </TouchableOpacity>
+        </View>
+
+        {/* LOCATION STATUS */}
+
+        <View style={styles.locationStatus}>
+          <Ionicons
+            name={
+              locationPermission
+                ? "location"
+                : "location-outline"
+            }
+            size={18}
+            color={
+              locationPermission
+                ? "#16A34A"
+                : "#D97706"
+            }
+          />
+
+          <Text style={styles.locationStatusText}>
+            {locationPermission
+              ? "Location permission enabled"
+              : "Location permission not enabled"}
+          </Text>
+        </View>
+
+        {/* PASSENGER HAIL COMPONENT */}
+
+        {userLevel === "user" && (
+          <View style={styles.hailContainer}>
+            <PassengerHailButton
+              bus={selectedBus}
+              user={user}
+            />
+          </View>
+        )}
+
+        {/* OPERATOR HAIL REQUESTS */}
+
+        {userLevel === "operator" && (
+          <OperatorHailRequests
+            buses={buses.filter(
+              bus =>
+                String(bus.operator_id) ===
+                String(user?.id)
+            )}
+          />
+        )}
+
+        {/* SELECTED BUS DETAILS */}
+
+        {selectedBus && (
+          <View style={styles.selectedBusContainer}>
+            <Text style={styles.sectionTitle}>
+              Selected Bus
+            </Text>
+
+            <View style={styles.selectedBusDetails}>
+              <View style={styles.selectedBusHeader}>
+                <View style={styles.selectedBusIcon}>
+                  <Ionicons
+                    name="bus"
+                    size={30}
+                    color="#0891B2"
+                  />
+                </View>
+
+                <View style={styles.selectedBusText}>
+                  <Text style={styles.selectedBusName}>
+                    {selectedBus.bus_name || "Unnamed Bus"}
+                  </Text>
+
+                  <Text style={styles.selectedBusPlate}>
+                    {selectedBus.plate_number ||
+                      "Plate number unavailable"}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.detailDivider} />
+
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>
+                  Destination
+                </Text>
+
+                <Text style={styles.detailValue}>
+                  {selectedBus.destination || "Not set"}
+                </Text>
+              </View>
+
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>
+                  Bus Status
+                </Text>
+
+                <Text
+                  style={[
+                    styles.detailValue,
+                    {
+                      color: getBusStatusColor(
+                        selectedBus.availability_status
+                      ),
+                    },
+                  ]}
+                >
+                  {getBusStatusLabel(
+                    selectedBus.availability_status
+                  )}
+                </Text>
+              </View>
+
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>
+                  GPS Location
+                </Text>
+
+                <Text style={styles.detailValue}>
+                  {selectedBus.location
+                    ? "Location available"
+                    : "Waiting for GPS"}
+                </Text>
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* ACTIVE BUS LIST */}
+
+        <View style={styles.busListContainer}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>
+              Active Buses
+            </Text>
+
+            <Text style={styles.busCount}>
+              {buses.length} bus{buses.length !== 1 ? "es" : ""}
+            </Text>
           </View>
 
           {buses.length === 0 ? (
-            <View style={styles.emptyCard}>
+            <View style={styles.emptyContainer}>
               <Ionicons
                 name="bus-outline"
-                size={35}
+                size={45}
                 color="#94A3B8"
               />
 
@@ -1106,233 +1162,66 @@ export default function TrackingScreen() {
               </Text>
 
               <Text style={styles.emptyText}>
-                No buses are currently on an active trip.
-                Buses will appear here when their operators
-                start a trip.
+                There are currently no buses with an active trip.
               </Text>
             </View>
           ) : (
-            buses.map((item) => {
-              const status = getBusStatus(
-                item.availability_status
-              );
-
-              const statusColor = getStatusColor(status);
-              const isSelected = selectedBusId === item.bus_id;
-
-              return (
-                <TouchableOpacity
-                  key={`bus-list-${item.bus_id}`}
-                  style={[
-                    styles.busListItem,
-                    isSelected && styles.busListItemSelected,
-                  ]}
-                  onPress={() => handleSelectBus(item)}
-                  activeOpacity={0.8}
-                >
-                  <View
-                    style={[
-                      styles.busListIcon,
-                      { backgroundColor: `${statusColor}18` },
-                    ]}
-                  >
-                    <Ionicons
-                      name="bus"
-                      size={23}
-                      color={statusColor}
-                    />
-                  </View>
-
-                  <View style={styles.busListInfo}>
-                    <Text style={styles.busListName}>
-                      {item.bus_name || "RouteX Bus"}
-                    </Text>
-
-                    <Text style={styles.busListPlate}>
-                      {item.plate_number || "Plate unavailable"}
-                    </Text>
-
-                    <Text style={styles.busListTrip}>
-                      Destination: {item.destination || "Not specified"}
-                    </Text>
-
-                    <Text style={styles.busListGps}>
-                      {hasValidLocation(item.location)
-                        ? `GPS: ${formatLastUpdate(item.location.recorded_at)}`
-                        : "Location unavailable"}
-                    </Text>
-                  </View>
-
-                  <View
-                    style={[
-                      styles.statusBadge,
-                      { backgroundColor: `${statusColor}18` },
-                    ]}
-                  >
-                    <View
-                      style={[
-                        styles.statusDot,
-                        { backgroundColor: statusColor },
-                      ]}
-                    />
-
-                    <Text
-                      style={[
-                        styles.statusBadgeText,
-                        { color: statusColor },
-                      ]}
-                    >
-                      {getStatusLabel(status)}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              );
-            })
+            buses.map(renderBusCard)
           )}
         </View>
 
-        {/* SELECTED BUS DETAILS */}
-
-        {selectedBus && (
-          <View style={styles.selectedCard}>
-            <View style={styles.selectedTop}>
-              <View style={styles.selectedIcon}>
-                <Ionicons
-                  name="bus"
-                  size={24}
-                  color="#0891B2"
-                />
-              </View>
-
-              <View style={{ flex: 1 }}>
-                <Text style={styles.selectedTitle}>
-                  {selectedBus.bus_name || "RouteX Bus"}
-                </Text>
-
-                <Text style={styles.selectedPlate}>
-                  {selectedBus.plate_number || "Plate number unavailable"}
-                </Text>
-              </View>
-
-              <TouchableOpacity
-                onPress={() => setSelectedBusId(null)}
-              >
-                <Ionicons
-                  name="close-circle"
-                  size={25}
-                  color="#94A3B8"
-                />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.selectedStatusRow}>
-              <Text style={styles.detailLabel}>
-                Availability
-              </Text>
-
-              <View
-                style={[
-                  styles.statusBadge,
-                  {
-                    backgroundColor:
-                      `${getStatusColor(selectedBus.availability_status)}18`,
-                  },
-                ]}
-              >
-                <View
-                  style={[
-                    styles.statusDot,
-                    {
-                      backgroundColor: getStatusColor(
-                        selectedBus.availability_status
-                      ),
-                    },
-                  ]}
-                />
-
-                <Text
-                  style={[
-                    styles.statusBadgeText,
-                    {
-                      color: getStatusColor(
-                        selectedBus.availability_status
-                      ),
-                    },
-                  ]}
-                >
-                  {getStatusLabel(selectedBus.availability_status)}
-                </Text>
-              </View>
-            </View>
-
-            {selectedBus.availability_status === "standing" && (
-              <View style={styles.standingNotice}>
-                <Ionicons
-                  name="people-outline"
-                  size={17}
-                  color="#B45309"
-                />
-
-                <Text style={styles.standingNoticeText}>
-                  This bus is full, but is still accepting
-                  passengers willing to stand.
-                </Text>
-              </View>
-            )}
-
-            {selectedBus.availability_status === "not_available" && (
-              <View style={styles.unavailableNotice}>
-                <Ionicons
-                  name="alert-circle-outline"
-                  size={17}
-                  color="#B91C1C"
-                />
-
-                <Text style={styles.unavailableNoticeText}>
-                  This bus is currently not accepting passengers.
-                </Text>
-              </View>
-            )}
-
-            <View style={styles.selectedDetails}>
-              <View style={styles.detailItem}>
-                <Text style={styles.detailLabel}>
-                  Destination
-                </Text>
-
-                <Text style={styles.detailValue}>
-                  {selectedBus.destination || "Not specified"}
-                </Text>
-              </View>
-
-              <View style={styles.detailItem}>
-                <Text style={styles.detailLabel}>
-                  GPS Update
-                </Text>
-
-                <Text style={styles.detailValue}>
-                  {formatLastUpdate(selectedBus.location?.recorded_at)}
-                </Text>
-              </View>
-            </View>
-          </View>
-        )}
-
-        {/* OPERATOR PASSENGER COUNT */}
+        {/* PASSENGER LOCATION LIST */}
 
         {userLevel === "operator" && (
-          <View style={styles.passengerCountCard}>
-            <Ionicons
-              name="people"
-              size={21}
-              color="#7C3AED"
-            />
+          <View style={styles.passengerContainer}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>
+                Shared Passenger Locations
+              </Text>
 
-            <Text style={styles.passengerCountText}>
-              {passengers.length} passenger
-              {passengers.length === 1 ? "" : "s"} currently
-              sharing location
-            </Text>
+              <Text style={styles.busCount}>
+                {passengers.length} passenger
+                {passengers.length !== 1 ? "s" : ""}
+              </Text>
+            </View>
+
+            {passengers.length === 0 ? (
+              <Text style={styles.emptyText}>
+                No passengers are currently sharing their locations.
+              </Text>
+            ) : (
+              passengers.map((passenger, index) => (
+                <View
+                  key={String(passenger.passenger_id)}
+                  style={styles.passengerCard}
+                >
+                  <View style={styles.passengerIcon}>
+                    <Ionicons
+                      name="person"
+                      size={20}
+                      color="#7C3AED"
+                    />
+                  </View>
+
+                  <View style={styles.passengerInfo}>
+                    <Text style={styles.passengerName}>
+                      Passenger {index + 1}
+                    </Text>
+
+                    <Text style={styles.passengerCoordinates}>
+                      {Number(passenger.latitude).toFixed(6)},{" "}
+                      {Number(passenger.longitude).toFixed(6)}
+                    </Text>
+                  </View>
+
+                  <Ionicons
+                    name="location"
+                    size={20}
+                    color="#7C3AED"
+                  />
+                </View>
+              ))
+            )}
           </View>
         )}
       </ScrollView>
@@ -1340,455 +1229,318 @@ export default function TrackingScreen() {
   );
 }
 
-// ------------------------------------------
+// --------------------------------------------------
 // STYLES
-// ------------------------------------------
+// --------------------------------------------------
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F1F5F9",
+    backgroundColor: "#F8FAFC",
   },
 
-  center: {
+  loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "#F8FAFC",
-    padding: 25,
   },
 
   loadingText: {
     marginTop: 12,
     color: "#64748B",
-  },
-
-  errorText: {
-    marginTop: 12,
-    color: "#DC2626",
-    textAlign: "center",
+    fontSize: 14,
   },
 
   header: {
-    paddingHorizontal: 18,
-    paddingTop: 48,
-    paddingBottom: 15,
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 14,
     backgroundColor: "#FFFFFF",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    borderBottomWidth: 1,
+    borderBottomColor: "#E2E8F0",
   },
 
   headerTitle: {
-    fontSize: 23,
-    fontWeight: "800",
+    fontSize: 22,
+    fontWeight: "bold",
     color: "#0F172A",
   },
 
   headerSubtitle: {
-    color: "#64748B",
     fontSize: 12,
+    color: "#64748B",
     marginTop: 4,
-    maxWidth: 270,
   },
 
   refreshButton: {
     width: 42,
     height: 42,
-    borderRadius: 13,
-    backgroundColor: "#0891B2",
-    justifyContent: "center",
+    borderRadius: 12,
+    backgroundColor: "#ECFEFF",
     alignItems: "center",
-    marginLeft: 10,
+    justifyContent: "center",
   },
 
   scrollContent: {
-    paddingBottom: 25,
-  },
-
-  shareButton: {
-    marginHorizontal: 15,
-    marginTop: 12,
-    padding: 13,
-    borderRadius: 12,
-    backgroundColor: "#0891B2",
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 9,
-  },
-
-  stopShareButton: {
-    backgroundColor: "#DC2626",
-  },
-
-  shareButtonText: {
-    color: "#FFFFFF",
-    fontWeight: "700",
-  },
-
-  statsRow: {
-    flexDirection: "row",
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-  },
-
-  statCard: {
-    width: 112,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    padding: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-
-  statNumber: {
-    fontSize: 17,
-    fontWeight: "800",
-    color: "#0F172A",
-  },
-
-  statLabel: {
-    fontSize: 10,
-    color: "#64748B",
+    padding: 16,
+    paddingBottom: 35,
   },
 
   mapContainer: {
-    height: 350,
-    marginHorizontal: 12,
-    marginBottom: 12,
-    borderRadius: 17,
+    height: 280,
+    borderRadius: 18,
     overflow: "hidden",
+    backgroundColor: "#E2E8F0",
+    marginBottom: 12,
   },
 
   map: {
     flex: 1,
   },
 
-  busMarker: {
-    width: 39,
-    height: 39,
-    borderRadius: 22,
-    borderWidth: 3,
-    borderColor: "#FFFFFF",
-    justifyContent: "center",
-    alignItems: "center",
-    elevation: 5,
-  },
-
-  passengerMarker: {
-    width: 32,
-    height: 32,
-    borderRadius: 18,
-    backgroundColor: "#7C3AED",
-    borderWidth: 2,
-    borderColor: "#FFFFFF",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-
-  callout: {
-    minWidth: 160,
-    padding: 5,
-  },
-
-  calloutTitle: {
-    fontWeight: "800",
-    color: "#0F172A",
-  },
-
-  calloutText: {
-    color: "#475569",
-    fontSize: 12,
-    marginTop: 3,
-  },
-
-  calloutStatus: {
-    fontSize: 12,
-    fontWeight: "800",
-    marginTop: 4,
-  },
-
-  mapLegend: {
+  myLocationButton: {
     position: "absolute",
-    bottom: 12,
-    left: 12,
+    right: 14,
+    bottom: 14,
+    width: 42,
+    height: 42,
+    borderRadius: 12,
     backgroundColor: "#FFFFFF",
-    borderRadius: 10,
-    padding: 9,
-    gap: 7,
-    elevation: 3,
+    alignItems: "center",
+    justifyContent: "center",
+    elevation: 4,
   },
 
-  legendItem: {
+  locationStatus: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 7,
-  },
-
-  legendDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-
-  legendText: {
-    color: "#475569",
-    fontSize: 10,
-  },
-
-  notice: {
-    marginHorizontal: 12,
-    marginBottom: 12,
-    padding: 11,
-    backgroundColor: "#FEF3C7",
-    borderRadius: 10,
-    flexDirection: "row",
-    alignItems: "center",
+    padding: 12,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    marginBottom: 18,
     gap: 8,
   },
 
-  noticeText: {
-    flex: 1,
-    color: "#92400E",
-    fontSize: 11,
+  locationStatusText: {
+    fontSize: 12,
+    color: "#475569",
   },
 
-  busListContainer: {
-    backgroundColor: "#FFFFFF",
-    marginHorizontal: 12,
-    marginBottom: 12,
-    padding: 14,
-    borderRadius: 15,
+  hailContainer: {
+    marginBottom: 18,
   },
 
   sectionHeader: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
+    justifyContent: "space-between",
     marginBottom: 12,
   },
 
   sectionTitle: {
+    fontSize: 17,
+    fontWeight: "bold",
     color: "#0F172A",
-    fontSize: 16,
-    fontWeight: "800",
   },
 
-  sectionSubtitle: {
-    color: "#64748B",
-    fontSize: 11,
-    marginTop: 3,
-  },
-
-  busListItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: "#F1F5F9",
-    gap: 10,
-  },
-
-  busListItemSelected: {
-    backgroundColor: "#ECFEFF",
-    borderRadius: 10,
-    paddingHorizontal: 7,
-  },
-
-  busListIcon: {
-    width: 43,
-    height: 43,
-    borderRadius: 12,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-
-  busListInfo: {
-    flex: 1,
-  },
-
-  busListName: {
-    color: "#0F172A",
-    fontSize: 13,
-    fontWeight: "800",
-  },
-
-  busListPlate: {
-    color: "#64748B",
-    fontSize: 11,
-    marginTop: 2,
-  },
-
-  busListTrip: {
-    color: "#475569",
-    fontSize: 11,
-    marginTop: 4,
-  },
-
-  busListGps: {
-    color: "#94A3B8",
-    fontSize: 10,
-    marginTop: 3,
-  },
-
-  statusBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    alignSelf: "flex-start",
-    borderRadius: 20,
-    paddingHorizontal: 9,
-    paddingVertical: 6,
-    gap: 5,
-  },
-
-  statusDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-  },
-
-  statusBadgeText: {
-    fontSize: 10,
-    fontWeight: "800",
-  },
-
-  emptyCard: {
-    backgroundColor: "#F8FAFC",
-    padding: 17,
-    borderRadius: 14,
-    alignItems: "center",
-  },
-
-  emptyTitle: {
-    fontWeight: "800",
-    color: "#334155",
-    marginTop: 6,
-  },
-
-  emptyText: {
-    textAlign: "center",
-    color: "#64748B",
+  busCount: {
     fontSize: 12,
-    marginTop: 4,
-    lineHeight: 18,
+    color: "#0891B2",
+    fontWeight: "600",
   },
 
-  selectedCard: {
+  selectedBusContainer: {
+    marginBottom: 20,
+  },
+
+  selectedBusDetails: {
     backgroundColor: "#FFFFFF",
-    marginHorizontal: 12,
-    marginBottom: 12,
-    padding: 14,
-    borderRadius: 15,
-    elevation: 2,
+    borderRadius: 16,
+    padding: 16,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
   },
 
-  selectedTop: {
+  selectedBusHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
   },
 
-  selectedIcon: {
-    width: 43,
-    height: 43,
-    borderRadius: 12,
-    backgroundColor: "#CFFAFE",
+  selectedBusIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 14,
+    backgroundColor: "#ECFEFF",
     justifyContent: "center",
     alignItems: "center",
   },
 
-  selectedTitle: {
+  selectedBusText: {
+    marginLeft: 12,
+    flex: 1,
+  },
+
+  selectedBusName: {
+    fontSize: 16,
+    fontWeight: "bold",
     color: "#0F172A",
-    fontWeight: "800",
-    fontSize: 15,
   },
 
-  selectedPlate: {
+  selectedBusPlate: {
+    fontSize: 13,
     color: "#64748B",
-    fontSize: 12,
-    marginTop: 3,
+    marginTop: 4,
   },
 
-  selectedStatusRow: {
+  detailDivider: {
+    height: 1,
+    backgroundColor: "#E2E8F0",
+    marginVertical: 15,
+  },
+
+  detailRow: {
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
-    marginTop: 14,
-  },
-
-  standingNotice: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    padding: 10,
-    borderRadius: 9,
-    backgroundColor: "#FEF3C7",
-    marginTop: 10,
-  },
-
-  standingNoticeText: {
-    flex: 1,
-    color: "#92400E",
-    fontSize: 11,
-  },
-
-  unavailableNotice: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    padding: 10,
-    borderRadius: 9,
-    backgroundColor: "#FEE2E2",
-    marginTop: 10,
-  },
-
-  unavailableNoticeText: {
-    flex: 1,
-    color: "#991B1B",
-    fontSize: 11,
-  },
-
-  selectedDetails: {
-    flexDirection: "row",
-    marginTop: 13,
-    borderTopWidth: 1,
-    borderTopColor: "#E2E8F0",
-    paddingTop: 10,
-  },
-
-  detailItem: {
-    flex: 1,
+    marginBottom: 12,
   },
 
   detailLabel: {
-    color: "#94A3B8",
-    fontSize: 11,
+    fontSize: 13,
+    color: "#64748B",
   },
 
   detailValue: {
+    fontSize: 13,
+    fontWeight: "600",
     color: "#0F172A",
-    fontWeight: "700",
-    marginTop: 4,
-    fontSize: 12,
+    maxWidth: "60%",
+    textAlign: "right",
   },
 
-  passengerCountCard: {
-    backgroundColor: "#FFFFFF",
-    marginHorizontal: 12,
-    marginBottom: 12,
-    padding: 13,
-    borderRadius: 12,
+  busListContainer: {
+    marginBottom: 20,
+  },
+
+  busCard: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 9,
+    backgroundColor: "#FFFFFF",
+    padding: 14,
+    borderRadius: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
   },
 
-  passengerCountText: {
-    color: "#475569",
+  selectedBusCard: {
+    borderColor: "#06B6D4",
+    backgroundColor: "#ECFEFF",
+  },
+
+  busIconContainer: {
+    width: 46,
+    height: 46,
+    borderRadius: 12,
+    backgroundColor: "#ECFEFF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  busInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+
+  busName: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#0F172A",
+  },
+
+  busPlate: {
     fontSize: 12,
-    fontWeight: "600",
+    color: "#64748B",
+    marginTop: 3,
+  },
+
+  busDestination: {
+    fontSize: 12,
+    color: "#475569",
+    marginTop: 3,
+  },
+
+  busStatus: {
+    fontSize: 11,
+    fontWeight: "bold",
+    marginTop: 5,
+  },
+
+  emptyContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 25,
+  },
+
+  emptyTitle: {
+    fontSize: 15,
+    fontWeight: "bold",
+    color: "#334155",
+    marginTop: 10,
+  },
+
+  emptyText: {
+    fontSize: 12,
+    color: "#94A3B8",
+    textAlign: "center",
+    marginTop: 6,
+    lineHeight: 18,
+  },
+
+  passengerContainer: {
+    marginBottom: 20,
+  },
+
+  passengerCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    padding: 13,
+    marginBottom: 9,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+
+  passengerIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: "#F3E8FF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  passengerInfo: {
+    flex: 1,
+    marginLeft: 11,
+  },
+
+  passengerName: {
+    fontSize: 13,
+    fontWeight: "bold",
+    color: "#0F172A",
+  },
+
+  passengerCoordinates: {
+    fontSize: 11,
+    color: "#64748B",
+    marginTop: 4,
   },
 });

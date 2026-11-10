@@ -1,5 +1,8 @@
+import React, {
+  useCallback,
+  useState,
+} from "react";
 
-import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -8,739 +11,1296 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
-  StatusBar,
+  RefreshControl,
 } from "react-native";
 
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
+
 import { supabase } from "../config/supabase";
 
-const COLORS = {
-  blue: "#06B6D4",
-  dark: "#164E63",
-  background: "#F1F5F9",
-  white: "#FFFFFF",
-  text: "#0F172A",
-  muted: "#64748B",
-  green: "#16A34A",
-  red: "#DC2626",
-};
+import {
+  requestBackgroundLocationPermission,
+  startOperatorBackgroundGPS,
+  stopOperatorBackgroundGPS,
+} from "../tasks/backgroundLocation";
 
-export default function OperatorDockingScreen({ navigation }) {
-  const [loading, setLoading] = useState(true);
-  const [processing, setProcessing] = useState(false);
+export default function OperatorDockingScreen({ navigation, route }) {
+  const tripId = route?.params?.tripId;
+  const passedBusId = route?.params?.busId;
 
   const [user, setUser] = useState(null);
-  const [activeTrip, setActiveTrip] = useState(null);
+  const [trip, setTrip] = useState(null);
   const [bus, setBus] = useState(null);
 
   const [terminals, setTerminals] = useState([]);
   const [selectedTerminal, setSelectedTerminal] = useState(null);
+  const [docking, setDocking] = useState(null);
 
-  const [currentDocking, setCurrentDocking] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  // ==========================================
-  // LOAD OPERATOR AND ACTIVE TRIP
-  // ==========================================
+  // -----------------------------------------
+  // GET CURRENT USER
+  // -----------------------------------------
 
-  const loadData = async () => {
+  const getCurrentUser = async () => {
+    const {
+      data: { user: authUser },
+      error,
+    } = await supabase.auth.getUser();
+
+    if (error) throw error;
+
+    if (!authUser) {
+      throw new Error("You are not logged in.");
+    }
+
+    return authUser;
+  };
+
+  // -----------------------------------------
+  // LOAD TRIP
+  // -----------------------------------------
+
+  const loadTrip = async (operatorId) => {
+    if (!tripId) {
+      throw new Error(
+        "Trip ID is missing. Please open this screen from Trip Management."
+      );
+    }
+
+    const { data, error } = await supabase
+      .from("bus_trips")
+      .select(`
+        trip_id,
+        bus_id,
+        operator_id,
+        destination,
+        status,
+        started_at,
+        ended_at
+      `)
+      .eq("trip_id", tripId)
+      .eq("operator_id", operatorId)
+      .single();
+
+    if (error) throw error;
+
+    if (
+      passedBusId &&
+      String(data.bus_id) !== String(passedBusId)
+    ) {
+      throw new Error(
+        "The selected bus does not match this trip."
+      );
+    }
+
+    setTrip(data);
+
+    return data;
+  };
+
+  // -----------------------------------------
+  // LOAD BUS
+  // -----------------------------------------
+
+  const loadBus = async (operatorId, busId) => {
+    const { data, error } = await supabase
+      .from("buses")
+      .select(`
+        bus_id,
+        operator_id,
+        bus_name,
+        plate_number,
+        bus_type,
+        capacity,
+        bus_status,
+        company,
+        availability_status
+      `)
+      .eq("bus_id", busId)
+      .eq("operator_id", operatorId)
+      .single();
+
+    if (error) throw error;
+
+    setBus(data);
+
+    return data;
+  };
+
+  // -----------------------------------------
+  // LOAD COMPANY TERMINALS
+  // -----------------------------------------
+
+  const loadTerminals = async (companyName) => {
+    if (!companyName) {
+      setTerminals([]);
+      return [];
+    }
+
+    const { data, error } = await supabase
+      .from("terminals")
+      .select(`
+        terminal_id,
+        operator_name,
+        terminal_name,
+        terminal_address,
+        is_active
+      `)
+      .eq("operator_name", companyName)
+      .eq("is_active", true)
+      .order("terminal_name", {
+        ascending: true,
+      });
+
+    if (error) throw error;
+
+    setTerminals(data || []);
+
+    return data || [];
+  };
+
+  // -----------------------------------------
+  // LOAD DOCKING RECORD
+  // -----------------------------------------
+
+  const loadDocking = async (currentTripId) => {
+    const { data, error } = await supabase
+      .from("bus_docking")
+      .select("*")
+      .eq("trip_id", currentTripId)
+      .order("docked_at", {
+        ascending: false,
+      })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) throw error;
+
+    setDocking(data || null);
+
+    if (data?.terminal_id != null) {
+      setSelectedTerminal(String(data.terminal_id));
+    } else {
+      setSelectedTerminal(null);
+    }
+
+    return data;
+  };
+
+  // -----------------------------------------
+  // LOAD SCREEN DATA
+  // -----------------------------------------
+
+  const loadData = async (isRefreshing = false) => {
     try {
-      setLoading(true);
-
-      const {
-        data: { user: currentUser },
-        error: authError,
-      } = await supabase.auth.getUser();
-
-      if (authError) throw authError;
-
-      if (!currentUser) {
-        throw new Error("Please log in again.");
+      if (isRefreshing) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
       }
 
-      setUser(currentUser);
+      const authUser = await getCurrentUser();
 
-      // Retrieve active trip
-      const { data: trip, error: tripError } = await supabase
+      setUser(authUser);
+
+      const loadedTrip = await loadTrip(authUser.id);
+
+      const loadedBus = await loadBus(
+        authUser.id,
+        loadedTrip.bus_id
+      );
+
+      await loadTerminals(loadedBus.company);
+
+      await loadDocking(loadedTrip.trip_id);
+    } catch (error) {
+      console.log("DOCKING LOAD ERROR:", error);
+
+      Alert.alert(
+        "Loading Error",
+        error.message || "Unable to load docking information."
+      );
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  // -----------------------------------------
+  // RELOAD WHEN SCREEN OPENS
+  // -----------------------------------------
+
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [tripId, passedBusId])
+  );
+
+  // -----------------------------------------
+  // SAVE DOCKING
+  // -----------------------------------------
+
+  const saveDocking = async () => {
+    if (saving) return;
+
+    if (!user || !trip || !bus) {
+      Alert.alert("Error", "Trip or bus information is missing.");
+      return;
+    }
+
+    if (!selectedTerminal) {
+      Alert.alert(
+        "Select Terminal",
+        "Please select a terminal first."
+      );
+      return;
+    }
+
+    if (trip.status !== "planned") {
+      Alert.alert(
+        "Trip Already Started",
+        "You cannot change the terminal after the trip has started."
+      );
+      return;
+    }
+
+    try {
+      setSaving(true);
+
+      const terminal = terminals.find(
+        (item) =>
+          String(item.terminal_id) === String(selectedTerminal)
+      );
+
+      if (!terminal) {
+        throw new Error(
+          "The selected terminal could not be found."
+        );
+      }
+
+      const dockingData = {
+        terminal_id: terminal.terminal_id,
+        terminal_name: terminal.terminal_name,
+        docking_status: "docked",
+        docked_at: new Date().toISOString(),
+        undocked_at: null,
+      };
+
+      let savedDocking;
+
+      if (docking?.docking_id) {
+        const { data, error } = await supabase
+          .from("bus_docking")
+          .update(dockingData)
+          .eq("docking_id", docking.docking_id)
+          .eq("operator_id", user.id)
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        savedDocking = data;
+      } else {
+        const { data, error } = await supabase
+          .from("bus_docking")
+          .insert({
+            bus_id: bus.bus_id,
+            operator_id: user.id,
+            trip_id: trip.trip_id,
+            ...dockingData,
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        savedDocking = data;
+      }
+
+      const { error: busError } = await supabase
+        .from("buses")
+        .update({
+          bus_status: "docked",
+        })
+        .eq("bus_id", bus.bus_id)
+        .eq("operator_id", user.id);
+
+      if (busError) throw busError;
+
+      setDocking(savedDocking);
+
+      setBus((previous) => ({
+        ...previous,
+        bus_status: "docked",
+      }));
+
+      Alert.alert(
+        "Success",
+        "Bus successfully docked at the selected terminal."
+      );
+
+      await loadData(true);
+    } catch (error) {
+      console.log("SAVE DOCKING ERROR:", error);
+
+      Alert.alert(
+        "Docking Error",
+        error.message || "Unable to dock bus."
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // -----------------------------------------
+  // START TRIP CONFIRMATION
+  // -----------------------------------------
+
+  const startTrip = () => {
+    if (saving) return;
+
+    if (!user || !trip || !bus) {
+      Alert.alert(
+        "Error",
+        "Trip or bus information is missing."
+      );
+      return;
+    }
+
+    if (trip.status !== "planned") {
+      Alert.alert(
+        "Invalid Trip",
+        "Only planned trips can be started."
+      );
+      return;
+    }
+
+    if (!docking || docking.docking_status !== "docked") {
+      Alert.alert(
+        "Bus Not Docked",
+        "Please dock the bus at a terminal before starting the trip."
+      );
+      return;
+    }
+
+    Alert.alert(
+      "Start Trip",
+      `Start the trip to ${trip.destination}?`,
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Start Trip",
+          onPress: confirmStartTrip,
+        },
+      ]
+    );
+  };
+
+  // -----------------------------------------
+  // ROLLBACK IF GPS STARTUP FAILS
+  // -----------------------------------------
+
+  const rollbackTripStart = async () => {
+    try {
+      // Return the trip to planned status.
+      await supabase
         .from("bus_trips")
-        .select("trip_id, bus_id, operator_id, destination, status, started_at")
-        .eq("operator_id", currentUser.id)
-        .eq("status", "active")
-        .order("started_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .update({
+          status: "planned",
+          started_at: null,
+        })
+        .eq("trip_id", trip.trip_id)
+        .eq("operator_id", user.id);
+
+      // Return the bus to docked status.
+      await supabase
+        .from("buses")
+        .update({
+          bus_status: "docked",
+        })
+        .eq("bus_id", bus.bus_id)
+        .eq("operator_id", user.id);
+
+      // Restore the docking record.
+      if (docking?.docking_id) {
+        await supabase
+          .from("bus_docking")
+          .update({
+            docking_status: "docked",
+            undocked_at: null,
+          })
+          .eq("docking_id", docking.docking_id)
+          .eq("operator_id", user.id);
+      }
+
+      await stopOperatorBackgroundGPS();
+
+      await loadData(true);
+    } catch (rollbackError) {
+      console.log(
+        "TRIP ROLLBACK ERROR:",
+        rollbackError
+      );
+    }
+  };
+
+  // -----------------------------------------
+  // START TRIP
+  // -----------------------------------------
+
+  const confirmStartTrip = async () => {
+    if (saving) return;
+
+    let databaseTripActivated = false;
+
+    try {
+      setSaving(true);
+
+      // Check whether another trip is already active.
+      const {
+        data: activeTrips,
+        error: activeTripsError,
+      } = await supabase
+        .from("bus_trips")
+        .select("trip_id,bus_id,destination")
+        .eq("operator_id", user.id)
+        .eq("status", "active");
+
+      if (activeTripsError) throw activeTripsError;
+
+      const anotherActiveTrip = (activeTrips || []).find(
+        (item) =>
+          String(item.trip_id) !== String(trip.trip_id)
+      );
+
+      if (anotherActiveTrip) {
+        throw new Error(
+          "You already have another active trip. End that trip before starting a new one."
+        );
+      }
+
+      // Verify location permissions.
+      const permissionGranted =
+        await requestBackgroundLocationPermission();
+
+      if (!permissionGranted) {
+        throw new Error(
+          "Location permission is required. Please allow RouteX to access your location in your device settings."
+        );
+      }
+
+      const now = new Date().toISOString();
+
+      // Activate trip.
+      const { data: updatedTrip, error: tripError } =
+        await supabase
+          .from("bus_trips")
+          .update({
+            status: "active",
+            started_at: now,
+            ended_at: null,
+          })
+          .eq("trip_id", trip.trip_id)
+          .eq("operator_id", user.id)
+          .eq("status", "planned")
+          .select()
+          .single();
 
       if (tripError) throw tripError;
 
-      setActiveTrip(trip);
+      databaseTripActivated = true;
 
-      if (trip) {
-        // Retrieve bus information
-        const { data: busData, error: busError } = await supabase
-          .from("buses")
-          .select("bus_id, bus_name, plate_number, bus_type, capacity")
-          .eq("bus_id", trip.bus_id)
-          .eq("operator_id", currentUser.id)
-          .maybeSingle();
+      // Update bus status.
+      const { error: busError } = await supabase
+        .from("buses")
+        .update({
+          bus_status: "in_transit",
+        })
+        .eq("bus_id", bus.bus_id)
+        .eq("operator_id", user.id);
 
-        if (busError) throw busError;
+      if (busError) throw busError;
 
-        if (!busData) {
-          throw new Error("Assigned bus not found.");
-        }
+      // Mark docking record as undocked.
+      const { error: dockingError } = await supabase
+        .from("bus_docking")
+        .update({
+          docking_status: "undocked",
+          undocked_at: now,
+        })
+        .eq("docking_id", docking.docking_id)
+        .eq("operator_id", user.id);
 
-        setBus(busData);
+      if (dockingError) throw dockingError;
 
-        // Check if this bus is already docked
-        const { data: docking, error: dockingError } = await supabase
-          .from("bus_docking")
-          .select("*")
-          .eq("bus_id", trip.bus_id)
-          .eq("operator_id", currentUser.id)
-          .eq("docking_status", "docked")
-          .maybeSingle();
+      // Start GPS after trip becomes active.
+      // The background task looks for an active trip.
+      await startOperatorBackgroundGPS();
 
-        if (dockingError) throw dockingError;
+      // Update local data.
+      setTrip(updatedTrip);
 
-        setCurrentDocking(docking);
-      } else {
-        setBus(null);
-        setCurrentDocking(null);
+      setBus((previous) => ({
+        ...previous,
+        bus_status: "in_transit",
+      }));
+
+      setDocking((previous) =>
+        previous
+          ? {
+              ...previous,
+              docking_status: "undocked",
+              undocked_at: now,
+            }
+          : previous
+      );
+
+      Alert.alert(
+        "Trip Started",
+        "Your bus is now in transit. GPS tracking has started.",
+        [
+          {
+            text: "Continue",
+            onPress: () => {
+              // Both screens are registered in the root Stack Navigator.
+              navigation.replace("TripManagement", {
+                tripId: updatedTrip.trip_id,
+                busId: bus.bus_id,
+              });
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      console.log("START TRIP ERROR:", error);
+
+      // If the database was changed but GPS or another step failed,
+      // restore the trip and bus to their previous state.
+      if (databaseTripActivated) {
+        await rollbackTripStart();
       }
 
-      // Load registered terminals
-      const { data: terminalData, error: terminalError } =
-        await supabase
-          .from("terminals")
-          .select("terminal_id, operator_name, terminal_name, terminal_address")
-          .eq("is_active", true)
-          .order("terminal_name");
-
-      if (terminalError) throw terminalError;
-
-      setTerminals(terminalData || []);
-    } catch (error) {
-      console.log("DOCKING LOAD ERROR:", error.message);
-      Alert.alert("Loading Error", error.message);
+      Alert.alert(
+        "Unable to Start Trip",
+        error.message ||
+          "Something went wrong while starting the trip."
+      );
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  // -----------------------------------------
+  // REFRESH
+  // -----------------------------------------
 
-  // ==========================================
-  // CONFIRM DOCKING
-  // ==========================================
-
-  const handleDockBus = async () => {
-    if (!user || !activeTrip || !bus || !selectedTerminal) {
-      Alert.alert(
-        "Incomplete Information",
-        "Please select a terminal and make sure you have an active trip."
-      );
-      return;
-    }
-
-    if (currentDocking) {
-      Alert.alert(
-        "Already Docked",
-        "Please undock your bus before selecting another terminal."
-      );
-      return;
-    }
-
-    Alert.alert(
-      "Confirm Bus Docking",
-      `Bus: ${bus.bus_name}\nTerminal: ${selectedTerminal.terminal_name}\nDestination: ${activeTrip.destination}\n\nConfirm docking?`,
-      [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
-        {
-          text: "Confirm",
-          onPress: async () => {
-            try {
-              setProcessing(true);
-
-              const { data, error } = await supabase
-                .from("bus_docking")
-                .insert({
-                  bus_id: bus.bus_id,
-                  operator_id: user.id,
-                  terminal_id: selectedTerminal.terminal_id,
-                  terminal_name: selectedTerminal.terminal_name,
-                  trip_id: activeTrip.trip_id,
-                  docking_status: "docked",
-                  docked_at: new Date().toISOString(),
-                })
-                .select()
-                .single();
-
-              if (error) throw error;
-
-              setCurrentDocking(data);
-
-              Alert.alert(
-                "Successfully Docked",
-                `${bus.bus_name} is now docked at ${selectedTerminal.terminal_name}.`
-              );
-            } catch (error) {
-              console.log("DOCKING ERROR:", error.message);
-
-              Alert.alert(
-                "Docking Failed",
-                error.message
-              );
-            } finally {
-              setProcessing(false);
-            }
-          },
-        },
-      ]
-    );
+  const onRefresh = () => {
+    loadData(true);
   };
 
-  // ==========================================
-  // UNDOCK BUS
-  // ==========================================
-
-  const handleUndockBus = async () => {
-    if (!currentDocking || !user) return;
-
-    Alert.alert(
-      "Confirm Undocking",
-      "Are you sure you want to remove your bus from this terminal?",
-      [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
-        {
-          text: "Undock",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              setProcessing(true);
-
-              const { error } = await supabase
-                .from("bus_docking")
-                .update({
-                  docking_status: "undocked",
-                  undocked_at: new Date().toISOString(),
-                })
-                .eq("docking_id", currentDocking.docking_id)
-                .eq("operator_id", user.id);
-
-              if (error) throw error;
-
-              setCurrentDocking(null);
-              setSelectedTerminal(null);
-
-              Alert.alert(
-                "Successfully Undocked",
-                "Your bus is no longer docked at the terminal."
-              );
-            } catch (error) {
-              Alert.alert("Undocking Failed", error.message);
-            } finally {
-              setProcessing(false);
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  // ==========================================
-  // LOADING
-  // ==========================================
+  // -----------------------------------------
+  // LOADING SCREEN
+  // -----------------------------------------
 
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color={COLORS.blue} />
-        <Text style={styles.muted}>Loading docking information...</Text>
+        <ActivityIndicator
+          size="large"
+          color="#06B6D4"
+        />
+
+        <Text style={styles.loadingText}>
+          Loading docking information...
+        </Text>
       </View>
     );
   }
 
-  // ==========================================
-  // MAIN SCREEN
-  // ==========================================
+  // -----------------------------------------
+  // MAIN UI
+  // -----------------------------------------
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="dark-content" />
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+        />
+      }
+    >
+      {/* HEADER */}
 
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={25} color={COLORS.dark} />
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
+          <Ionicons
+            name="arrow-back"
+            size={22}
+            color="#0F172A"
+          />
         </TouchableOpacity>
 
-        <View style={{ flex: 1, marginLeft: 15 }}>
-          <Text style={styles.headerTitle}>Bus Docking</Text>
+        <View style={styles.headerTextContainer}>
+          <Text style={styles.headerTitle}>
+            Operator Docking
+          </Text>
+
           <Text style={styles.headerSubtitle}>
-            Manage your terminal location
+            Dock your bus before starting a trip
           </Text>
         </View>
 
-        <TouchableOpacity onPress={loadData}>
-          <Ionicons name="refresh" size={24} color={COLORS.blue} />
+        <TouchableOpacity
+          style={styles.refreshButton}
+          onPress={onRefresh}
+        >
+          <Ionicons
+            name="refresh"
+            size={20}
+            color="#06B6D4"
+          />
         </TouchableOpacity>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* ACTIVE TRIP */}
+      {!trip || !bus ? (
+        <View style={styles.emptyCard}>
+          <Ionicons
+            name="alert-circle-outline"
+            size={42}
+            color="#DC2626"
+          />
 
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Current Trip</Text>
+          <Text style={styles.emptyTitle}>
+            Trip or Bus Not Found
+          </Text>
 
-          {!activeTrip ? (
-            <View style={styles.emptyBox}>
+          <Text style={styles.emptyText}>
+            Return to Trip Management and select a valid trip.
+          </Text>
+
+          <TouchableOpacity
+            style={styles.primaryButton}
+            onPress={() =>
+              navigation.navigate("TripManagement")
+            }
+          >
+            <Text style={styles.primaryButtonText}>
+              Back to Trip Management
+            </Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <>
+          {/* BUS INFORMATION */}
+
+          <View style={styles.busCard}>
+            <View style={styles.busIcon}>
               <Ionicons
-                name="alert-circle-outline"
-                size={35}
-                color={COLORS.muted}
+                name="bus"
+                size={30}
+                color="#06B6D4"
               />
+            </View>
 
-              <Text style={styles.emptyTitle}>
-                No Active Trip
+            <View style={styles.busInfo}>
+              <Text style={styles.busName}>
+                {bus.bus_name || "Unnamed Bus"}
               </Text>
 
-              <Text style={styles.muted}>
-                Start a trip in TrackingScreen before docking your bus.
+              <Text style={styles.plateNumber}>
+                {bus.plate_number || "No plate number"}
+              </Text>
+
+              <Text style={styles.companyText}>
+                {bus.company || "No company assigned"}
               </Text>
             </View>
-          ) : (
-            <>
-              <View style={styles.infoRow}>
-                <MaterialCommunityIcons
-                  name="bus"
-                  size={27}
-                  color={COLORS.blue}
-                />
+          </View>
 
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.infoLabel}>Bus</Text>
-                  <Text style={styles.infoValue}>
-                    {bus?.bus_name}
-                  </Text>
-                  <Text style={styles.muted}>
-                    {bus?.plate_number || "No plate number"}
-                  </Text>
-                </View>
-              </View>
+          {/* TRIP INFORMATION */}
 
-              <View style={styles.infoRow}>
-                <Ionicons
-                  name="location"
-                  size={25}
-                  color={COLORS.green}
-                />
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>
+              Trip Information
+            </Text>
 
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.infoLabel}>Destination</Text>
-                  <Text style={styles.destination}>
-                    {activeTrip.destination}
-                  </Text>
-                  <Text style={styles.muted}>
-                    Retrieved from TrackingScreen
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.tripStatus}>
-                <View style={styles.statusDot} />
-                <Text style={styles.tripStatusText}>
-                  ACTIVE TRIP
-                </Text>
-              </View>
-            </>
-          )}
-        </View>
-
-        {/* CURRENT DOCKING */}
-
-        {currentDocking ? (
-          <View style={styles.card}>
-            <View style={styles.dockedHeader}>
-              <Text style={styles.sectionTitle}>
-                Current Docking
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>
+                Trip ID
               </Text>
 
-              <View style={styles.dockedBadge}>
-                <Text style={styles.dockedBadgeText}>DOCKED</Text>
-              </View>
+              <Text style={styles.infoValue}>
+                {trip.trip_id}
+              </Text>
             </View>
 
             <View style={styles.infoRow}>
-              <Ionicons
-                name="business"
-                size={27}
-                color={COLORS.green}
-              />
+              <Text style={styles.infoLabel}>
+                Destination
+              </Text>
 
-              <View style={{ flex: 1 }}>
-                <Text style={styles.infoLabel}>Terminal</Text>
-                <Text style={styles.infoValue}>
-                  {currentDocking.terminal_name}
-                </Text>
-              </View>
+              <Text style={styles.infoValue}>
+                {trip.destination}
+              </Text>
             </View>
 
-            <TouchableOpacity
-              style={styles.undockButton}
-              onPress={handleUndockBus}
-              disabled={processing}
-            >
-              {processing ? (
-                <ActivityIndicator color="white" />
-              ) : (
-                <>
-                  <Ionicons
-                    name="exit-outline"
-                    size={20}
-                    color="white"
-                  />
-                  <Text style={styles.buttonText}>
-                    Undock Bus
-                  </Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <>
-            {/* TERMINAL SELECTION */}
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>
+                Trip Status
+              </Text>
 
-            <View style={styles.card}>
+              <Text
+                style={[
+                  styles.infoValue,
+                  trip.status === "active"
+                    ? styles.activeText
+                    : styles.plannedText,
+                ]}
+              >
+                {trip.status}
+              </Text>
+            </View>
+
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>
+                Bus Status
+              </Text>
+
+              <Text style={styles.infoValue}>
+                {(bus.bus_status || "offline").replace("_", " ")}
+              </Text>
+            </View>
+          </View>
+
+          {/* TERMINAL SELECTION */}
+
+          {trip.status === "planned" && (
+            <View style={styles.sectionCard}>
               <Text style={styles.sectionTitle}>
                 Select Bus Terminal
               </Text>
 
-              <Text style={styles.muted}>
-                Choose the registered terminal where your bus is currently stationed.
+              <Text style={styles.sectionDescription}>
+                Choose the terminal where this bus will be docked.
               </Text>
 
               {terminals.length === 0 ? (
-                <Text style={styles.emptyTitle}>
-                  No registered terminals found.
-                </Text>
+                <View style={styles.noTerminalBox}>
+                  <Ionicons
+                    name="location-outline"
+                    size={25}
+                    color="#94A3B8"
+                  />
+
+                  <Text style={styles.noTerminalText}>
+                    No active terminals found for{" "}
+                    {bus.company || "this bus company"}.
+                  </Text>
+                </View>
               ) : (
-                terminals.map((terminal) => (
-                  <TouchableOpacity
-                    key={terminal.terminal_id}
-                    style={[
-                      styles.terminalOption,
-                      selectedTerminal?.terminal_id === terminal.terminal_id &&
-                        styles.selectedTerminal,
-                    ]}
-                    onPress={() => setSelectedTerminal(terminal)}
-                    disabled={!activeTrip}
-                  >
-                    <View style={styles.terminalIcon}>
+                terminals.map((terminal) => {
+                  const isSelected =
+                    String(selectedTerminal) ===
+                    String(terminal.terminal_id);
+
+                  return (
+                    <TouchableOpacity
+                      key={String(terminal.terminal_id)}
+                      style={[
+                        styles.terminalOption,
+                        isSelected && styles.selectedTerminal,
+                      ]}
+                      onPress={() =>
+                        setSelectedTerminal(
+                          String(terminal.terminal_id)
+                        )
+                      }
+                    >
+                      <View style={styles.terminalIcon}>
+                        <Ionicons
+                          name="location"
+                          size={20}
+                          color={
+                            isSelected
+                              ? "#FFFFFF"
+                              : "#06B6D4"
+                          }
+                        />
+                      </View>
+
+                      <View style={styles.terminalInfo}>
+                        <Text style={styles.terminalName}>
+                          {terminal.terminal_name}
+                        </Text>
+
+                        <Text style={styles.terminalAddress}>
+                          {terminal.terminal_address ||
+                            "No address available"}
+                        </Text>
+                      </View>
+
                       <Ionicons
-                        name="business"
-                        size={24}
-                        color={COLORS.blue}
+                        name={
+                          isSelected
+                            ? "radio-button-on"
+                            : "radio-button-off"
+                        }
+                        size={21}
+                        color={
+                          isSelected
+                            ? "#06B6D4"
+                            : "#94A3B8"
+                        }
                       />
-                    </View>
-
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.infoValue}>
-                        {terminal.terminal_name}
-                      </Text>
-
-                      <Text style={styles.muted}>
-                        {terminal.operator_name}
-                      </Text>
-
-                      <Text style={styles.terminalAddress}>
-                        {terminal.terminal_address}
-                      </Text>
-                    </View>
-
-                    <Ionicons
-                      name={
-                        selectedTerminal?.terminal_id === terminal.terminal_id
-                          ? "radio-button-on"
-                          : "radio-button-off"
-                      }
-                      size={22}
-                      color={
-                        selectedTerminal?.terminal_id === terminal.terminal_id
-                          ? COLORS.blue
-                          : COLORS.muted
-                      }
-                    />
-                  </TouchableOpacity>
-                ))
+                    </TouchableOpacity>
+                  );
+                })
               )}
 
               <TouchableOpacity
                 style={[
                   styles.dockButton,
-                  (!activeTrip || !selectedTerminal || processing) &&
+                  (saving || terminals.length === 0) &&
                     styles.disabledButton,
                 ]}
-                onPress={handleDockBus}
-                disabled={!activeTrip || !selectedTerminal || processing}
+                onPress={saveDocking}
+                disabled={
+                  saving || terminals.length === 0
+                }
               >
-                {processing ? (
-                  <ActivityIndicator color="white" />
+                {saving ? (
+                  <ActivityIndicator color="#FFFFFF" />
                 ) : (
                   <>
                     <Ionicons
-                      name="checkmark-circle-outline"
-                      size={21}
-                      color="white"
+                      name="location"
+                      size={19}
+                      color="#FFFFFF"
                     />
-                    <Text style={styles.buttonText}>
-                      Confirm Docking
+
+                    <Text style={styles.primaryButtonText}>
+                      Dock Bus
                     </Text>
                   </>
                 )}
               </TouchableOpacity>
             </View>
-          </>
-        )}
+          )}
 
-        <View style={styles.notice}>
-          <Ionicons
-            name="information-circle"
-            size={22}
-            color={COLORS.blue}
-          />
+          {/* DOCKING STATUS */}
 
-          <Text style={styles.noticeText}>
-            Your destination is automatically retrieved from your active trip.
-            You cannot manually change it on this screen.
-          </Text>
-        </View>
-      </ScrollView>
-    </View>
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>
+              Docking Status
+            </Text>
+
+            {docking?.docking_status === "docked" ? (
+              <View style={styles.dockedBox}>
+                <Ionicons
+                  name="checkmark-circle"
+                  size={25}
+                  color="#16A34A"
+                />
+
+                <View style={styles.dockedInfo}>
+                  <Text style={styles.dockedTitle}>
+                    Bus Successfully Docked
+                  </Text>
+
+                  <Text style={styles.dockedTerminal}>
+                    {docking.terminal_name}
+                  </Text>
+                </View>
+              </View>
+            ) : (
+              <View style={styles.notDockedBox}>
+                <Ionicons
+                  name="alert-circle-outline"
+                  size={23}
+                  color="#D97706"
+                />
+
+                <Text style={styles.notDockedText}>
+                  This bus is not currently docked.
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* START TRIP */}
+
+          {trip.status === "planned" && (
+            <TouchableOpacity
+              style={[
+                styles.startButton,
+                (
+                  !docking ||
+                  docking.docking_status !== "docked" ||
+                  saving
+                ) && styles.disabledButton,
+              ]}
+              onPress={startTrip}
+              disabled={
+                !docking ||
+                docking.docking_status !== "docked" ||
+                saving
+              }
+            >
+              {saving ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <>
+                  <Ionicons
+                    name="play-circle"
+                    size={22}
+                    color="#FFFFFF"
+                  />
+
+                  <Text style={styles.startButtonText}>
+                    Start Trip
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
+
+          {/* ACTIVE TRIP */}
+
+          {trip.status === "active" && (
+            <View style={styles.activeTripBox}>
+              <Ionicons
+                name="navigate"
+                size={25}
+                color="#16A34A"
+              />
+
+              <View style={styles.activeTripInfo}>
+                <Text style={styles.activeTripTitle}>
+                  Trip In Progress
+                </Text>
+
+                <Text style={styles.activeTripDescription}>
+                  Your bus is currently on the road.
+                </Text>
+              </View>
+            </View>
+          )}
+        </>
+      )}
+
+      <View style={{ height: 30 }} />
+    </ScrollView>
   );
 }
 
-// ==========================================
+// -----------------------------------------
 // STYLES
-// ==========================================
+// -----------------------------------------
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
-    paddingHorizontal: 18,
+    backgroundColor: "#F1F5F9",
   },
-
+  content: {
+    padding: 18,
+  },
   center: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    gap: 12,
-    backgroundColor: COLORS.background,
+    backgroundColor: "#F1F5F9",
   },
-
+  loadingText: {
+    marginTop: 12,
+    color: "#64748B",
+  },
   header: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 18,
+    marginBottom: 20,
   },
-
+  backButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: "#FFFFFF",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 11,
+  },
+  headerTextContainer: {
+    flex: 1,
+  },
   headerTitle: {
-    fontSize: 22,
+    fontSize: 21,
     fontWeight: "800",
-    color: COLORS.dark,
+    color: "#0F172A",
   },
-
   headerSubtitle: {
-    color: COLORS.muted,
-    fontSize: 12,
+    fontSize: 11,
+    color: "#64748B",
     marginTop: 3,
   },
-
-  card: {
-    backgroundColor: COLORS.white,
-    borderRadius: 20,
-    padding: 19,
-    marginBottom: 17,
-    elevation: 2,
+  refreshButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: "#FFFFFF",
+    justifyContent: "center",
+    alignItems: "center",
   },
-
-  sectionTitle: {
-    fontSize: 18,
+  busCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    padding: 17,
+    borderRadius: 16,
+    marginBottom: 15,
+  },
+  busIcon: {
+    width: 55,
+    height: 55,
+    borderRadius: 15,
+    backgroundColor: "#CFFAFE",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 14,
+  },
+  busInfo: {
+    flex: 1,
+  },
+  busName: {
+    fontSize: 17,
     fontWeight: "800",
-    color: COLORS.text,
-    marginBottom: 14,
+    color: "#0F172A",
   },
-
+  plateNumber: {
+    fontSize: 12,
+    color: "#475569",
+    marginTop: 4,
+  },
+  companyText: {
+    fontSize: 11,
+    color: "#0891B2",
+    marginTop: 4,
+  },
+  sectionCard: {
+    backgroundColor: "#FFFFFF",
+    padding: 17,
+    borderRadius: 16,
+    marginBottom: 15,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#0F172A",
+    marginBottom: 13,
+  },
+  sectionDescription: {
+    color: "#64748B",
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: -6,
+    marginBottom: 13,
+  },
   infoRow: {
     flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-    gap: 13,
-    paddingVertical: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F1F5F9",
   },
-
   infoLabel: {
-    color: COLORS.muted,
     fontSize: 12,
+    color: "#64748B",
   },
-
   infoValue: {
-    color: COLORS.text,
-    fontSize: 15,
-    fontWeight: "800",
-    marginTop: 3,
-  },
-
-  destination: {
-    color: COLORS.dark,
-    fontSize: 17,
-    fontWeight: "900",
-    marginTop: 3,
-  },
-
-  muted: {
-    color: COLORS.muted,
     fontSize: 12,
-    marginTop: 4,
+    fontWeight: "700",
+    color: "#0F172A",
+    textTransform: "capitalize",
+  },
+  activeText: {
+    color: "#16A34A",
+  },
+  plannedText: {
+    color: "#D97706",
+  },
+  noTerminalBox: {
+    backgroundColor: "#F8FAFC",
+    borderRadius: 12,
+    padding: 17,
+    alignItems: "center",
+  },
+  noTerminalText: {
+    textAlign: "center",
+    fontSize: 12,
+    color: "#64748B",
+    marginTop: 8,
     lineHeight: 18,
   },
-
-  tripStatus: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 7,
-    backgroundColor: "#DCFCE7",
-    padding: 10,
-    borderRadius: 10,
-    marginTop: 10,
-    alignSelf: "flex-start",
-  },
-
-  statusDot: {
-    height: 8,
-    width: 8,
-    borderRadius: 4,
-    backgroundColor: COLORS.green,
-  },
-
-  tripStatusText: {
-    color: COLORS.green,
-    fontWeight: "900",
-    fontSize: 11,
-  },
-
   terminalOption: {
     flexDirection: "row",
     alignItems: "center",
+    padding: 12,
     borderWidth: 1,
     borderColor: "#E2E8F0",
-    borderRadius: 14,
-    padding: 13,
-    marginTop: 12,
-    gap: 12,
-  },
-
-  selectedTerminal: {
-    borderColor: COLORS.blue,
-    backgroundColor: "#ECFEFF",
-  },
-
-  terminalIcon: {
-    width: 45,
-    height: 45,
     borderRadius: 12,
-    backgroundColor: "#ECFEFF",
-    alignItems: "center",
-    justifyContent: "center",
+    marginBottom: 9,
   },
-
+  selectedTerminal: {
+    borderColor: "#06B6D4",
+    backgroundColor: "#ECFEFF",
+  },
+  terminalIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    backgroundColor: "#CFFAFE",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 10,
+  },
+  terminalInfo: {
+    flex: 1,
+    paddingRight: 8,
+  },
+  terminalName: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#0F172A",
+  },
   terminalAddress: {
-    fontSize: 11,
-    color: COLORS.muted,
+    fontSize: 10,
+    color: "#64748B",
     marginTop: 4,
   },
-
   dockButton: {
-    backgroundColor: COLORS.blue,
+    height: 48,
+    backgroundColor: "#0891B2",
+    borderRadius: 11,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 9,
+  },
+  primaryButton: {
+    backgroundColor: "#06B6D4",
+    padding: 13,
+    borderRadius: 10,
+    marginTop: 15,
+  },
+  primaryButtonText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  dockedBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#DCFCE7",
+    borderRadius: 12,
+    padding: 13,
+    gap: 10,
+  },
+  dockedInfo: {
+    flex: 1,
+  },
+  dockedTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#166534",
+  },
+  dockedTerminal: {
+    fontSize: 11,
+    color: "#15803D",
+    marginTop: 4,
+  },
+  notDockedBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FEF3C7",
+    borderRadius: 12,
+    padding: 13,
+    gap: 9,
+  },
+  notDockedText: {
+    flex: 1,
+    fontSize: 12,
+    color: "#92400E",
+  },
+  startButton: {
+    height: 53,
+    backgroundColor: "#16A34A",
     borderRadius: 13,
-    padding: 16,
-    marginTop: 20,
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
     gap: 9,
+    marginBottom: 15,
   },
-
-  undockButton: {
-    backgroundColor: COLORS.red,
-    borderRadius: 13,
-    padding: 15,
-    marginTop: 18,
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 9,
+  startButtonText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "800",
   },
-
   disabledButton: {
     opacity: 0.45,
   },
-
-  buttonText: {
-    color: "white",
-    fontWeight: "800",
-    fontSize: 14,
-  },
-
-  dockedHeader: {
+  activeTripBox: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-  },
-
-  dockedBadge: {
     backgroundColor: "#DCFCE7",
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-
-  dockedBadgeText: {
-    color: COLORS.green,
-    fontSize: 10,
-    fontWeight: "900",
-  },
-
-  emptyBox: {
-    alignItems: "center",
+    borderRadius: 13,
     padding: 15,
+    gap: 11,
   },
-
-  emptyTitle: {
-    color: COLORS.text,
+  activeTripInfo: {
+    flex: 1,
+  },
+  activeTripTitle: {
+    fontSize: 14,
     fontWeight: "800",
+    color: "#166534",
+  },
+  activeTripDescription: {
+    fontSize: 11,
+    color: "#15803D",
+    marginTop: 4,
+  },
+  emptyCard: {
+    backgroundColor: "#FFFFFF",
+    padding: 22,
+    borderRadius: 16,
+    alignItems: "center",
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#0F172A",
     marginTop: 10,
   },
-
-  notice: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    backgroundColor: "#E0F2FE",
-    padding: 15,
-    borderRadius: 14,
-    marginBottom: 30,
-    gap: 10,
-  },
-
-  noticeText: {
-    flex: 1,
-    color: COLORS.dark,
+  emptyText: {
     fontSize: 12,
-    lineHeight: 19,
+    color: "#64748B",
+    textAlign: "center",
+    lineHeight: 18,
+    marginTop: 6,
   },
 });

@@ -530,7 +530,7 @@ export default function TerminalBookingScreen({ navigation }) {
               </View>
 
               <View style={styles.driverArea}>
-                <Ionicons name="steering" size={24} color="#64748B" />
+                <Ionicons name="car-sport" size={24} color="#64748B" />
                 <Text style={styles.driverText}>DRIVER</Text>
               </View>
 

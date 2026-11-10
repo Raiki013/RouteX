@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "228303205450",
+    "project_id": "routex-a132d",
+    "storage_bucket": "routex-a132d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:228303205450:android:4ae05fe93900e0c6bde2b3",
+        "android_client_info": {
+          "package_name": "com.anonymous.RouteX"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDrwo8xDw-vNNSxlWJ1WjDe11KnBUpiWxs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

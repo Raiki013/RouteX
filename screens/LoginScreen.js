@@ -13,6 +13,7 @@ import {
 
 import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "../config/supabase";
+import { registerPushToken } from "../services/pushNotifications";
 
 export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState("");
@@ -42,9 +43,20 @@ export default function LoginScreen({ navigation }) {
       }
 
       if (data.user) {
-        // Supabase automatically manages the authentication session.
-        navigation.replace("MainTabs");
-      }
+          // Register this device for push notifications.
+          try {
+            await registerPushToken(data.user.id);
+          } catch (pushError) {
+            console.log(
+              "Push registration failed:",
+              pushError.message
+            );
+          }
+
+          // Continue to the application even if push registration fails.
+          navigation.replace("MainTabs");
+        }
+
     } catch (error) {
       Alert.alert("Error", "Something went wrong. Please try again.");
     } finally {

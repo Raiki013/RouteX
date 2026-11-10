@@ -15,9 +15,9 @@ import BottomTabs from "./navigation/BottomTabs";
 import BusListScreen from "./screens/BusListScreen";
 import PaymentScreen from "./screens/PaymentScreen";
 import TrackingScreen from "./screens/TrackingScreen";
-import TerminalBookingScreen from "./screens/TerminalBookingScreen";
-import PickupBookingScreen from "./screens/PickupBookingScreen";
+import TerminalBookingScreen from "./screens/TerminalBookingScreen";;
 import OperatorDockingScreen from "./screens/OperatorDockingScreen";
+import TripManagementScreen from "./screens/TripManagementScreen";
 import CashierPaymentScreen from "./screens/CashierPaymentScreen";
 
 // GCASH PAYMENT SCREENS
@@ -95,16 +95,16 @@ export default function App() {
             component={TerminalBookingScreen}
           />
 
-          {/* PICKUP BOOKING */}
-          <Stack.Screen
-            name="PickupBooking"
-            component={PickupBookingScreen}
-          />
-
           {/* OPERATOR DOCKING */}
           <Stack.Screen
             name="OperatorDocking"
             component={OperatorDockingScreen}
+          />
+
+          {/* OPERATOR TRIP MANAGEMENT */}
+          <Stack.Screen
+            name="TripManagement"
+            component={TripManagementScreen}
           />
 
           {/* CASHIER PAYMENT */}
@@ -112,6 +112,7 @@ export default function App() {
             name="CashierPayment"
             component={CashierPaymentScreen}
           />
+
         </Stack.Navigator>
       </NavigationContainer>
     </SafeAreaProvider>

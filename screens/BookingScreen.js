@@ -1,5 +1,6 @@
 
-import React from "react";
+import React, { useEffect, useState } from "react";
+
 import {
   View,
   Text,
@@ -7,32 +8,96 @@ import {
   TouchableOpacity,
   StatusBar,
   ScrollView,
+  ActivityIndicator,
+  Alert,
 } from "react-native";
 
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import AppHeader from "../components/AppHeader";
+import { supabase } from "../config/supabase";
 
 export default function BookingScreen({ navigation }) {
-  const bookingOptions = [
-    {
-      id: "terminal",
-      title: "Terminal Booking",
-      description:
-        "Book your bus seat and departure directly from your selected bus terminal.",
-      icon: "bus",
-      color: "#06B6D4",
-      screen: "TerminalBooking",
-    },
-    {
-      id: "pickup",
-      title: "Pick-up Booking",
-      description:
-        "Book a bus and request a convenient pick-up location along the route.",
-      icon: "map-marker-radius",
-      color: "#8B5CF6",
-      screen: "PickupBooking",
-    },
-  ];
+  const [companies, setCompanies] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const loadCompanies = async () => {
+    try {
+      setLoading(true);
+
+      const { data, error } = await supabase
+        .from("buses")
+        .select("bus_id, company, availability_status")
+        .not("company", "is", null)
+        .order("company", { ascending: true });
+
+      if (error) throw error;
+
+      // Group buses by company
+      const grouped = {};
+
+      (data || []).forEach((bus) => {
+        const company = bus.company?.trim();
+
+        if (!company) return;
+
+        if (!grouped[company]) {
+          grouped[company] = {
+            name: company,
+            total: 0,
+            available: 0,
+            standing: 0,
+            notAvailable: 0,
+          };
+        }
+
+        grouped[company].total++;
+
+        if (bus.availability_status === "available") {
+          grouped[company].available++;
+        } else if (bus.availability_status === "standing") {
+          grouped[company].standing++;
+        } else if (bus.availability_status === "not_available") {
+          grouped[company].notAvailable++;
+        }
+      });
+
+      setCompanies(Object.values(grouped));
+    } catch (error) {
+      console.log("Company loading error:", error);
+      Alert.alert("Error", "Unable to load bus companies.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadCompanies();
+
+    const channel = supabase
+      .channel("booking-companies")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "buses",
+        },
+        () => {
+          loadCompanies();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  const openCompany = (company) => {
+    navigation.navigate("BusList", {
+      company: company.name,
+    });
+  };
 
   return (
     <View style={styles.container}>
@@ -40,61 +105,131 @@ export default function BookingScreen({ navigation }) {
 
       <AppHeader />
 
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* HEADER */}
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
         <View style={styles.heroCard}>
-          <Text style={styles.heroTitle}>Book Your Trip</Text>
+          <View style={styles.heroIcon}>
+            <MaterialCommunityIcons
+              name="bus-multiple"
+              size={35}
+              color="#fff"
+            />
+          </View>
+
+          <Text style={styles.heroTitle}>Book Your Bus</Text>
+
           <Text style={styles.heroSub}>
-            Choose how you want to board your bus.
+            Select your preferred bus company to view its buses and
+            availability.
           </Text>
         </View>
 
-        {/* BOOKING OPTIONS */}
-        <Text style={styles.sectionTitle}>Select Booking Type</Text>
+        <View style={styles.sectionHeader}>
+          <View>
+            <Text style={styles.sectionTitle}>Bus Companies</Text>
+            <Text style={styles.sectionSubtitle}>
+              Choose a company to continue
+            </Text>
+          </View>
 
-        {bookingOptions.map((option) => (
-          <TouchableOpacity
-            key={option.id}
-            activeOpacity={0.85}
-            style={styles.optionCard}
-            onPress={() => navigation.navigate(option.screen)}
-          >
-            <View
-              style={[
-                styles.iconContainer,
-                { backgroundColor: option.color },
-              ]}
+          <View style={styles.companyCount}>
+            <Text style={styles.companyCountText}>
+              {companies.length}
+            </Text>
+          </View>
+        </View>
+
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#06B6D4" />
+            <Text style={styles.loadingText}>
+              Loading bus companies...
+            </Text>
+          </View>
+        ) : companies.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <MaterialCommunityIcons
+              name="bus-alert"
+              size={45}
+              color="#94A3B8"
+            />
+
+            <Text style={styles.emptyTitle}>
+              No Bus Companies Found
+            </Text>
+
+            <Text style={styles.emptyText}>
+              There are currently no registered bus companies.
+            </Text>
+
+            <TouchableOpacity
+              style={styles.retryButton}
+              onPress={loadCompanies}
             >
-              <MaterialCommunityIcons
-                name={option.icon}
-                size={36}
-                color="#fff"
-              />
-            </View>
-
-            <View style={styles.optionContent}>
-              <Text style={styles.optionTitle}>{option.title}</Text>
-
-              <Text style={styles.optionDescription}>
-                {option.description}
-              </Text>
-
-              <View style={styles.continueRow}>
-                <Text style={[styles.continueText, { color: option.color }]}>
-                  Continue Booking
-                </Text>
-
-                <Ionicons
-                  name="arrow-forward-circle"
-                  size={20}
-                  color={option.color}
+              <Text style={styles.retryText}>Refresh</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          companies.map((company, index) => (
+            <TouchableOpacity
+              key={company.name}
+              activeOpacity={0.85}
+              style={styles.companyCard}
+              onPress={() => openCompany(company)}
+            >
+              <View style={styles.companyIcon}>
+                <MaterialCommunityIcons
+                  name="bus"
+                  size={32}
+                  color="#06B6D4"
                 />
               </View>
-            </View>
-          </TouchableOpacity>
-        ))}
 
-        {/* INFORMATION */}
+              <View style={styles.companyInfo}>
+                <Text style={styles.companyName}>
+                  {company.name}
+                </Text>
+
+                <Text style={styles.busCount}>
+                  {company.total} registered{" "}
+                  {company.total === 1 ? "bus" : "buses"}
+                </Text>
+
+                <View style={styles.statusRow}>
+                  <View style={styles.statusItem}>
+                    <View style={styles.greenDot} />
+                    <Text style={styles.statusText}>
+                      {company.available}
+                    </Text>
+                  </View>
+
+                  <View style={styles.statusItem}>
+                    <View style={styles.orangeDot} />
+                    <Text style={styles.statusText}>
+                      {company.standing}
+                    </Text>
+                  </View>
+
+                  <View style={styles.statusItem}>
+                    <View style={styles.redDot} />
+                    <Text style={styles.statusText}>
+                      {company.notAvailable}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              <Ionicons
+                name="chevron-forward-circle"
+                size={27}
+                color="#06B6D4"
+              />
+            </TouchableOpacity>
+          ))
+        )}
+
         <View style={styles.infoCard}>
           <Ionicons
             name="information-circle"
@@ -103,8 +238,8 @@ export default function BookingScreen({ navigation }) {
           />
 
           <Text style={styles.infoText}>
-            Choose Terminal Booking if you will board at a terminal.
-            Choose Pick-up Booking if you need to be picked up along the route.
+            Select a bus company to view its registered buses,
+            locations, and current availability.
           </Text>
         </View>
       </ScrollView>
@@ -119,16 +254,30 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
   },
 
+  scrollContent: {
+    paddingBottom: 30,
+  },
+
   heroCard: {
     backgroundColor: "#06B6D4",
     borderRadius: 24,
-    padding: 22,
+    padding: 23,
     marginTop: 20,
+  },
+
+  heroIcon: {
+    width: 58,
+    height: 58,
+    borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 15,
   },
 
   heroTitle: {
     color: "#fff",
-    fontSize: 27,
+    fontSize: 26,
     fontWeight: "bold",
   },
 
@@ -139,60 +288,158 @@ const styles = StyleSheet.create({
     lineHeight: 21,
   },
 
+  sectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 28,
+    marginBottom: 16,
+  },
+
   sectionTitle: {
     fontSize: 19,
     fontWeight: "bold",
     color: "#0F172A",
-    marginTop: 28,
-    marginBottom: 15,
   },
 
-  optionCard: {
-    backgroundColor: "#fff",
-    borderRadius: 24,
-    padding: 20,
-    marginBottom: 18,
-    elevation: 3,
-    flexDirection: "row",
-    alignItems: "center",
+  sectionSubtitle: {
+    color: "#64748B",
+    fontSize: 12,
+    marginTop: 4,
   },
 
-  iconContainer: {
-    width: 75,
-    height: 75,
-    borderRadius: 22,
+  companyCount: {
+    backgroundColor: "#CFFAFE",
+    width: 36,
+    height: 36,
+    borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",
   },
 
-  optionContent: {
-    flex: 1,
-    marginLeft: 16,
+  companyCountText: {
+    color: "#0891B2",
+    fontWeight: "bold",
+    fontSize: 15,
   },
 
-  optionTitle: {
-    fontSize: 17,
+  companyCard: {
+    backgroundColor: "#fff",
+    borderRadius: 20,
+    padding: 17,
+    marginBottom: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    elevation: 2,
+  },
+
+  companyIcon: {
+    width: 62,
+    height: 62,
+    borderRadius: 18,
+    backgroundColor: "#CFFAFE",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  companyInfo: {
+    flex: 1,
+    marginLeft: 14,
+  },
+
+  companyName: {
+    fontSize: 16,
     fontWeight: "bold",
     color: "#0F172A",
   },
 
-  optionDescription: {
+  busCount: {
     color: "#64748B",
-    fontSize: 13,
-    lineHeight: 19,
-    marginTop: 7,
+    fontSize: 12,
+    marginTop: 4,
   },
 
-  continueRow: {
+  statusRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 13,
+    marginTop: 10,
+    gap: 13,
   },
 
-  continueText: {
-    fontSize: 13,
+  statusItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+
+  statusText: {
+    color: "#64748B",
+    fontSize: 11,
+  },
+
+  greenDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#16A34A",
+  },
+
+  orangeDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#F59E0B",
+  },
+
+  redDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#EF4444",
+  },
+
+  loadingContainer: {
+    padding: 45,
+    alignItems: "center",
+  },
+
+  loadingText: {
+    color: "#64748B",
+    marginTop: 12,
+  },
+
+  emptyCard: {
+    backgroundColor: "#fff",
+    padding: 30,
+    borderRadius: 20,
+    alignItems: "center",
+  },
+
+  emptyTitle: {
+    color: "#0F172A",
+    fontSize: 17,
     fontWeight: "bold",
-    marginRight: 6,
+    marginTop: 12,
+  },
+
+  emptyText: {
+    color: "#64748B",
+    fontSize: 13,
+    textAlign: "center",
+    marginTop: 6,
+  },
+
+  retryButton: {
+    backgroundColor: "#06B6D4",
+    paddingHorizontal: 25,
+    paddingVertical: 11,
+    borderRadius: 12,
+    marginTop: 18,
+  },
+
+  retryText: {
+    color: "#fff",
+    fontWeight: "bold",
   },
 
   infoCard: {
@@ -201,8 +448,7 @@ const styles = StyleSheet.create({
     padding: 16,
     flexDirection: "row",
     alignItems: "flex-start",
-    marginTop: 8,
-    marginBottom: 30,
+    marginTop: 12,
   },
 
   infoText: {

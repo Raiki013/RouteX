@@ -1,3 +1,4 @@
+
 {
   "expo": {
     "name": "RouteX",
@@ -7,11 +8,13 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
+
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
+
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
@@ -20,7 +23,9 @@
         ]
       }
     },
+
     "android": {
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -37,11 +42,14 @@
       ],
       "package": "com.anonymous.RouteX"
     },
+
     "web": {
       "favicon": "./assets/favicon.png"
     },
+
     "plugins": [
       "expo-status-bar",
+
       [
         "expo-location",
         {
@@ -51,7 +59,24 @@
           "isAndroidForegroundServiceEnabled": true,
           "isIosBackgroundLocationEnabled": true
         }
+      ],
+
+      [
+        "expo-notifications",
+        {
+          "sounds": [
+            "./assets/sounds/hail_received.wav",
+            "./assets/sounds/hail_accepted.wav",
+            "./assets/sounds/passenger_nearby.wav"
+          ]
+        }
       ]
-    ]
+    ],
+
+    "extra": {
+      "eas": {
+        "projectId": "004dab7d-48b1-4d17-a5b1-2348073c0908"
+      }
+    }
   }
 }
