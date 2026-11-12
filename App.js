@@ -1,29 +1,39 @@
+
 import "./tasks/backgroundLocation";
+
 import React from "react";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
-// AUTH SCREENS
+// AUTH
 import LoginScreen from "./screens/LoginScreen";
 import SignupScreen from "./screens/SignupScreen";
 
 // NAVIGATION
 import BottomTabs from "./navigation/BottomTabs";
 
-// OTHER SCREENS
+// PASSENGER
 import BusListScreen from "./screens/BusListScreen";
 import PaymentScreen from "./screens/PaymentScreen";
-import TrackingScreen from "./screens/TrackingScreen";
-import TerminalBookingScreen from "./screens/TerminalBookingScreen";;
+import TerminalBookingScreen from "./screens/TerminalBookingScreen";
+import TicketScreen from "./screens/TicketScreen";
+
+// OPERATOR
 import OperatorDockingScreen from "./screens/OperatorDockingScreen";
 import TripManagementScreen from "./screens/TripManagementScreen";
-import CashierPaymentScreen from "./screens/CashierPaymentScreen";
-
-// GCASH PAYMENT SCREENS
 import OperatorGCashScreen from "./screens/OperatorGCashScreen";
+import OperatorTicketScannerScreen from "./screens/OperatorTicketScannerScreen";
+
+// CASHIER
+import CashierDashboardScreen from "./screens/CashierDashboardScreen";
+import CashierPaymentScreen from "./screens/CashierPaymentScreen";
 import CashierVerificationScreen from "./screens/CashierVerificationScreen";
-import TicketScreen from "./screens/TicketScreen";
+import CashierQRScannerScreen from "./screens/CashierQRScannerScreen";
+
+
+// TRACKING
+import TrackingScreen from "./screens/TrackingScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -38,81 +48,56 @@ export default function App() {
           }}
           initialRouteName="Login"
         >
-          {/* AUTHENTICATION */}
+          <Stack.Screen name="Login" component={LoginScreen} />
+          <Stack.Screen name="Signup" component={SignupScreen} />
+
+          <Stack.Screen name="MainTabs" component={BottomTabs} />
+
+          {/* PASSENGER */}
+          <Stack.Screen name="BusList" component={BusListScreen} />
+          <Stack.Screen name="TerminalBooking" component={TerminalBookingScreen} />
+          <Stack.Screen name="Payment" component={PaymentScreen} />
+          <Stack.Screen name="Ticket" component={TicketScreen} />
+
+          {/* CASHIER */}
           <Stack.Screen
-            name="Login"
-            component={LoginScreen}
+            name="CashierDashboard"
+            component={CashierDashboardScreen}
+          />
+          <Stack.Screen
+            name="CashierPayment"
+            component={CashierPaymentScreen}
+          />
+          <Stack.Screen
+            name="CashierVerification"
+            component={CashierVerificationScreen}
+          />
+          <Stack.Screen
+            name="CashierQRScanner"
+            component={CashierQRScannerScreen}
           />
 
+          {/* OPERATOR */}
           <Stack.Screen
-            name="Signup"
-            component={SignupScreen}
+            name="OperatorDocking"
+            component={OperatorDockingScreen}
           />
-
-          {/* MAIN APPLICATION */}
           <Stack.Screen
-            name="MainTabs"
-            component={BottomTabs}
+            name="TripManagement"
+            component={TripManagementScreen}
           />
-
-          <Stack.Screen
-            name="BusList"
-            component={BusListScreen}
-          />
-
-          {/* PASSENGER PAYMENT */}
-          <Stack.Screen
-            name="Payment"
-            component={PaymentScreen}
-          />
-
-          <Stack.Screen
-            name="Ticket"
-            component={TicketScreen}
-          />
-
-          {/* OPERATOR GCASH SETTINGS */}
           <Stack.Screen
             name="OperatorGCash"
             component={OperatorGCashScreen}
           />
 
-          {/* CASHIER GCASH VERIFICATION */}
           <Stack.Screen
-            name="CashierVerification"
-            component={CashierVerificationScreen}
+            name="OperatorTicketScanner"
+            component={OperatorTicketScannerScreen}
           />
 
           {/* TRACKING */}
-          <Stack.Screen
-            name="Tracking"
-            component={TrackingScreen}
-          />
-
-          {/* TERMINAL BOOKING */}
-          <Stack.Screen
-            name="TerminalBooking"
-            component={TerminalBookingScreen}
-          />
-
-          {/* OPERATOR DOCKING */}
-          <Stack.Screen
-            name="OperatorDocking"
-            component={OperatorDockingScreen}
-          />
-
-          {/* OPERATOR TRIP MANAGEMENT */}
-          <Stack.Screen
-            name="TripManagement"
-            component={TripManagementScreen}
-          />
-
-          {/* CASHIER PAYMENT */}
-          <Stack.Screen
-            name="CashierPayment"
-            component={CashierPaymentScreen}
-          />
-
+          <Stack.Screen name="Tracking" component={TrackingScreen} />
         </Stack.Navigator>
       </NavigationContainer>
     </SafeAreaProvider>

@@ -1,10 +1,8 @@
-
 import React, { useEffect, useState } from "react";
 
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   Image,
   Alert,
@@ -20,27 +18,21 @@ import * as FileSystem from "expo-file-system/legacy";
 import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "../config/supabase";
 
-const QR_BUCKET = "operator-gcash-qr";
+const IMAGE_BUCKET = "operator-gcash-qr";
 
 export default function OperatorGCashScreen() {
-  const [accountName, setAccountName] = useState("");
-  const [accountNumber, setAccountNumber] = useState("");
-
-  const [qrPath, setQrPath] = useState(null);
-  const [qrUrl, setQrUrl] = useState(null);
+  const [imageUrl, setImageUrl] = useState(null);
   const [selectedImage, setSelectedImage] = useState(null);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    loadAccount();
+    loadOperatorImage();
   }, []);
 
-  // ==========================================
-  // LOAD OPERATOR GCASH ACCOUNT
-  // ==========================================
-  const loadAccount = async () => {
+  // LOAD OPERATOR IMAGE
+  const loadOperatorImage = async () => {
     try {
       setLoading(true);
 
@@ -55,47 +47,33 @@ export default function OperatorGCashScreen() {
         throw new Error("Please log in first.");
       }
 
-      const { data, error } = await supabase
-        .from("operator_payment_methods")
-        .select("*")
-        .eq("operator_id", user.id)
-        .eq("payment_method", "GCash")
-        .maybeSingle();
+      const filePath = `${user.id}/operator-image.jpg`;
 
-      if (error) throw error;
+      const { data, error } = await supabase.storage
+        .from(IMAGE_BUCKET)
+        .createSignedUrl(filePath, 3600);
 
-      if (data) {
-        setAccountName(data.account_name || "");
-        setAccountNumber(data.account_number || "");
-        setQrPath(data.qr_image_path || null);
-
-        if (data.qr_image_path) {
-          const { data: imageData, error: imageError } =
-            await supabase.storage
-              .from(QR_BUCKET)
-              .createSignedUrl(data.qr_image_path, 3600);
-
-          if (imageError) throw imageError;
-
-          setQrUrl(imageData?.signedUrl || null);
-        }
+      if (error) {
+        // No image has been uploaded yet.
+        setImageUrl(null);
+        return;
       }
+
+      setImageUrl(data?.signedUrl || null);
     } catch (error) {
-      console.log("LOAD ACCOUNT ERROR:", error);
+      console.log("LOAD OPERATOR IMAGE ERROR:", error);
 
       Alert.alert(
         "Loading Error",
-        error.message || "Unable to load GCash account."
+        error.message || "Unable to load operator image."
       );
     } finally {
       setLoading(false);
     }
   };
 
-  // ==========================================
-  // SELECT AND CONVERT IMAGE TO JPG
-  // ==========================================
-  const chooseQR = async () => {
+  // SELECT IMAGE
+  const chooseImage = async () => {
     try {
       const permission =
         await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -110,7 +88,7 @@ export default function OperatorGCashScreen() {
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["images"],
-        allowsEditing: false,
+        allowsEditing: true,
         quality: 1,
       });
 
@@ -118,13 +96,8 @@ export default function OperatorGCashScreen() {
         return;
       }
 
-      const originalUri = result.assets[0].uri;
-
-      console.log("ORIGINAL IMAGE URI:", originalUri);
-
-      // Convert selected image into actual JPEG
       const converted = await ImageManipulator.manipulateAsync(
-        originalUri,
+        result.assets[0].uri,
         [],
         {
           compress: 0.9,
@@ -132,37 +105,28 @@ export default function OperatorGCashScreen() {
         }
       );
 
-      console.log("CONVERTED IMAGE URI:", converted.uri);
-
       const fileInfo = await FileSystem.getInfoAsync(converted.uri);
 
       if (!fileInfo.exists) {
-        throw new Error("Converted JPG image was not found.");
+        throw new Error("Selected image could not be processed.");
       }
 
       setSelectedImage({
         uri: converted.uri,
       });
 
-      setQrUrl(converted.uri);
-
-      Alert.alert(
-        "Image Selected",
-        "Your QR image is ready to upload as JPG."
-      );
+      setImageUrl(converted.uri);
     } catch (error) {
       console.log("IMAGE PICKER ERROR:", error);
 
       Alert.alert(
         "Image Error",
-        error.message || "Unable to process selected image."
+        error.message || "Unable to select image."
       );
     }
   };
 
-  // ==========================================
-  // CONVERT BASE64 TO UINT8ARRAY
-  // ==========================================
+  // CONVERT BASE64 TO BYTES
   const base64ToBytes = (base64) => {
     const binary = atob(base64);
     const bytes = new Uint8Array(binary.length);
@@ -174,85 +138,12 @@ export default function OperatorGCashScreen() {
     return bytes;
   };
 
-  // ==========================================
-  // UPLOAD JPG TO SUPABASE STORAGE
-  // ==========================================
-  const uploadQR = async (user) => {
+  // UPLOAD OPERATOR IMAGE
+  const saveImage = async () => {
     if (!selectedImage) {
-      return qrPath;
-    }
-
-    const fileInfo = await FileSystem.getInfoAsync(
-      selectedImage.uri
-    );
-
-    if (!fileInfo.exists) {
-      throw new Error("Converted JPG file does not exist.");
-    }
-
-    const base64 = await FileSystem.readAsStringAsync(
-      selectedImage.uri,
-      {
-        encoding: FileSystem.EncodingType.Base64,
-      }
-    );
-
-    if (!base64) {
-      throw new Error("Unable to read the selected JPG image.");
-    }
-
-    const bytes = base64ToBytes(base64);
-
-    if (!bytes.length) {
-      throw new Error("The selected JPG image is empty.");
-    }
-
-    const filePath = `${user.id}/${Date.now()}.jpg`;
-
-    console.log("UPLOADING JPG:", filePath);
-    console.log("IMAGE SIZE:", bytes.length);
-
-    const { data, error } = await supabase.storage
-      .from(QR_BUCKET)
-      .upload(filePath, bytes, {
-        contentType: "image/jpeg",
-        upsert: true,
-      });
-
-    if (error) {
-      console.log("SUPABASE STORAGE ERROR:", error);
-      throw error;
-    }
-
-    console.log("UPLOAD SUCCESS:", data);
-
-    return filePath;
-  };
-
-  // ==========================================
-  // SAVE GCASH ACCOUNT
-  // ==========================================
-  const saveAccount = async () => {
-    if (!accountName.trim() || !accountNumber.trim()) {
       Alert.alert(
-        "Missing Information",
-        "Please enter your GCash account name and mobile number."
-      );
-      return;
-    }
-
-    if (!/^\d{11}$/.test(accountNumber.trim())) {
-      Alert.alert(
-        "Invalid Number",
-        "Please enter a valid 11-digit GCash mobile number."
-      );
-      return;
-    }
-
-    if (!selectedImage && !qrPath) {
-      Alert.alert(
-        "Missing QR Code",
-        "Please upload your official GCash QR image."
+        "No New Image",
+        "Please choose an image before saving."
       );
       return;
     }
@@ -271,81 +162,69 @@ export default function OperatorGCashScreen() {
         throw new Error("Please log in first.");
       }
 
-      // Upload image if a new one was selected
-      const uploadedPath = await uploadQR(user);
+      const base64 = await FileSystem.readAsStringAsync(
+        selectedImage.uri,
+        {
+          encoding: FileSystem.EncodingType.Base64,
+        }
+      );
 
-      if (!uploadedPath) {
-        throw new Error("No QR image path available.");
+      if (!base64) {
+        throw new Error("Unable to read the selected image.");
       }
 
-      // Save GCash information
-      const { error: databaseError } = await supabase
-        .from("operator_payment_methods")
-        .upsert(
-          {
-            operator_id: user.id,
-            payment_method: "GCash",
-            account_name: accountName.trim(),
-            account_number: accountNumber.trim(),
-            qr_image_path: uploadedPath,
-            is_active: true,
-            updated_at: new Date().toISOString(),
-          },
-          {
-            onConflict: "operator_id",
-          }
-        );
+      const bytes = base64ToBytes(base64);
 
-      if (databaseError) {
-        throw databaseError;
-      }
+      const filePath = `${user.id}/operator-image.jpg`;
 
-      // Create signed URL for QR preview
-      const { data: imageData, error: imageError } =
-        await supabase.storage
-          .from(QR_BUCKET)
-          .createSignedUrl(uploadedPath, 3600);
+      const { error: uploadError } = await supabase.storage
+        .from(IMAGE_BUCKET)
+        .upload(filePath, bytes, {
+          contentType: "image/jpeg",
+          upsert: true,
+        });
+
+      if (uploadError) throw uploadError;
+
+      const { data, error: imageError } = await supabase.storage
+        .from(IMAGE_BUCKET)
+        .createSignedUrl(filePath, 3600);
 
       if (imageError) throw imageError;
 
-      setQrPath(uploadedPath);
-      setQrUrl(imageData?.signedUrl || null);
+      setImageUrl(data?.signedUrl || null);
       setSelectedImage(null);
 
       Alert.alert(
         "Success",
-        "Your GCash account and JPG QR image have been saved."
+        "Operator image uploaded successfully."
       );
     } catch (error) {
-      console.log("SAVE GCASH ERROR:", error);
+      console.log("SAVE OPERATOR IMAGE ERROR:", error);
 
       Alert.alert(
-        "Save Failed",
-        error.message || "Unable to save GCash information."
+        "Upload Failed",
+        error.message || "Unable to upload operator image."
       );
     } finally {
       setSaving(false);
     }
   };
 
-  // ==========================================
   // LOADING SCREEN
-  // ==========================================
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#087CFF" />
 
         <Text style={styles.loadingText}>
-          Loading GCash account...
+          Loading operator image...
         </Text>
       </View>
     );
   }
 
-  // ==========================================
   // MAIN SCREEN
-  // ==========================================
   return (
     <ScrollView
       style={styles.container}
@@ -353,95 +232,43 @@ export default function OperatorGCashScreen() {
       showsVerticalScrollIndicator={false}
     >
       <View style={styles.header}>
-        <Text style={styles.title}>
-          GCash Payment Setup
-        </Text>
+        <Text style={styles.title}>Operator Image</Text>
 
         <Text style={styles.subtitle}>
-          Manage your GCash account and payment QR code.
+          Upload and manage your operator image.
         </Text>
       </View>
 
-      {/* GCASH DETAILS */}
       <View style={styles.card}>
         <View style={styles.sectionHeader}>
           <Ionicons
-            name="wallet-outline"
+            name="image-outline"
             size={23}
             color="#087CFF"
           />
 
           <Text style={styles.sectionTitle}>
-            GCash Account Details
+            Image Preview
           </Text>
         </View>
 
-        <Text style={styles.label}>
-          Account Name
-        </Text>
-
-        <TextInput
-          style={styles.input}
-          placeholder="Enter GCash account name"
-          value={accountName}
-          onChangeText={setAccountName}
-          autoCapitalize="words"
-        />
-
-        <Text style={styles.label}>
-          GCash Mobile Number
-        </Text>
-
-        <TextInput
-          style={styles.input}
-          placeholder="09XXXXXXXXX"
-          value={accountNumber}
-          onChangeText={(value) =>
-            setAccountNumber(
-              value.replace(/\D/g, "").slice(0, 11)
-            )
-          }
-          keyboardType="phone-pad"
-          maxLength={11}
-        />
-      </View>
-
-      {/* QR IMAGE */}
-      <View style={styles.card}>
-        <View style={styles.sectionHeader}>
-          <Ionicons
-            name="qr-code-outline"
-            size={23}
-            color="#087CFF"
-          />
-
-          <Text style={styles.sectionTitle}>
-            GCash QR Code
-          </Text>
-        </View>
-
-        <Text style={styles.description}>
-          Upload your official GCash QR image. Images are
-          converted to JPG before uploading.
-        </Text>
-
-        <View style={styles.qrContainer}>
-          {qrUrl ? (
+        <View style={styles.imageContainer}>
+          {imageUrl ? (
             <Image
-              source={{ uri: qrUrl }}
-              style={styles.qrImage}
+              source={{ uri: imageUrl }}
+              style={styles.image}
               resizeMode="contain"
             />
           ) : (
-            <View style={styles.emptyQR}>
+            <View style={styles.emptyImage}>
               <Ionicons
-                name="qr-code-outline"
+                name="image-outline"
                 size={65}
                 color="#A0AAB8"
               />
 
               <Text style={styles.emptyText}>
-                No QR image uploaded
+                No image uploaded
               </Text>
             </View>
           )}
@@ -449,46 +276,45 @@ export default function OperatorGCashScreen() {
 
         <TouchableOpacity
           style={styles.uploadButton}
-          onPress={chooseQR}
+          onPress={chooseImage}
           disabled={saving}
         >
           <Ionicons
-            name="image-outline"
+            name="images-outline"
             size={20}
             color="#FFFFFF"
           />
 
           <Text style={styles.buttonText}>
-            {qrUrl ? "Change QR Image" : "Choose QR Image"}
+            {imageUrl ? "Change Image" : "Choose Image"}
           </Text>
         </TouchableOpacity>
 
         <Text style={styles.fileNote}>
-          Uploaded format: JPG (.jpg)
+          Image format: JPG
         </Text>
       </View>
 
-      {/* SAVE BUTTON */}
       <TouchableOpacity
         style={[
           styles.saveButton,
           saving && styles.disabledButton,
         ]}
-        onPress={saveAccount}
-        disabled={saving}
+        onPress={saveImage}
+        disabled={saving || !selectedImage}
       >
         {saving ? (
           <ActivityIndicator color="#FFFFFF" />
         ) : (
           <>
             <Ionicons
-              name="save-outline"
+              name="cloud-upload-outline"
               size={20}
               color="#FFFFFF"
             />
 
             <Text style={styles.buttonText}>
-              Save GCash Information
+              Save Image
             </Text>
           </>
         )}
@@ -497,9 +323,7 @@ export default function OperatorGCashScreen() {
   );
 }
 
-// ==========================================
 // STYLES
-// ==========================================
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -560,32 +384,7 @@ const styles = StyleSheet.create({
     marginLeft: 10,
   },
 
-  label: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#334155",
-    marginBottom: 8,
-  },
-
-  input: {
-    height: 50,
-    borderWidth: 1,
-    borderColor: "#DCE3ED",
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    marginBottom: 16,
-    color: "#172B4D",
-    backgroundColor: "#FFFFFF",
-  },
-
-  description: {
-    fontSize: 13,
-    lineHeight: 20,
-    color: "#64748B",
-    marginBottom: 16,
-  },
-
-  qrContainer: {
+  imageContainer: {
     alignItems: "center",
     justifyContent: "center",
     minHeight: 230,
@@ -596,12 +395,12 @@ const styles = StyleSheet.create({
     padding: 12,
   },
 
-  qrImage: {
+  image: {
     width: 210,
     height: 210,
   },
 
-  emptyQR: {
+  emptyImage: {
     alignItems: "center",
     justifyContent: "center",
   },

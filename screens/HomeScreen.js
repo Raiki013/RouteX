@@ -1,3 +1,4 @@
+
 import React, { useCallback, useEffect, useState } from "react";
 
 import {
@@ -24,7 +25,6 @@ const C = {
   gray: "#64748B",
   light: "#E2E8F0",
   green: "#16A34A",
-  red: "#DC2626",
 };
 
 export default function HomeScreen({ navigation }) {
@@ -36,10 +36,6 @@ export default function HomeScreen({ navigation }) {
 
   const [assignedBus, setAssignedBus] = useState(null);
   const [activeTrip, setActiveTrip] = useState(null);
-  const [activeBuses, setActiveBuses] = useState([]);
-
-  const [origin, setOrigin] = useState("");
-  const [destination, setDestination] = useState("");
 
   // Add Bus Modal
   const [addBusModal, setAddBusModal] = useState(false);
@@ -49,9 +45,9 @@ export default function HomeScreen({ navigation }) {
   const [newCapacity, setNewCapacity] = useState("");
   const [savingBus, setSavingBus] = useState(false);
 
-  // =====================================================
-  // LOAD DASHBOARD
-  // =====================================================
+  // =========================================
+  // LOAD HOME
+  // =========================================
 
   const loadHome = useCallback(async () => {
     try {
@@ -78,8 +74,6 @@ export default function HomeScreen({ navigation }) {
 
       // OPERATOR
       if (profile.user_level === "operator") {
-        setActiveBuses([]);
-
         const { data: buses, error: busError } =
           await supabase
             .from("buses")
@@ -121,54 +115,6 @@ export default function HomeScreen({ navigation }) {
       else if (profile.user_level === "user") {
         setAssignedBus(null);
         setActiveTrip(null);
-
-        const { data: trips, error: tripError } =
-          await supabase
-            .from("bus_trips")
-            .select(
-              "trip_id, bus_id, destination, status, started_at"
-            )
-            .eq("status", "active");
-
-        if (tripError) throw tripError;
-
-        const activeTrips = trips || [];
-
-        const busIds = [
-          ...new Set(
-            activeTrips
-              .map((trip) => trip.bus_id)
-              .filter((id) => id !== null && id !== undefined)
-              .map(String)
-          ),
-        ];
-
-        let busList = [];
-
-        if (busIds.length > 0) {
-          const { data: buses, error: busError } =
-            await supabase
-              .from("buses")
-              .select(
-                "bus_id, bus_name, plate_number, bus_type, capacity"
-              )
-              .in("bus_id", busIds);
-
-          if (busError) throw busError;
-
-          busList = buses || [];
-        }
-
-        const combined = activeTrips.map((trip) => ({
-          ...trip,
-          bus:
-            busList.find(
-              (bus) =>
-                String(bus.bus_id) === String(trip.bus_id)
-            ) || null,
-        }));
-
-        setActiveBuses(combined);
       } else {
         throw new Error("Unauthorized account role.");
       }
@@ -182,25 +128,22 @@ export default function HomeScreen({ navigation }) {
     }
   }, []);
 
-  // =====================================================
+  // =========================================
   // INITIAL LOAD
-  // =====================================================
+  // =========================================
 
   useEffect(() => {
     const initialize = async () => {
-      try {
-        await loadHome();
-      } finally {
-        setLoading(false);
-      }
+      await loadHome();
+      setLoading(false);
     };
 
     initialize();
   }, [loadHome]);
 
-  // =====================================================
+  // =========================================
   // REFRESH
-  // =====================================================
+  // =========================================
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -208,27 +151,16 @@ export default function HomeScreen({ navigation }) {
     setRefreshing(false);
   };
 
-  // =====================================================
+  // =========================================
   // NAVIGATION
-  // =====================================================
+  // =========================================
+
+  const openBooking = () => {
+    navigation.navigate("Booking");
+  };
 
   const openTracking = () => {
     navigation.navigate("Live Tracking");
-  };
-
-  const openBooking = () => {
-    if (!origin.trim() || !destination.trim()) {
-      Alert.alert(
-        "Missing Route",
-        "Please enter your origin and destination."
-      );
-      return;
-    }
-
-    navigation.navigate("Book a Bus", {
-      origin: origin.trim(),
-      destination: destination.trim(),
-    });
   };
 
   const openProfile = () => {
@@ -239,9 +171,13 @@ export default function HomeScreen({ navigation }) {
     navigation.navigate("OperatorDocking");
   };
 
-  // =====================================================
+  const openTicketScanner = () => {
+    navigation.navigate("OperatorTicketScanner");
+  };
+
+  // =========================================
   // ADD BUS
-  // =====================================================
+  // =========================================
 
   const resetBusForm = () => {
     setNewBusName("");
@@ -333,9 +269,9 @@ export default function HomeScreen({ navigation }) {
     }
   };
 
-  // =====================================================
+  // =========================================
   // LOADING
-  // =====================================================
+  // =========================================
 
   if (loading) {
     return (
@@ -346,9 +282,9 @@ export default function HomeScreen({ navigation }) {
     );
   }
 
-  // =====================================================
+  // =========================================
   // MAIN SCREEN
-  // =====================================================
+  // =========================================
 
   return (
     <ScrollView
@@ -388,9 +324,9 @@ export default function HomeScreen({ navigation }) {
         </TouchableOpacity>
       </View>
 
-      {/* ================================================= */}
+      {/* ===================================== */}
       {/* PASSENGER HOME */}
-      {/* ================================================= */}
+      {/* ===================================== */}
 
       {userLevel === "user" && (
         <>
@@ -404,191 +340,88 @@ export default function HomeScreen({ navigation }) {
             </Text>
           </View>
 
-          {/* FIND A BUS */}
-
-          <View style={styles.card}>
-            <View style={styles.cardHeading}>
-              <View style={styles.headingIcon}>
-                <Ionicons
-                  name="search"
-                  size={20}
-                  color={C.blue}
-                />
-              </View>
-
-              <View>
-                <Text style={styles.cardTitle}>
-                  Find a Bus
-                </Text>
-                <Text style={styles.cardSubtitle}>
-                  Enter your travel route
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.inputContainer}>
-              <Ionicons
-                name="radio-button-on"
-                size={19}
-                color={C.blue}
-              />
-
-              <TextInput
-                style={styles.input}
-                placeholder="Origin"
-                placeholderTextColor="#94A3B8"
-                value={origin}
-                onChangeText={setOrigin}
-              />
-            </View>
-
-            <View style={styles.routeLine} />
-
-            <View style={styles.inputContainer}>
-              <Ionicons
-                name="location"
-                size={19}
-                color={C.green}
-              />
-
-              <TextInput
-                style={styles.input}
-                placeholder="Destination"
-                placeholderTextColor="#94A3B8"
-                value={destination}
-                onChangeText={setDestination}
-              />
-            </View>
-
-            <TouchableOpacity
-              style={styles.primaryButton}
-              onPress={openBooking}
-              activeOpacity={0.8}
-            >
-              <Ionicons
-                name="search"
-                size={19}
-                color={C.white}
-              />
-
-              <Text style={styles.primaryButtonText}>
-                Search Available Buses
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* LIVE TRACKING SHORTCUT */}
+          {/* BOOK A BUS */}
 
           <TouchableOpacity
-            style={styles.trackingBanner}
-            onPress={openTracking}
+            style={styles.actionCard}
+            onPress={openBooking}
             activeOpacity={0.85}
           >
-            <View style={styles.trackingIcon}>
+            <View style={styles.actionIcon}>
               <Ionicons
-                name="navigate"
-                size={24}
+                name="bus"
+                size={27}
                 color={C.blue}
               />
             </View>
 
-            <View style={styles.trackingDetails}>
-              <Text style={styles.trackingTitle}>
-                Live Bus Tracking
+            <View style={styles.actionDetails}>
+              <Text style={styles.actionTitle}>
+                Book a Bus
               </Text>
 
-              <Text style={styles.trackingSubtitle}>
-                See buses currently on the road.
+              <Text style={styles.actionSubtitle}>
+                Find available buses and book your trip.
               </Text>
             </View>
 
             <Ionicons
               name="chevron-forward"
-              size={21}
+              size={22}
               color={C.gray}
             />
           </TouchableOpacity>
 
-          {/* ACTIVE BUSES */}
+          {/* LIVE TRACKING */}
 
-          <View style={styles.sectionHeader}>
-            <View>
-              <Text style={styles.sectionHeading}>
-                Active Buses
+          <TouchableOpacity
+            style={styles.actionCard}
+            onPress={openTracking}
+            activeOpacity={0.85}
+          >
+            <View style={styles.actionIcon}>
+              <Ionicons
+                name="navigate"
+                size={27}
+                color={C.blue}
+              />
+            </View>
+
+            <View style={styles.actionDetails}>
+              <Text style={styles.actionTitle}>
+                Live Bus Tracking
               </Text>
 
-              <Text style={styles.sectionSubtitle}>
-                Buses currently on active trips
+              <Text style={styles.actionSubtitle}>
+                View buses currently traveling on the road.
               </Text>
             </View>
 
-            <TouchableOpacity onPress={openTracking}>
-              <Text style={styles.viewAll}>View Map</Text>
-            </TouchableOpacity>
+            <Ionicons
+              name="chevron-forward"
+              size={22}
+              color={C.gray}
+            />
+          </TouchableOpacity>
+
+          <View style={styles.infoCard}>
+            <Ionicons
+              name="information-circle-outline"
+              size={22}
+              color={C.blue}
+            />
+
+            <Text style={styles.infoText}>
+              Book your trip and track your bus in real time
+              using RouteX.
+            </Text>
           </View>
-
-          {activeBuses.length === 0 ? (
-            <View style={styles.emptyCard}>
-              <View style={styles.emptyIcon}>
-                <Ionicons
-                  name="bus-outline"
-                  size={32}
-                  color="#94A3B8"
-                />
-              </View>
-
-              <Text style={styles.emptyTitle}>
-                No Active Buses
-              </Text>
-
-              <Text style={styles.emptyText}>
-                There are currently no buses on active trips.
-                Please check again later.
-              </Text>
-            </View>
-          ) : (
-            activeBuses.map((trip) => (
-              <TouchableOpacity
-                key={trip.trip_id}
-                style={styles.busCard}
-                onPress={openTracking}
-                activeOpacity={0.8}
-              >
-                <View style={styles.busIcon}>
-                  <Ionicons
-                    name="bus"
-                    size={26}
-                    color={C.blue}
-                  />
-                </View>
-
-                <View style={styles.busDetails}>
-                  <Text style={styles.busName}>
-                    {trip.bus?.bus_name || `Bus ${trip.bus_id}`}
-                  </Text>
-
-                  <Text style={styles.busRoute}>
-                    To: {trip.destination || "Not specified"}
-                  </Text>
-
-                  <Text style={styles.plateNumber}>
-                    {trip.bus?.plate_number || "Plate unavailable"}
-                  </Text>
-                </View>
-
-                <View style={styles.activeBadge}>
-                  <View style={styles.activeDot} />
-                  <Text style={styles.activeText}>Active</Text>
-                </View>
-              </TouchableOpacity>
-            ))
-          )}
         </>
       )}
 
-      {/* ================================================= */}
+      {/* ===================================== */}
       {/* OPERATOR HOME */}
-      {/* ================================================= */}
+      {/* ===================================== */}
 
       {userLevel === "operator" && (
         <>
@@ -598,11 +431,11 @@ export default function HomeScreen({ navigation }) {
             </Text>
 
             <Text style={styles.welcomeText}>
-              Manage your bus and active trips.
+              Manage your bus, trips, and passengers.
             </Text>
           </View>
 
-          {/* ASSIGNED BUS */}
+          {/* MY BUS HEADER */}
 
           <View style={styles.sectionHeader}>
             <View>
@@ -631,6 +464,8 @@ export default function HomeScreen({ navigation }) {
               </Text>
             </TouchableOpacity>
           </View>
+
+          {/* BUS INFORMATION */}
 
           <View style={styles.card}>
             {assignedBus ? (
@@ -775,7 +610,7 @@ export default function HomeScreen({ navigation }) {
                 </TouchableOpacity>
               </>
             ) : (
-              <View style={styles.emptyCard}>
+              <View style={styles.noBusContainer}>
                 <View style={styles.emptyIcon}>
                   <Ionicons
                     name="bus-outline"
@@ -789,8 +624,8 @@ export default function HomeScreen({ navigation }) {
                 </Text>
 
                 <Text style={styles.emptyText}>
-                  Add a bus to your account to start managing
-                  trips and GPS tracking.
+                  Register a bus to start managing trips and
+                  GPS tracking.
                 </Text>
 
                 <TouchableOpacity
@@ -811,89 +646,113 @@ export default function HomeScreen({ navigation }) {
             )}
           </View>
 
-          {/* BUS DOCKING */}
+          {/* OPERATOR ACTIONS */}
 
           <Text style={styles.sectionHeading}>
-            Bus Management
+            Operator Tools
           </Text>
 
+          {/* SCAN BOARDING TICKET */}
+
           <TouchableOpacity
-            style={styles.managementCard}
-            onPress={openDocking}
+            style={styles.actionCard}
+            onPress={openTicketScanner}
             activeOpacity={0.85}
           >
-            <View style={styles.managementIcon}>
+            <View style={[styles.actionIcon, styles.scanIcon]}>
               <Ionicons
-                name="git-branch-outline"
-                size={25}
+                name="qr-code"
+                size={27}
                 color={C.blue}
               />
             </View>
 
-            <View style={styles.managementDetails}>
-              <Text style={styles.managementTitle}>
-                Manage Bus Docking
+            <View style={styles.actionDetails}>
+              <Text style={styles.actionTitle}>
+                Scan Boarding Ticket
               </Text>
 
-              <Text style={styles.managementSubtitle}>
-                View and manage your bus docking information.
+              <Text style={styles.actionSubtitle}>
+                Scan and verify passenger tickets before boarding.
               </Text>
             </View>
 
             <Ionicons
               name="chevron-forward"
-              size={21}
+              size={22}
               color={C.gray}
             />
           </TouchableOpacity>
 
-          {/* GPS STATUS */}
+          {/* BUS DOCKING */}
 
-          <View style={styles.gpsCard}>
-            <View style={styles.gpsIcon}>
+          <TouchableOpacity
+            style={styles.actionCard}
+            onPress={openDocking}
+            activeOpacity={0.85}
+          >
+            <View style={styles.actionIcon}>
               <Ionicons
-                name="location"
-                size={22}
+                name="git-branch-outline"
+                size={27}
                 color={C.blue}
               />
             </View>
 
-            <View style={{ flex: 1 }}>
-              <Text style={styles.gpsTitle}>
-                GPS Tracking
+            <View style={styles.actionDetails}>
+              <Text style={styles.actionTitle}>
+                Manage Bus Docking
               </Text>
 
-              <Text style={styles.gpsDescription}>
-                {activeTrip
-                  ? "Your trip is active. Open Live Tracking to manage your location."
-                  : "GPS tracking starts when you select a destination and start your trip."}
+              <Text style={styles.actionSubtitle}>
+                View and manage your bus terminal docking.
               </Text>
             </View>
-          </View>
 
-          {/* TRACKING BUTTON */}
+            <Ionicons
+              name="chevron-forward"
+              size={22}
+              color={C.gray}
+            />
+          </TouchableOpacity>
+
+          {/* LIVE TRACKING */}
 
           <TouchableOpacity
-            style={styles.trackingButton}
+            style={styles.actionCard}
             onPress={openTracking}
             activeOpacity={0.85}
           >
-            <Ionicons
-              name="navigate"
-              size={20}
-              color={C.white}
-            />
+            <View style={styles.actionIcon}>
+              <Ionicons
+                name="navigate"
+                size={27}
+                color={C.blue}
+              />
+            </View>
 
-            <Text style={styles.trackingButtonText}>
-              Open Live Tracking
-            </Text>
+            <View style={styles.actionDetails}>
+              <Text style={styles.actionTitle}>
+                Live Tracking
+              </Text>
+
+              <Text style={styles.actionSubtitle}>
+                Start or manage your active trip and GPS location.
+              </Text>
+            </View>
+
+            <Ionicons
+              name="chevron-forward"
+              size={22}
+              color={C.gray}
+            />
           </TouchableOpacity>
         </>
       )}
 
-      {/* ================================================= */}
+      {/* ===================================== */}
       {/* ADD BUS MODAL */}
-      {/* ================================================= */}
+      {/* ===================================== */}
 
       <Modal
         visible={addBusModal}
@@ -1094,9 +953,9 @@ export default function HomeScreen({ navigation }) {
   );
 }
 
-// =====================================================
+// =============================================
 // STYLES
-// =====================================================
+// =============================================
 
 const styles = StyleSheet.create({
   container: {
@@ -1105,7 +964,7 @@ const styles = StyleSheet.create({
   },
 
   content: {
-    paddingBottom: 15,
+    paddingBottom: 20,
   },
 
   center: {
@@ -1183,118 +1042,66 @@ const styles = StyleSheet.create({
     marginTop: 5,
   },
 
-  card: {
+  actionCard: {
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: C.white,
     marginHorizontal: 20,
-    padding: 18,
-    borderRadius: 19,
-    marginBottom: 22,
+    marginBottom: 14,
+    padding: 17,
+    borderRadius: 17,
     borderWidth: 1,
     borderColor: "#EAF0F7",
   },
 
-  cardHeading: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 17,
-  },
-
-  headingIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+  actionIcon: {
+    width: 50,
+    height: 50,
+    borderRadius: 14,
     backgroundColor: "#EFF6FF",
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 11,
   },
 
-  cardTitle: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: C.navy,
+  scanIcon: {
+    backgroundColor: "#DBEAFE",
   },
 
-  cardSubtitle: {
-    fontSize: 11,
-    color: C.gray,
-    marginTop: 3,
-  },
-
-  inputContainer: {
-    height: 50,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: C.background,
-    borderRadius: 12,
-    paddingHorizontal: 13,
-  },
-
-  input: {
+  actionDetails: {
     flex: 1,
-    marginLeft: 10,
+    marginLeft: 13,
+    marginRight: 8,
+  },
+
+  actionTitle: {
     color: C.navy,
     fontSize: 14,
-  },
-
-  routeLine: {
-    height: 13,
-    width: 1,
-    backgroundColor: "#CBD5E1",
-    marginLeft: 22,
-  },
-
-  primaryButton: {
-    backgroundColor: C.blue,
-    borderRadius: 12,
-    padding: 15,
-    alignItems: "center",
-    justifyContent: "center",
-    flexDirection: "row",
-    marginTop: 15,
-  },
-
-  primaryButtonText: {
-    color: C.white,
     fontWeight: "bold",
-    fontSize: 14,
-    marginLeft: 8,
   },
 
-  trackingBanner: {
+  actionSubtitle: {
+    color: C.gray,
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 5,
+  },
+
+  infoCard: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#EAF3FF",
     marginHorizontal: 20,
+    marginTop: 8,
     padding: 15,
-    borderRadius: 16,
-    marginBottom: 25,
+    borderRadius: 14,
+    gap: 10,
   },
 
-  trackingIcon: {
-    width: 45,
-    height: 45,
-    backgroundColor: C.white,
-    borderRadius: 13,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-
-  trackingDetails: {
+  infoText: {
     flex: 1,
-    marginLeft: 12,
-  },
-
-  trackingTitle: {
     color: C.navy,
-    fontSize: 14,
-    fontWeight: "bold",
-  },
-
-  trackingSubtitle: {
-    color: C.gray,
-    fontSize: 11,
-    marginTop: 4,
+    fontSize: 12,
+    lineHeight: 18,
   },
 
   sectionHeader: {
@@ -1319,107 +1126,14 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 
-  viewAll: {
-    color: C.blue,
-    fontWeight: "bold",
-    fontSize: 12,
-  },
-
-  emptyCard: {
-    alignItems: "center",
-    padding: 18,
-  },
-
-  emptyIcon: {
-    width: 65,
-    height: 65,
-    borderRadius: 20,
-    backgroundColor: "#F1F5F9",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-
-  emptyTitle: {
-    color: C.navy,
-    fontWeight: "bold",
-    fontSize: 15,
-    marginTop: 12,
-    textAlign: "center",
-  },
-
-  emptyText: {
-    color: C.gray,
-    fontSize: 12,
-    textAlign: "center",
-    marginTop: 6,
-    lineHeight: 19,
-  },
-
-  busCard: {
+  card: {
     backgroundColor: C.white,
     marginHorizontal: 20,
-    marginBottom: 11,
-    padding: 14,
-    borderRadius: 16,
-    flexDirection: "row",
-    alignItems: "center",
+    padding: 18,
+    borderRadius: 19,
+    marginBottom: 22,
     borderWidth: 1,
     borderColor: "#EAF0F7",
-  },
-
-  busIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 13,
-    backgroundColor: "#EFF6FF",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-
-  busDetails: {
-    flex: 1,
-    marginLeft: 12,
-  },
-
-  busName: {
-    color: C.navy,
-    fontSize: 14,
-    fontWeight: "bold",
-  },
-
-  busRoute: {
-    color: C.gray,
-    fontSize: 12,
-    marginTop: 4,
-  },
-
-  plateNumber: {
-    color: C.gray,
-    fontSize: 11,
-    marginTop: 4,
-  },
-
-  activeBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#DCFCE7",
-    paddingHorizontal: 9,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-
-  activeDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: C.green,
-    marginRight: 5,
-  },
-
-  activeText: {
-    color: C.green,
-    fontSize: 10,
-    fontWeight: "bold",
   },
 
   operatorBusHeader: {
@@ -1441,6 +1155,12 @@ const styles = StyleSheet.create({
     fontSize: 17,
     color: C.navy,
     fontWeight: "bold",
+  },
+
+  plateNumber: {
+    color: C.gray,
+    fontSize: 11,
+    marginTop: 4,
   },
 
   assignedBadge: {
@@ -1544,6 +1264,23 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 
+  primaryButton: {
+    backgroundColor: C.blue,
+    borderRadius: 12,
+    padding: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    marginTop: 15,
+  },
+
+  primaryButtonText: {
+    color: C.white,
+    fontWeight: "bold",
+    fontSize: 14,
+    marginLeft: 8,
+  },
+
   addBusButton: {
     backgroundColor: C.blue,
     flexDirection: "row",
@@ -1560,93 +1297,34 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
 
-  managementCard: {
-    flexDirection: "row",
+  noBusContainer: {
     alignItems: "center",
-    backgroundColor: C.white,
-    marginHorizontal: 20,
-    padding: 15,
-    borderRadius: 16,
-    marginBottom: 17,
-    borderWidth: 1,
-    borderColor: "#EAF0F7",
+    padding: 10,
   },
 
-  managementIcon: {
-    width: 46,
-    height: 46,
-    borderRadius: 13,
-    backgroundColor: "#EFF6FF",
+  emptyIcon: {
+    width: 65,
+    height: 65,
+    borderRadius: 20,
+    backgroundColor: "#F1F5F9",
     justifyContent: "center",
     alignItems: "center",
   },
 
-  managementDetails: {
-    flex: 1,
-    marginLeft: 12,
-  },
-
-  managementTitle: {
+  emptyTitle: {
     color: C.navy,
     fontWeight: "bold",
-    fontSize: 14,
+    fontSize: 15,
+    marginTop: 12,
+    textAlign: "center",
   },
 
-  managementSubtitle: {
+  emptyText: {
     color: C.gray,
-    fontSize: 11,
-    marginTop: 4,
-    lineHeight: 16,
-  },
-
-  gpsCard: {
-    backgroundColor: "#EAF3FF",
-    marginHorizontal: 20,
-    padding: 15,
-    borderRadius: 15,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    marginBottom: 13,
-  },
-
-  gpsIcon: {
-    width: 42,
-    height: 42,
-    backgroundColor: C.white,
-    borderRadius: 12,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-
-  gpsTitle: {
-    color: C.navy,
-    fontWeight: "bold",
-    fontSize: 14,
-  },
-
-  gpsDescription: {
-    color: C.gray,
-    fontSize: 11,
-    marginTop: 4,
-    lineHeight: 17,
-  },
-
-  trackingButton: {
-    backgroundColor: C.navy,
-    marginHorizontal: 20,
-    padding: 15,
-    borderRadius: 13,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 9,
-  },
-
-  trackingButtonText: {
-    color: C.white,
-    fontWeight: "bold",
-    fontSize: 14,
+    fontSize: 12,
+    textAlign: "center",
+    marginTop: 6,
+    lineHeight: 19,
   },
 
   footer: {

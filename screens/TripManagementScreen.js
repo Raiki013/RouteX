@@ -10,7 +10,6 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  TextInput,
   ScrollView,
   ActivityIndicator,
   Alert,
@@ -19,26 +18,47 @@ import {
 
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
+import * as Location from "expo-location";
 
 import { supabase } from "../config/supabase";
-import { stopOperatorBackgroundGPS } from "../tasks/backgroundLocation";
+import {
+  startOperatorBackgroundGPS,
+  stopOperatorBackgroundGPS,
+} from "../tasks/backgroundLocation";
 
-export default function TripManagementScreen({ navigation, route }) {
+// ==========================================
+// DESTINATION OPTIONS
+// ==========================================
+
+const DESTINATIONS = [
+  "Cubao",
+  "TPLEX",
+  "Vigan",
+  "Laoag",
+  "San Fernando City",
+  "Baguio",
+  "Rosario",
+  "Agoo",
+  "Aringay",
+];
+
+export default function TripManagementScreen({
+  navigation,
+  route,
+}) {
   const [user, setUser] = useState(null);
   const [buses, setBuses] = useState([]);
   const [trips, setTrips] = useState([]);
   const [selectedBus, setSelectedBus] = useState(null);
-  const [hails, setHails] = useState([]);
 
   const [destination, setDestination] = useState("");
+  const [destinationOpen, setDestinationOpen] = useState(false);
+
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // Keep the latest selected bus available to async functions.
   const selectedBusRef = useRef(null);
-
-  // Allows realtime callbacks to call the latest loadData function.
   const loadDataRef = useRef(null);
 
   selectedBusRef.current = selectedBus;
@@ -134,35 +154,13 @@ export default function TripManagementScreen({ navigation, route }) {
   };
 
   // ==========================================
-  // LOAD PASSENGER HAILS
-  // ==========================================
-
-  const loadHails = async (operatorId, busId, tripId) => {
-    if (!operatorId || !busId || !tripId) {
-      setHails([]);
-      return [];
-    }
-
-    const { data, error } = await supabase
-      .from("passenger_hails")
-      .select("*")
-      .eq("operator_id", operatorId)
-      .eq("bus_id", String(busId))
-      .eq("trip_id", String(tripId))
-      .order("created_at", { ascending: false });
-
-    if (error) throw error;
-
-    setHails(data || []);
-
-    return data || [];
-  };
-
-  // ==========================================
   // LOAD ALL SCREEN DATA
   // ==========================================
 
-  const loadData = async ({ refresh = false, silent = false } = {}) => {
+  const loadData = async ({
+    refresh = false,
+    silent = false,
+  } = {}) => {
     try {
       if (refresh) {
         setRefreshing(true);
@@ -182,7 +180,6 @@ export default function TripManagementScreen({ navigation, route }) {
       setBuses(loadedBuses);
       setTrips(loadedTrips);
 
-      // First priority: bus passed from OperatorDocking.
       const requestedBusId = route?.params?.busId;
 
       let currentSelectedBus = requestedBusId
@@ -192,7 +189,6 @@ export default function TripManagementScreen({ navigation, route }) {
           )
         : null;
 
-      // Second priority: previously selected bus.
       if (!currentSelectedBus && selectedBusRef.current) {
         currentSelectedBus = loadedBuses.find(
           (item) =>
@@ -201,31 +197,11 @@ export default function TripManagementScreen({ navigation, route }) {
         );
       }
 
-      // Third priority: first assigned bus.
       if (!currentSelectedBus && loadedBuses.length > 0) {
         currentSelectedBus = loadedBuses[0];
       }
 
       setSelectedBus(currentSelectedBus || null);
-
-      if (currentSelectedBus) {
-        const currentTrip = getBusTrip(
-          currentSelectedBus.bus_id,
-          loadedTrips
-        );
-
-        if (currentTrip) {
-          await loadHails(
-            authUser.id,
-            currentSelectedBus.bus_id,
-            currentTrip.trip_id
-          );
-        } else {
-          setHails([]);
-        }
-      } else {
-        setHails([]);
-      }
     } catch (error) {
       console.log("TRIP MANAGEMENT LOAD ERROR:", error);
 
@@ -246,7 +222,6 @@ export default function TripManagementScreen({ navigation, route }) {
     }
   };
 
-  // Keep the latest function for realtime subscriptions.
   loadDataRef.current = loadData;
 
   // ==========================================
@@ -259,7 +234,6 @@ export default function TripManagementScreen({ navigation, route }) {
       let realtimeChannel = null;
 
       const startScreen = async () => {
-        // Initial screen load.
         loadDataRef.current?.();
 
         try {
@@ -275,7 +249,6 @@ export default function TripManagementScreen({ navigation, route }) {
           realtimeChannel = supabase
             .channel(`trip-management-${authUser.id}`)
 
-            // Trip status changes from OperatorDocking.
             .on(
               "postgres_changes",
               {
@@ -285,33 +258,12 @@ export default function TripManagementScreen({ navigation, route }) {
                 filter: `operator_id=eq.${authUser.id}`,
               },
               () => {
-                console.log("TRIP UPDATE RECEIVED");
-
                 loadDataRef.current?.({
                   silent: true,
                 });
               }
             )
 
-            // Passenger hail changes.
-            .on(
-              "postgres_changes",
-              {
-                event: "*",
-                schema: "public",
-                table: "passenger_hails",
-                filter: `operator_id=eq.${authUser.id}`,
-              },
-              () => {
-                console.log("PASSENGER HAIL UPDATE RECEIVED");
-
-                loadDataRef.current?.({
-                  silent: true,
-                });
-              }
-            )
-
-            // Bus status changes.
             .on(
               "postgres_changes",
               {
@@ -321,15 +273,12 @@ export default function TripManagementScreen({ navigation, route }) {
                 filter: `operator_id=eq.${authUser.id}`,
               },
               () => {
-                console.log("BUS UPDATE RECEIVED");
-
                 loadDataRef.current?.({
                   silent: true,
                 });
               }
             )
 
-            // Docking and undocking changes.
             .on(
               "postgres_changes",
               {
@@ -339,8 +288,6 @@ export default function TripManagementScreen({ navigation, route }) {
                 filter: `operator_id=eq.${authUser.id}`,
               },
               () => {
-                console.log("DOCKING UPDATE RECEIVED");
-
                 loadDataRef.current?.({
                   silent: true,
                 });
@@ -373,37 +320,269 @@ export default function TripManagementScreen({ navigation, route }) {
   // SELECT BUS
   // ==========================================
 
-  const handleSelectBus = async (bus) => {
+  const handleSelectBus = (bus) => {
     setSelectedBus(bus);
-    setHails([]);
+    setDestination("");
+    setDestinationOpen(false);
+  };
 
-    const trip = getBusTrip(bus.bus_id);
+  // ==========================================
+  // UPDATE BUS AVAILABILITY
+  // ==========================================
 
-    if (!trip || !user) return;
+  const updateAvailability = async (status) => {
+    if (!selectedBus || !user || saving) return;
 
     try {
-      await loadHails(
-        user.id,
-        bus.bus_id,
-        trip.trip_id
+      setSaving(true);
+
+      const { data, error } = await supabase
+        .from("buses")
+        .update({
+          availability_status: status,
+        })
+        .eq("bus_id", selectedBus.bus_id)
+        .eq("operator_id", user.id)
+        .select()
+        .maybeSingle();
+
+      if (error) throw error;
+
+      if (!data) {
+        throw new Error(
+          "Bus availability was not updated. Check your buses RLS policies."
+        );
+      }
+
+      setSelectedBus(data);
+
+      setBuses((previousBuses) =>
+        previousBuses.map((bus) =>
+          String(bus.bus_id) === String(data.bus_id)
+            ? data
+            : bus
+        )
+      );
+
+      Alert.alert(
+        "Availability Updated",
+        `Bus status changed to ${status.replace("_", " ")}.`
       );
     } catch (error) {
-      console.log("HAIL LOAD ERROR:", error);
+      console.log("AVAILABILITY UPDATE ERROR:", error);
 
       Alert.alert(
         "Error",
-        "Unable to load passenger requests."
+        error.message || "Unable to update bus availability."
       );
+    } finally {
+      setSaving(false);
     }
   };
 
   // ==========================================
-  // CREATE TRIP
-  // Trip Management only creates planned trips.
-  // OperatorDocking starts the trip.
+  // START TRANSIT IMMEDIATELY
   // ==========================================
 
-  const createTrip = async () => {
+  const startTransitImmediately = async (bus, trip) => {
+    let tripActivated = false;
+    let gpsStarted = false;
+
+    try {
+      // Check foreground permission.
+      const foreground =
+        await Location.requestForegroundPermissionsAsync();
+
+      if (foreground.status !== "granted") {
+        throw new Error(
+          "Location permission is required to start tracking."
+        );
+      }
+
+      // Check background permission.
+      const background =
+        await Location.requestBackgroundPermissionsAsync();
+
+      if (background.status !== "granted") {
+        throw new Error(
+          "Background location permission is required for bus tracking."
+        );
+      }
+
+      // Check phone GPS.
+      const gpsEnabled =
+        await Location.hasServicesEnabledAsync();
+
+      if (!gpsEnabled) {
+        throw new Error(
+          "Please turn on your phone's location/GPS."
+        );
+      }
+
+      // Get an initial location before activating the trip.
+      const currentPosition =
+        await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.BestForNavigation,
+        });
+
+      const coords = currentPosition.coords;
+
+      const locationData = {
+        bus_id: bus.bus_id,
+        trip_id: trip.trip_id,
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        accuracy: coords.accuracy,
+        speed: coords.speed,
+        heading: coords.heading,
+        recorded_at: new Date().toISOString(),
+      };
+
+      // Activate the planned trip.
+      const { data: updatedTrip, error: tripError } =
+        await supabase
+          .from("bus_trips")
+          .update({
+            status: "active",
+            started_at: new Date().toISOString(),
+          })
+          .eq("trip_id", trip.trip_id)
+          .eq("operator_id", user.id)
+          .eq("status", "planned")
+          .select()
+          .maybeSingle();
+
+      if (tripError) throw tripError;
+
+      if (!updatedTrip) {
+        throw new Error(
+          "The trip could not be activated. It may have already been started."
+        );
+      }
+
+      tripActivated = true;
+
+      // Save the initial GPS location.
+      const { error: locationError } = await supabase
+        .from("bus_locations")
+        .upsert(locationData, {
+          onConflict: "bus_id",
+        });
+
+      if (locationError) throw locationError;
+
+      // Start background GPS tracking.
+      await startOperatorBackgroundGPS();
+      gpsStarted = true;
+
+      // Update bus operating status.
+      const { data: updatedBus, error: busError } =
+        await supabase
+          .from("buses")
+          .update({
+            bus_status: "in_transit",
+          })
+          .eq("bus_id", bus.bus_id)
+          .eq("operator_id", user.id)
+          .select()
+          .maybeSingle();
+
+      if (busError) throw busError;
+
+      if (!updatedBus) {
+        throw new Error(
+          "The bus status could not be updated. Check your buses RLS policies."
+        );
+      }
+
+      // Mark the latest docking record as undocked.
+      const { data: dockingRecord, error: dockingFindError } =
+        await supabase
+          .from("bus_docking")
+          .select("docking_id")
+          .eq("bus_id", bus.bus_id)
+          .eq("operator_id", user.id)
+          .eq("docking_status", "docked")
+          .order("docked_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+      if (dockingFindError) throw dockingFindError;
+
+      if (dockingRecord) {
+        const { error: dockingError } = await supabase
+          .from("bus_docking")
+          .update({
+            docking_status: "undocked",
+            undocked_at: new Date().toISOString(),
+          })
+          .eq("docking_id", dockingRecord.docking_id);
+
+        if (dockingError) throw dockingError;
+      }
+
+      setBuses((previous) =>
+        previous.map((item) =>
+          String(item.bus_id) === String(updatedBus.bus_id)
+            ? updatedBus
+            : item
+        )
+      );
+
+      setSelectedBus(updatedBus);
+
+      await loadData({ silent: true });
+
+      Alert.alert(
+        "Trip Started",
+        "Your bus is now in transit. GPS tracking is active."
+      );
+
+    } catch (error) {
+      console.log("START TRANSIT ERROR:", error);
+
+      // Roll back the trip if starting GPS or updating the bus failed.
+      if (tripActivated) {
+        await supabase
+          .from("bus_trips")
+          .update({
+            status: "planned",
+            started_at: null,
+          })
+          .eq("trip_id", trip.trip_id)
+          .eq("operator_id", user.id);
+      }
+
+      if (gpsStarted) {
+        try {
+          const { data: otherActiveTrips } = await supabase
+            .from("bus_trips")
+            .select("trip_id")
+            .eq("operator_id", user.id)
+            .eq("status", "active");
+
+          if (!otherActiveTrips || otherActiveTrips.length === 0) {
+            await stopOperatorBackgroundGPS();
+          }
+        } catch (stopError) {
+          console.log("GPS CLEANUP ERROR:", stopError);
+        }
+      }
+
+      Alert.alert(
+        "Unable to Start Trip",
+        error.message || "Something went wrong while starting the trip."
+      );
+
+      await loadData({ silent: true });
+    }
+  };
+
+  // ==========================================
+  // CREATE PLANNED TRIP
+  // ==========================================
+
+  const createTrip = async (mode) => {
     if (saving) return;
 
     if (!user) {
@@ -416,8 +595,11 @@ export default function TripManagementScreen({ navigation, route }) {
       return;
     }
 
-    if (!destination.trim()) {
-      Alert.alert("Missing Destination", "Please enter a destination.");
+    if (!destination) {
+      Alert.alert(
+        "Missing Destination",
+        "Please select a destination."
+      );
       return;
     }
 
@@ -439,7 +621,7 @@ export default function TripManagementScreen({ navigation, route }) {
         .insert({
           bus_id: selectedBus.bus_id,
           operator_id: user.id,
-          destination: destination.trim(),
+          destination,
           status: "planned",
         })
         .select()
@@ -448,18 +630,23 @@ export default function TripManagementScreen({ navigation, route }) {
       if (error) throw error;
 
       setDestination("");
+      setDestinationOpen(false);
 
-      await loadData({ silent: true });
+      if (mode === "instant") {
+        await startTransitImmediately(selectedBus, data);
+      } else {
+        await loadData({ silent: true });
 
-      Alert.alert(
-        "Trip Created",
-        "Your trip has been created. Continue to Operator Docking to start it."
-      );
+        Alert.alert(
+          "Trip Created",
+          "Your planned trip has been created. Continue to Operator Docking to dock your bus."
+        );
 
-      navigation.navigate("OperatorDocking", {
-        tripId: data.trip_id,
-        busId: selectedBus.bus_id,
-      });
+        navigation.navigate("OperatorDocking", {
+          tripId: data.trip_id,
+          busId: selectedBus.bus_id,
+        });
+      }
     } catch (error) {
       console.log("CREATE TRIP ERROR:", error);
 
@@ -492,78 +679,6 @@ export default function TripManagementScreen({ navigation, route }) {
   };
 
   // ==========================================
-  // UPDATE PASSENGER HAIL
-  // pending -> accepted/rejected
-  // accepted -> completed
-  // ==========================================
-
-  const updateHailStatus = async (hailId, status) => {
-    if (saving || !user) return;
-
-    try {
-      setSaving(true);
-
-      const updateData = {
-        status,
-      };
-
-      if (status === "accepted") {
-        updateData.accepted_at = new Date().toISOString();
-      }
-
-      if (status === "completed") {
-        updateData.completed_at = new Date().toISOString();
-      }
-
-      const { data, error } = await supabase
-        .from("passenger_hails")
-        .update(updateData)
-        .eq("hail_id", hailId)
-        .eq("operator_id", user.id)
-        .select()
-        .maybeSingle();
-
-      if (error) throw error;
-
-      if (!data) {
-        throw new Error(
-          "The request was not updated. Check your passenger_hails RLS policies."
-        );
-      }
-
-      if (selectedBus) {
-        const trip = getBusTrip(selectedBus.bus_id);
-
-        if (trip) {
-          await loadHails(
-            user.id,
-            selectedBus.bus_id,
-            trip.trip_id
-          );
-        }
-      }
-
-      Alert.alert(
-        "Request Updated",
-        status === "accepted"
-          ? "Passenger request accepted."
-          : status === "rejected"
-          ? "Passenger request rejected."
-          : "Passenger request completed."
-      );
-    } catch (error) {
-      console.log("HAIL UPDATE ERROR:", error);
-
-      Alert.alert(
-        "Error",
-        error.message || "Unable to update passenger request."
-      );
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  // ==========================================
   // END TRIP
   // ==========================================
 
@@ -587,18 +702,19 @@ export default function TripManagementScreen({ navigation, route }) {
             try {
               setSaving(true);
 
-              // Complete the trip.
-              const { data: updatedTrip, error: tripError } =
-                await supabase
-                  .from("bus_trips")
-                  .update({
-                    status: "completed",
-                    ended_at: new Date().toISOString(),
-                  })
-                  .eq("trip_id", trip.trip_id)
-                  .eq("operator_id", user.id)
-                  .select()
-                  .maybeSingle();
+              const {
+                data: updatedTrip,
+                error: tripError,
+              } = await supabase
+                .from("bus_trips")
+                .update({
+                  status: "completed",
+                  ended_at: new Date().toISOString(),
+                })
+                .eq("trip_id", trip.trip_id)
+                .eq("operator_id", user.id)
+                .select()
+                .maybeSingle();
 
               if (tripError) throw tripError;
 
@@ -608,7 +724,6 @@ export default function TripManagementScreen({ navigation, route }) {
                 );
               }
 
-              // Update the bus status.
               const { error: busError } = await supabase
                 .from("buses")
                 .update({
@@ -619,14 +734,14 @@ export default function TripManagementScreen({ navigation, route }) {
 
               if (busError) throw busError;
 
-              // Only stop GPS if there are no other active trips
-              // assigned to this operator.
-              const { data: remainingTrips, error: remainingError } =
-                await supabase
-                  .from("bus_trips")
-                  .select("trip_id")
-                  .eq("operator_id", user.id)
-                  .eq("status", "active");
+              const {
+                data: remainingTrips,
+                error: remainingError,
+              } = await supabase
+                .from("bus_trips")
+                .select("trip_id")
+                .eq("operator_id", user.id)
+                .eq("status", "active");
 
               if (remainingError) {
                 console.log(
@@ -668,6 +783,23 @@ export default function TripManagementScreen({ navigation, route }) {
 
   const onRefresh = () => {
     loadData({ refresh: true });
+  };
+
+  // ==========================================
+  // AVAILABILITY LABEL
+  // ==========================================
+
+  const getAvailabilityLabel = (status) => {
+    switch (status) {
+      case "available":
+        return "Available";
+      case "standing":
+        return "Standing";
+      case "not_available":
+        return "Not Available";
+      default:
+        return "Not Set";
+    }
   };
 
   // ==========================================
@@ -912,6 +1044,141 @@ export default function TripManagementScreen({ navigation, route }) {
         })
       )}
 
+      {/* SELECTED BUS AVAILABILITY */}
+
+      {selectedBus && (
+        <View style={styles.availabilityCard}>
+          <Text style={styles.sectionTitle}>
+            Bus Availability
+          </Text>
+
+          <Text style={styles.selectedBusText}>
+            Selected bus:{" "}
+            <Text style={styles.selectedBusName}>
+              {selectedBus.bus_name ||
+                selectedBus.plate_number}
+            </Text>
+          </Text>
+
+          <Text style={styles.availabilityDescription}>
+            Choose whether passengers can select this bus.
+          </Text>
+
+          <View style={styles.availabilityButtons}>
+            <TouchableOpacity
+              style={[
+                styles.availabilityButton,
+                styles.availableButton,
+                selectedBus.availability_status === "available" &&
+                  styles.activeAvailableButton,
+                saving && styles.disabledButton,
+              ]}
+              disabled={saving}
+              onPress={() => updateAvailability("available")}
+            >
+              <Ionicons
+                name="checkmark-circle"
+                size={18}
+                color={
+                  selectedBus.availability_status === "available"
+                    ? "#FFFFFF"
+                    : "#16A34A"
+                }
+              />
+
+              <Text
+                style={[
+                  styles.availabilityButtonText,
+                  styles.availableButtonText,
+                  selectedBus.availability_status === "available" &&
+                    styles.activeAvailabilityText,
+                ]}
+              >
+                Available
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.availabilityButton,
+                styles.standingButton,
+                selectedBus.availability_status === "standing" &&
+                  styles.activeStandingButton,
+                saving && styles.disabledButton,
+              ]}
+              disabled={saving}
+              onPress={() => updateAvailability("standing")}
+            >
+              <Ionicons
+                name="pause-circle"
+                size={18}
+                color={
+                  selectedBus.availability_status === "standing"
+                    ? "#FFFFFF"
+                    : "#D97706"
+                }
+              />
+
+              <Text
+                style={[
+                  styles.availabilityButtonText,
+                  styles.standingButtonText,
+                  selectedBus.availability_status === "standing" &&
+                    styles.activeAvailabilityText,
+                ]}
+              >
+                Standing
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.availabilityButton,
+                styles.unavailableButton,
+                selectedBus.availability_status === "not_available" &&
+                  styles.activeUnavailableButton,
+                saving && styles.disabledButton,
+              ]}
+              disabled={saving}
+              onPress={() => updateAvailability("not_available")}
+            >
+              <Ionicons
+                name="close-circle"
+                size={18}
+                color={
+                  selectedBus.availability_status === "not_available"
+                    ? "#FFFFFF"
+                    : "#DC2626"
+                }
+              />
+
+              <Text
+                style={[
+                  styles.availabilityButtonText,
+                  styles.unavailableButtonText,
+                  selectedBus.availability_status === "not_available" &&
+                    styles.activeAvailabilityText,
+                ]}
+              >
+                Not Available
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.currentAvailability}>
+            <Text style={styles.currentAvailabilityLabel}>
+              Current availability:
+            </Text>
+
+            <Text style={styles.currentAvailabilityValue}>
+              {getAvailabilityLabel(
+                selectedBus.availability_status
+              )}
+            </Text>
+          </View>
+        </View>
+      )}
+
       {/* CREATE TRIP */}
 
       {selectedBus && (
@@ -944,181 +1211,136 @@ export default function TripManagementScreen({ navigation, route }) {
           ) : (
             <>
               <Text style={styles.inputLabel}>
-                Destination
+                Select Destination
               </Text>
 
-              <TextInput
-                style={styles.input}
-                placeholder="Enter your destination"
-                placeholderTextColor="#94A3B8"
-                value={destination}
-                onChangeText={setDestination}
-              />
+              {/* DESTINATION DROPDOWN */}
+
+              <TouchableOpacity
+                style={styles.destinationDropdown}
+                activeOpacity={0.8}
+                onPress={() =>
+                  setDestinationOpen(!destinationOpen)
+                }
+                disabled={saving}
+              >
+                <Text
+                  style={[
+                    styles.destinationPlaceholder,
+                    destination && styles.destinationSelected,
+                  ]}
+                >
+                  {destination || "Choose a destination"}
+                </Text>
+
+                <Ionicons
+                  name={
+                    destinationOpen
+                      ? "chevron-up"
+                      : "chevron-down"
+                  }
+                  size={20}
+                  color="#64748B"
+                />
+              </TouchableOpacity>
+
+              {destinationOpen && (
+                <View style={styles.destinationOptions}>
+                  <ScrollView
+                    nestedScrollEnabled
+                    style={styles.destinationOptionsScroll}
+                    keyboardShouldPersistTaps="handled"
+                  >
+                    {DESTINATIONS.map((item) => (
+                      <TouchableOpacity
+                        key={item}
+                        style={[
+                          styles.destinationOption,
+                          destination === item &&
+                            styles.destinationOptionSelected,
+                        ]}
+                        onPress={() => {
+                          setDestination(item);
+                          setDestinationOpen(false);
+                        }}
+                      >
+                        <Text
+                          style={[
+                            styles.destinationOptionText,
+                            destination === item &&
+                              styles.destinationOptionTextSelected,
+                          ]}
+                        >
+                          {item}
+                        </Text>
+
+                        {destination === item && (
+                          <Ionicons
+                            name="checkmark"
+                            size={19}
+                            color="#0891B2"
+                          />
+                        )}
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
+
+              {/* START TRANSIT NOW */}
 
               <TouchableOpacity
                 style={[
-                  styles.createButton,
+                  styles.startTransitButton,
                   saving && styles.disabledButton,
                 ]}
-                onPress={createTrip}
-                disabled={saving}
+                onPress={() => createTrip("instant")}
+                disabled={saving || !destination}
               >
                 {saving ? (
                   <ActivityIndicator color="#FFFFFF" />
                 ) : (
                   <>
                     <Ionicons
-                      name="add-circle-outline"
-                      size={20}
+                      name="play-circle"
+                      size={21}
                       color="#FFFFFF"
                     />
 
                     <Text style={styles.createButtonText}>
-                      Create Trip
+                      Start Transit Now
                     </Text>
                   </>
                 )}
               </TouchableOpacity>
-            </>
-          )}
-        </View>
-      )}
 
-      {/* PASSENGER HAILS */}
+              {/* MANAGE DOCKING */}
 
-      {selectedBus && (
-        <View style={styles.hailsSection}>
-          <Text style={styles.sectionTitle}>
-            Passenger Requests
-          </Text>
-
-          <Text style={styles.hailsSubtitle}>
-            {selectedBus.bus_name ||
-              selectedBus.plate_number}
-          </Text>
-
-          {hails.length === 0 ? (
-            <View style={styles.emptyHails}>
-              <Ionicons
-                name="notifications-off-outline"
-                size={30}
-                color="#94A3B8"
-              />
-
-              <Text style={styles.emptyHailsText}>
-                No passenger requests for this trip.
-              </Text>
-            </View>
-          ) : (
-            hails.map((hail) => (
-              <View
-                key={String(hail.hail_id)}
-                style={styles.hailCard}
+              <TouchableOpacity
+                style={[
+                  styles.dockingButton,
+                  saving && styles.disabledButton,
+                ]}
+                onPress={() => createTrip("docking")}
+                disabled={saving || !destination}
               >
-                <View style={styles.hailHeader}>
-                  <Text style={styles.hailTitle}>
-                    Passenger Request
-                  </Text>
+                <Ionicons
+                  name="business-outline"
+                  size={20}
+                  color="#0891B2"
+                />
 
-                  <Text
-                    style={[
-                      styles.hailStatus,
-                      hail.status === "accepted"
-                        ? styles.acceptedText
-                        : hail.status === "rejected"
-                        ? styles.rejectedText
-                        : hail.status === "completed"
-                        ? styles.completedText
-                        : hail.status === "cancelled"
-                        ? styles.rejectedText
-                        : styles.pendingText,
-                    ]}
-                  >
-                    {hail.status}
-                  </Text>
-                </View>
-
-                <Text style={styles.hailCoordinates}>
-                  Latitude:{" "}
-                  {Number(
-                    hail.passenger_latitude || 0
-                  ).toFixed(5)}
+                <Text style={styles.dockingButtonText}>
+                  Manage Docking First
                 </Text>
+              </TouchableOpacity>
 
-                <Text style={styles.hailCoordinates}>
-                  Longitude:{" "}
-                  {Number(
-                    hail.passenger_longitude || 0
-                  ).toFixed(5)}
-                </Text>
-
-                {hail.status === "pending" && (
-                  <View style={styles.hailActions}>
-                    <TouchableOpacity
-                      style={[
-                        styles.acceptButton,
-                        saving && styles.disabledButton,
-                      ]}
-                      disabled={saving}
-                      onPress={() =>
-                        updateHailStatus(
-                          hail.hail_id,
-                          "accepted"
-                        )
-                      }
-                    >
-                      <Text style={styles.actionButtonText}>
-                        Accept
-                      </Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={[
-                        styles.rejectButton,
-                        saving && styles.disabledButton,
-                      ]}
-                      disabled={saving}
-                      onPress={() =>
-                        updateHailStatus(
-                          hail.hail_id,
-                          "rejected"
-                        )
-                      }
-                    >
-                      <Text style={styles.actionButtonText}>
-                        Reject
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-
-                {hail.status === "accepted" && (
-                  <TouchableOpacity
-                    style={[
-                      styles.completeHailButton,
-                      saving && styles.disabledButton,
-                    ]}
-                    disabled={saving}
-                    onPress={() =>
-                      updateHailStatus(
-                        hail.hail_id,
-                        "completed"
-                      )
-                    }
-                  >
-                    <Ionicons
-                      name="checkmark-circle-outline"
-                      size={17}
-                      color="#FFFFFF"
-                    />
-
-                    <Text style={styles.actionButtonText}>
-                      Complete Request
-                    </Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            ))
+              <Text style={styles.tripChoiceDescription}>
+                Start Transit Now activates GPS tracking immediately.
+                Manage Docking First lets you dock your bus before
+                starting the trip.
+              </Text>
+            </>
           )}
         </View>
       )}
@@ -1389,6 +1611,89 @@ const styles = StyleSheet.create({
     color: "#0891B2",
     marginTop: 4,
   },
+  availabilityCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 17,
+    padding: 17,
+    marginTop: 12,
+    marginBottom: 12,
+  },
+  availabilityDescription: {
+    color: "#64748B",
+    fontSize: 12,
+    marginBottom: 13,
+  },
+  availabilityButtons: {
+    gap: 9,
+  },
+  availabilityButton: {
+    minHeight: 45,
+    borderRadius: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    borderWidth: 1,
+  },
+  availableButton: {
+    backgroundColor: "#F0FDF4",
+    borderColor: "#BBF7D0",
+  },
+  activeAvailableButton: {
+    backgroundColor: "#16A34A",
+    borderColor: "#16A34A",
+  },
+  standingButton: {
+    backgroundColor: "#FFFBEB",
+    borderColor: "#FDE68A",
+  },
+  activeStandingButton: {
+    backgroundColor: "#D97706",
+    borderColor: "#D97706",
+  },
+  unavailableButton: {
+    backgroundColor: "#FEF2F2",
+    borderColor: "#FECACA",
+  },
+  activeUnavailableButton: {
+    backgroundColor: "#DC2626",
+    borderColor: "#DC2626",
+  },
+  availabilityButtonText: {
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  availableButtonText: {
+    color: "#16A34A",
+  },
+  standingButtonText: {
+    color: "#D97706",
+  },
+  unavailableButtonText: {
+    color: "#DC2626",
+  },
+  activeAvailabilityText: {
+    color: "#FFFFFF",
+  },
+  currentAvailability: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 15,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#E2E8F0",
+  },
+  currentAvailabilityLabel: {
+    fontSize: 12,
+    color: "#64748B",
+  },
+  currentAvailabilityValue: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#0891B2",
+    textTransform: "capitalize",
+  },
   createCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 17,
@@ -1399,7 +1704,7 @@ const styles = StyleSheet.create({
   selectedBusText: {
     color: "#64748B",
     fontSize: 12,
-    marginBottom: 15,
+    marginBottom: 10,
   },
   selectedBusName: {
     color: "#0891B2",
@@ -1411,28 +1716,95 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     marginBottom: 7,
   },
-  input: {
-    height: 48,
+  destinationDropdown: {
+    minHeight: 49,
     borderRadius: 11,
     backgroundColor: "#F8FAFC",
     borderWidth: 1,
     borderColor: "#E2E8F0",
     paddingHorizontal: 13,
-    color: "#0F172A",
-    marginBottom: 13,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
   },
-  createButton: {
-    height: 48,
+  destinationPlaceholder: {
+    fontSize: 13,
+    color: "#94A3B8",
+  },
+  destinationSelected: {
+    color: "#0F172A",
+    fontWeight: "700",
+  },
+  destinationOptions: {
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    borderRadius: 11,
+    backgroundColor: "#FFFFFF",
+    marginBottom: 13,
+    overflow: "hidden",
+  },
+  destinationOptionsScroll: {
+    maxHeight: 210,
+  },
+  destinationOption: {
+    minHeight: 43,
+    paddingHorizontal: 13,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    borderBottomWidth: 1,
+    borderBottomColor: "#F1F5F9",
+  },
+  destinationOptionSelected: {
+    backgroundColor: "#ECFEFF",
+  },
+  destinationOptionText: {
+    fontSize: 13,
+    color: "#334155",
+  },
+  destinationOptionTextSelected: {
+    color: "#0891B2",
+    fontWeight: "800",
+  },
+  startTransitButton: {
+    height: 49,
     borderRadius: 11,
     backgroundColor: "#06B6D4",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
+    marginTop: 5,
   },
   createButtonText: {
     color: "#FFFFFF",
     fontWeight: "800",
+    fontSize: 13,
+  },
+  dockingButton: {
+    height: 49,
+    borderRadius: 11,
+    backgroundColor: "#ECFEFF",
+    borderWidth: 1,
+    borderColor: "#A5F3FC",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 10,
+  },
+  dockingButtonText: {
+    color: "#0891B2",
+    fontWeight: "800",
+    fontSize: 13,
+  },
+  tripChoiceDescription: {
+    color: "#64748B",
+    fontSize: 11,
+    lineHeight: 17,
+    marginTop: 12,
+    textAlign: "center",
   },
   disabledButton: {
     opacity: 0.6,
@@ -1450,97 +1822,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
     color: "#92400E",
-  },
-  hailsSection: {
-    marginTop: 3,
-  },
-  hailsSubtitle: {
-    fontSize: 12,
-    color: "#64748B",
-    marginTop: -7,
-    marginBottom: 12,
-  },
-  emptyHails: {
-    backgroundColor: "#FFFFFF",
-    padding: 22,
-    borderRadius: 14,
-    alignItems: "center",
-  },
-  emptyHailsText: {
-    fontSize: 12,
-    color: "#64748B",
-    marginTop: 8,
-  },
-  hailCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 14,
-    padding: 15,
-    marginBottom: 10,
-  },
-  hailHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 10,
-  },
-  hailTitle: {
-    fontWeight: "800",
-    color: "#0F172A",
-  },
-  hailStatus: {
-    fontSize: 11,
-    fontWeight: "800",
-    textTransform: "capitalize",
-  },
-  acceptedText: {
-    color: "#16A34A",
-  },
-  rejectedText: {
-    color: "#DC2626",
-  },
-  pendingText: {
-    color: "#D97706",
-  },
-  completedText: {
-    color: "#0891B2",
-  },
-  hailCoordinates: {
-    color: "#64748B",
-    fontSize: 11,
-    marginTop: 3,
-  },
-  hailActions: {
-    flexDirection: "row",
-    gap: 9,
-    marginTop: 13,
-  },
-  acceptButton: {
-    flex: 1,
-    backgroundColor: "#16A34A",
-    padding: 11,
-    borderRadius: 9,
-    alignItems: "center",
-  },
-  rejectButton: {
-    flex: 1,
-    backgroundColor: "#DC2626",
-    padding: 11,
-    borderRadius: 9,
-    alignItems: "center",
-  },
-  completeHailButton: {
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 7,
-    backgroundColor: "#0891B2",
-    padding: 11,
-    borderRadius: 9,
-    marginTop: 13,
-  },
-  actionButtonText: {
-    color: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: "800",
   },
   endTripButton: {
     height: 50,

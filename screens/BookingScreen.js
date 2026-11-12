@@ -1,6 +1,5 @@
 
-import React, { useEffect, useState } from "react";
-
+import React, { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -10,19 +9,22 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  RefreshControl,
 } from "react-native";
 
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
 import AppHeader from "../components/AppHeader";
 import { supabase } from "../config/supabase";
 
 export default function BookingScreen({ navigation }) {
   const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const loadCompanies = async () => {
+  const loadCompanies = useCallback(async (showLoader = false) => {
     try {
-      setLoading(true);
+      if (showLoader) setLoading(true);
 
       const { data, error } = await supabase
         .from("buses")
@@ -32,7 +34,6 @@ export default function BookingScreen({ navigation }) {
 
       if (error) throw error;
 
-      // Group buses by company
       const grouped = {};
 
       (data || []).forEach((bus) => {
@@ -56,25 +57,41 @@ export default function BookingScreen({ navigation }) {
           grouped[company].available++;
         } else if (bus.availability_status === "standing") {
           grouped[company].standing++;
-        } else if (bus.availability_status === "not_available") {
+        } else {
           grouped[company].notAvailable++;
         }
       });
 
       setCompanies(Object.values(grouped));
     } catch (error) {
-      console.log("Company loading error:", error);
-      Alert.alert("Error", "Unable to load bus companies.");
+      console.log("COMPANY LOADING ERROR:", error);
+
+      Alert.alert(
+        "Loading Error",
+        error.message || "Unable to load bus companies."
+      );
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  };
+  }, []);
 
-  useEffect(() => {
-    loadCompanies();
+  useFocusEffect(
+    useCallback(() => {
+      loadCompanies();
+    }, [loadCompanies])
+  );
 
-    const channel = supabase
-      .channel("booking-companies")
+  
+useEffect(() => {
+  let isActive = true;
+  let channel = null;
+
+  const setupRealtime = () => {
+    if (!isActive) return;
+
+    channel = supabase
+      .channel(`booking-screen-buses-${Date.now()}`)
       .on(
         "postgres_changes",
         {
@@ -82,16 +99,50 @@ export default function BookingScreen({ navigation }) {
           schema: "public",
           table: "buses",
         },
-        () => {
-          loadCompanies();
-        }
-      )
-      .subscribe();
+        (payload) => {
+          console.log(
+            "BOOKING SCREEN BUS UPDATE:",
+            payload.eventType
+          );
 
-    return () => {
+          if (isActive) {
+            loadCompanies();
+          }
+        }
+      );
+
+    channel.subscribe((status, error) => {
+      console.log(
+        "BOOKING SCREEN REALTIME STATUS:",
+        status
+      );
+
+      if (error) {
+        console.log(
+          "BOOKING SCREEN REALTIME ERROR:",
+          error
+        );
+      }
+    });
+  };
+
+  setupRealtime();
+
+  return () => {
+    isActive = false;
+
+    if (channel) {
       supabase.removeChannel(channel);
-    };
-  }, []);
+      channel = null;
+    }
+  };
+}, [loadCompanies]);
+
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    loadCompanies();
+  };
 
   const openCompany = (company) => {
     navigation.navigate("BusList", {
@@ -108,21 +159,28 @@ export default function BookingScreen({ navigation }) {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            colors={["#06B6D4"]}
+          />
+        }
       >
         <View style={styles.heroCard}>
           <View style={styles.heroIcon}>
             <MaterialCommunityIcons
               name="bus-multiple"
               size={35}
-              color="#fff"
+              color="#FFFFFF"
             />
           </View>
 
           <Text style={styles.heroTitle}>Book Your Bus</Text>
 
           <Text style={styles.heroSub}>
-            Select your preferred bus company to view its buses and
-            availability.
+            Select your preferred bus company to view its buses
+            and current availability.
           </Text>
         </View>
 
@@ -166,13 +224,13 @@ export default function BookingScreen({ navigation }) {
 
             <TouchableOpacity
               style={styles.retryButton}
-              onPress={loadCompanies}
+              onPress={() => loadCompanies(true)}
             >
-              <Text style={styles.retryText}>Refresh</Text>
+              <Text style={styles.retryText}>Try Again</Text>
             </TouchableOpacity>
           </View>
         ) : (
-          companies.map((company, index) => (
+          companies.map((company) => (
             <TouchableOpacity
               key={company.name}
               activeOpacity={0.85}
@@ -201,7 +259,7 @@ export default function BookingScreen({ navigation }) {
                   <View style={styles.statusItem}>
                     <View style={styles.greenDot} />
                     <Text style={styles.statusText}>
-                      {company.available}
+                      {company.available} Available
                     </Text>
                   </View>
 
@@ -238,8 +296,8 @@ export default function BookingScreen({ navigation }) {
           />
 
           <Text style={styles.infoText}>
-            Select a bus company to view its registered buses,
-            locations, and current availability.
+            Only buses that are currently docked and available
+            can be booked. Select a company to see its buses.
           </Text>
         </View>
       </ScrollView>
@@ -253,18 +311,15 @@ const styles = StyleSheet.create({
     backgroundColor: "#F1F5F9",
     paddingHorizontal: 18,
   },
-
   scrollContent: {
     paddingBottom: 30,
   },
-
   heroCard: {
     backgroundColor: "#06B6D4",
     borderRadius: 24,
     padding: 23,
     marginTop: 20,
   },
-
   heroIcon: {
     width: 58,
     height: 58,
@@ -274,20 +329,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 15,
   },
-
   heroTitle: {
-    color: "#fff",
+    color: "#FFFFFF",
     fontSize: 26,
     fontWeight: "bold",
   },
-
   heroSub: {
     color: "#E0F2FE",
     marginTop: 8,
     fontSize: 14,
     lineHeight: 21,
   },
-
   sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -295,19 +347,16 @@ const styles = StyleSheet.create({
     marginTop: 28,
     marginBottom: 16,
   },
-
   sectionTitle: {
     fontSize: 19,
     fontWeight: "bold",
     color: "#0F172A",
   },
-
   sectionSubtitle: {
     color: "#64748B",
     fontSize: 12,
     marginTop: 4,
   },
-
   companyCount: {
     backgroundColor: "#CFFAFE",
     width: 36,
@@ -316,15 +365,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-
   companyCountText: {
     color: "#0891B2",
     fontWeight: "bold",
     fontSize: 15,
   },
-
   companyCard: {
-    backgroundColor: "#fff",
+    backgroundColor: "#FFFFFF",
     borderRadius: 20,
     padding: 17,
     marginBottom: 14,
@@ -332,7 +379,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     elevation: 2,
   },
-
   companyIcon: {
     width: 62,
     height: 62,
@@ -341,94 +387,80 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-
   companyInfo: {
     flex: 1,
     marginLeft: 14,
   },
-
   companyName: {
     fontSize: 16,
     fontWeight: "bold",
     color: "#0F172A",
   },
-
   busCount: {
     color: "#64748B",
     fontSize: 12,
     marginTop: 4,
   },
-
   statusRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "center",
     marginTop: 10,
-    gap: 13,
+    gap: 10,
   },
-
   statusItem: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
   },
-
   statusText: {
     color: "#64748B",
-    fontSize: 11,
+    fontSize: 10,
   },
-
   greenDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
     backgroundColor: "#16A34A",
   },
-
   orangeDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
     backgroundColor: "#F59E0B",
   },
-
   redDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
     backgroundColor: "#EF4444",
   },
-
   loadingContainer: {
     padding: 45,
     alignItems: "center",
   },
-
   loadingText: {
     color: "#64748B",
     marginTop: 12,
   },
-
   emptyCard: {
-    backgroundColor: "#fff",
+    backgroundColor: "#FFFFFF",
     padding: 30,
     borderRadius: 20,
     alignItems: "center",
   },
-
   emptyTitle: {
     color: "#0F172A",
     fontSize: 17,
     fontWeight: "bold",
     marginTop: 12,
   },
-
   emptyText: {
     color: "#64748B",
     fontSize: 13,
     textAlign: "center",
     marginTop: 6,
   },
-
   retryButton: {
     backgroundColor: "#06B6D4",
     paddingHorizontal: 25,
@@ -436,12 +468,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginTop: 18,
   },
-
   retryText: {
-    color: "#fff",
+    color: "#FFFFFF",
     fontWeight: "bold",
   },
-
   infoCard: {
     backgroundColor: "#E0F2FE",
     borderRadius: 18,
@@ -450,7 +480,6 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     marginTop: 12,
   },
-
   infoText: {
     flex: 1,
     color: "#334155",

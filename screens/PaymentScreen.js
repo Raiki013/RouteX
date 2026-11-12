@@ -4,759 +4,635 @@ import React, { useEffect, useState, useCallback } from "react";
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
-  ScrollView,
-  Image,
-  Alert,
   ActivityIndicator,
   StyleSheet,
+  ScrollView,
+  Alert,
 } from "react-native";
 
-import * as ImagePicker from "expo-image-picker";
 import { Ionicons } from "@expo/vector-icons";
-import { supabase } from "../config/supabase";
+import QRCode from "react-native-qrcode-svg";
 
-const QR_BUCKET = "operator-gcash-qr";
-const PROOF_BUCKET = "gcash-payment-proofs";
+import { supabase } from "../config/supabase";
 
 export default function PaymentScreen({ route, navigation }) {
   const { bookingId } = route.params || {};
 
   const [booking, setBooking] = useState(null);
-  const [operatorPayment, setOperatorPayment] = useState(null);
-
-  const [qrUrl, setQrUrl] = useState("");
-  const [reference, setReference] = useState("");
-  const [proof, setProof] = useState(null);
-
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    if (!bookingId) {
-      Alert.alert("Missing Booking", "No booking ID was provided.");
-      navigation.goBack();
-      return;
-    }
-
-    loadPaymentDetails();
-  }, [bookingId]);
-
-  // =========================================
-  // LOAD BOOKING AND OPERATOR GCASH DETAILS
-  // =========================================
-
-  const loadPaymentDetails = async () => {
+  // LOAD BOOKING
+  const loadBooking = useCallback(async (showLoader = true) => {
     try {
-      setLoading(true);
+      if (!bookingId) {
+        throw new Error("Booking ID is missing.");
+      }
 
-      setBooking(null);
-      setOperatorPayment(null);
-      setQrUrl("");
+      if (showLoader) {
+        setLoading(true);
+      } else {
+        setRefreshing(true);
+      }
 
       const {
         data: { user },
-        error: authError,
+        error: userError,
       } = await supabase.auth.getUser();
 
-      if (authError) throw authError;
+      if (userError) throw userError;
+      if (!user) throw new Error("Please sign in again.");
 
-      if (!user) {
-        throw new Error("Please sign in.");
-      }
+      const { data, error } = await supabase
+        .from("bookings")
+        .select(`
+          booking_id,
+          user_id,
+          booking_reference,
+          total_amount,
+          booking_status,
+          payment_status,
+          ticket_code,
+          expires_at,
+          paid_at
+        `)
+        .eq("booking_id", bookingId)
+        .eq("user_id", user.id)
+        .single();
 
-      // 1. Get passenger booking
-      const { data: bookingData, error: bookingError } =
-        await supabase
-          .from("bookings")
-          .select(`
-            booking_id,
-            user_id,
-            booking_reference,
-            total_amount,
-            docking_id,
-            booking_status,
-            payment_status,
-            ticket_code
-          `)
-          .eq("booking_id", bookingId)
-          .eq("user_id", user.id)
-          .single();
+      if (error) throw error;
 
-      if (bookingError) throw bookingError;
-
-      if (!bookingData.docking_id) {
-        throw new Error(
-          "This booking has no bus docking assigned."
-        );
-      }
-
-      setBooking(bookingData);
-
-      // 2. Get bus docking
-      const { data: docking, error: dockingError } =
-        await supabase
-          .from("bus_docking")
-          .select("bus_id")
-          .eq("docking_id", bookingData.docking_id)
-          .single();
-
-      if (dockingError) throw dockingError;
-
-      if (!docking?.bus_id) {
-        throw new Error("No bus is assigned to this docking.");
-      }
-
-      // 3. Get bus operator
-      const { data: bus, error: busError } =
-        await supabase
-          .from("buses")
-          .select("operator_id")
-          .eq("bus_id", docking.bus_id)
-          .single();
-
-      if (busError) throw busError;
-
-      if (!bus?.operator_id) {
-        throw new Error("No operator is assigned to this bus.");
-      }
-
-      // 4. Get operator GCash details
-      const { data: payment, error: paymentError } =
-        await supabase
-          .from("operator_payment_methods")
-          .select(`
-            operator_id,
-            payment_method,
-            account_name,
-            account_number,
-            qr_image_path,
-            is_active
-          `)
-          .eq("operator_id", bus.operator_id)
-          .eq("payment_method", "GCash")
-          .eq("is_active", true)
-          .maybeSingle();
-
-      if (paymentError) throw paymentError;
-
-      if (!payment) {
-        throw new Error(
-          "The bus operator has not configured their GCash account."
-        );
-      }
-
-      if (!payment.qr_image_path) {
-        throw new Error(
-          "The operator has not uploaded their official GCash QR code."
-        );
-      }
-
-      setOperatorPayment(payment);
-
-      // 5. Generate signed URL for private QR image
-      const { data: signedData, error: signedError } =
-        await supabase.storage
-          .from(QR_BUCKET)
-          .createSignedUrl(payment.qr_image_path, 3600);
-
-      if (signedError) throw signedError;
-
-      if (!signedData?.signedUrl) {
-        throw new Error("Unable to load the operator's GCash QR.");
-      }
-
-      setQrUrl(signedData.signedUrl);
-
+      setBooking(data);
     } catch (error) {
-      console.log("Payment loading error:", error);
-
-      Alert.alert(
-        "Payment Details",
-        error.message || "Unable to load payment details."
-      );
+      console.log("Payment screen error:", error.message);
+      Alert.alert("Unable to Load Booking", error.message);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  };
+  }, [bookingId]);
 
-  // =========================================
-  // SELECT PAYMENT SCREENSHOT
-  // =========================================
+  // AUTOMATIC REALTIME PAYMENT REFRESH
+  useEffect(() => {
+    if (!bookingId) return;
 
-  const chooseProof = async () => {
-    try {
-      const permission =
-        await ImagePicker.requestMediaLibraryPermissionsAsync();
+    // Load the latest booking information
+    loadBooking();
 
-      if (!permission.granted) {
-        Alert.alert(
-          "Permission Required",
-          "Please allow photo library access to upload your GCash receipt."
-        );
-        return;
-      }
+    // Listen for cashier updates
+    const bookingChannel = supabase
+      .channel(`payment-booking-${bookingId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "bookings",
+          filter: `booking_id=eq.${bookingId}`,
+        },
+        (payload) => {
+          console.log("BOOKING UPDATED:", payload.new);
 
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ["images"],
-        allowsEditing: true,
-        quality: 0.8,
+          // Update the booking information immediately
+          setBooking((currentBooking) => {
+            if (!currentBooking) {
+              return currentBooking;
+            }
+
+            return {
+              ...currentBooking,
+              ...payload.new,
+            };
+          });
+        }
+      )
+      .subscribe((status) => {
+        console.log("PAYMENT REALTIME STATUS:", status);
       });
 
-      if (!result.canceled && result.assets?.length > 0) {
-        setProof(result.assets[0]);
-      }
+    // Cleanup subscription
+    return () => {
+      supabase.removeChannel(bookingChannel);
+    };
+  }, [bookingId, loadBooking]);
 
-    } catch (error) {
-      Alert.alert("Image Error", error.message);
-    }
+  // PAYMENT STATUS
+  const isPaid =
+    booking?.payment_status === "paid" &&
+    booking?.booking_status === "confirmed" &&
+    !!booking?.ticket_code;
+
+  const isExpired =
+    booking?.expires_at &&
+    new Date(booking.expires_at).getTime() < Date.now() &&
+    !isPaid;
+
+  // BOOKING QR CODE
+  const bookingQR = booking?.booking_reference
+    ? `ROUTEX-BOOKING:${booking.booking_reference}`
+    : "";
+
+  // VIEW TICKET
+  const viewTicket = () => {
+    navigation.navigate("Ticket", {
+      bookingId: booking.booking_id,
+    });
   };
 
-  // =========================================
-  // SUBMIT GCASH PAYMENT
-  // =========================================
-
-  const submitPayment = async () => {
-    if (!reference.trim()) {
-      Alert.alert(
-        "Required",
-        "Please enter your GCash reference number."
-      );
-      return;
-    }
-
-    if (!proof) {
-      Alert.alert(
-        "Required",
-        "Please upload your GCash payment screenshot."
-      );
-      return;
-    }
-
-    if (submitting) return;
-
-    let uploadedPath = null;
-
-    try {
-      setSubmitting(true);
-
-      const {
-        data: { user },
-        error: authError,
-      } = await supabase.auth.getUser();
-
-      if (authError) throw authError;
-
-      if (!user) {
-        throw new Error("Please sign in again.");
-      }
-
-      // 1. Convert screenshot to blob
-      const response = await fetch(proof.uri);
-      const blob = await response.blob();
-
-      const extension =
-        proof.uri.split(".").pop()?.split("?")[0] || "jpg";
-
-      const path =
-        `${user.id}/${bookingId}/${Date.now()}.${extension}`;
-
-      // 2. Upload passenger payment proof
-      const { error: uploadError } = await supabase.storage
-        .from(PROOF_BUCKET)
-        .upload(path, blob, {
-          contentType: proof.mimeType || "image/jpeg",
-          upsert: false,
-        });
-
-      if (uploadError) throw uploadError;
-
-      uploadedPath = path;
-
-      // 3. Submit payment for verification
-      const { error: rpcError } = await supabase.rpc(
-        "submit_gcash_payment",
-        {
-          p_booking_id: Number(bookingId),
-          p_reference_number: reference.trim(),
-          p_proof_image_path: path,
-        }
-      );
-
-      if (rpcError) throw rpcError;
-
-      Alert.alert(
-        "Payment Submitted",
-        "Your GCash payment has been submitted successfully. Please wait for the operator or cashier to verify the transaction.",
-        [
-          {
-            text: "OK",
-            onPress: () => {
-              navigation.replace("Ticket", {
-                bookingId,
-              });
-            },
-          },
-        ]
-      );
-
-    } catch (error) {
-      console.log("Payment submission error:", error);
-
-      // Remove uploaded proof if database submission failed
-      if (uploadedPath) {
-        const { error: removeError } = await supabase.storage
-          .from(PROOF_BUCKET)
-          .remove([uploadedPath]);
-
-        if (removeError) {
-          console.log("Proof cleanup error:", removeError.message);
-        }
-      }
-
-      Alert.alert(
-        "Submission Failed",
-        error.message || "Unable to submit payment."
-      );
-
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // =========================================
   // LOADING SCREEN
-  // =========================================
-
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#2563EB" />
-
-        <Text style={styles.muted}>
-          Loading payment details...
+        <ActivityIndicator size="large" color="#06B6D4" />
+        <Text style={styles.loadingText}>
+          Loading your booking...
         </Text>
       </View>
     );
   }
 
-  // =========================================
-  // PAYMENT DETAILS UNAVAILABLE
-  // =========================================
-
-  if (!booking || !operatorPayment) {
+  // BOOKING NOT FOUND
+  if (!booking) {
     return (
       <View style={styles.center}>
         <Ionicons
           name="alert-circle-outline"
-          size={60}
+          size={55}
           color="#DC2626"
         />
 
         <Text style={styles.title}>
-          GCash Payment Unavailable
-        </Text>
-
-        <Text style={styles.muted}>
-          The operator's GCash payment details could not be loaded.
+          Booking Not Found
         </Text>
 
         <TouchableOpacity
           style={styles.button}
-          onPress={loadPaymentDetails}
+          onPress={() => navigation.goBack()}
         >
           <Text style={styles.buttonText}>
-            Try Again
+            Go Back
           </Text>
         </TouchableOpacity>
       </View>
     );
   }
-
-  // =========================================
-  // ALREADY PAID
-  // =========================================
-
-  if (booking.payment_status === "paid") {
-    return (
-      <View style={styles.center}>
-        <Ionicons
-          name="checkmark-circle"
-          size={70}
-          color="#16A34A"
-        />
-
-        <Text style={styles.title}>
-          Payment Already Verified
-        </Text>
-
-        <Text style={styles.muted}>
-          Your booking has already been paid.
-        </Text>
-
-        <TouchableOpacity
-          style={styles.button}
-          onPress={() =>
-            navigation.replace("Ticket", { bookingId })
-          }
-        >
-          <Text style={styles.buttonText}>
-            View Boarding Ticket
-          </Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
-  // =========================================
-  // PAYMENT SCREEN
-  // =========================================
 
   return (
     <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={styles.container}
+      showsVerticalScrollIndicator={false}
     >
-      <Text style={styles.title}>
-        Pay through GCash
-      </Text>
+      {/* HEADER */}
+      <View style={styles.header}>
+        <Ionicons
+          name="qr-code-outline"
+          size={38}
+          color="#0891B2"
+        />
 
-      <Text style={styles.subtitle}>
-        Scan the operator's official GCash QR code and transfer the exact amount.
-      </Text>
-
-      {/* BOOKING DETAILS */}
-
-      <View style={styles.card}>
-        <Text style={styles.sectionTitle}>
-          Booking Information
+        <Text style={styles.title}>
+          Terminal Payment
         </Text>
 
+        <Text style={styles.subtitle}>
+          Present your booking QR code to the cashier.
+        </Text>
+      </View>
+
+      {/* BOOKING CARD */}
+      <View style={styles.card}>
+
+        {/* PAID */}
+        {isPaid ? (
+          <View style={styles.statusContainer}>
+            <Ionicons
+              name="checkmark-circle"
+              size={55}
+              color="#16A34A"
+            />
+
+            <Text style={styles.paidTitle}>
+              Payment Confirmed!
+            </Text>
+
+            <Text style={styles.statusDescription}>
+              Your payment has been approved.
+              Your boarding ticket is ready.
+            </Text>
+          </View>
+
+        ) : isExpired ? (
+
+          /* EXPIRED */
+          <View style={styles.statusContainer}>
+            <Ionicons
+              name="alert-circle"
+              size={55}
+              color="#DC2626"
+            />
+
+            <Text style={styles.expiredTitle}>
+              Booking Expired
+            </Text>
+
+            <Text style={styles.statusDescription}>
+              Your booking has passed its payment deadline.
+              Please contact the terminal cashier or make a new booking.
+            </Text>
+          </View>
+
+        ) : (
+
+          /* PENDING PAYMENT */
+          <>
+            <View style={styles.pendingBadge}>
+              <Ionicons
+                name="time-outline"
+                size={17}
+                color="#B45309"
+              />
+
+              <Text style={styles.pendingText}>
+                AWAITING CASHIER PAYMENT
+              </Text>
+            </View>
+
+            <Text style={styles.qrTitle}>
+              Your Booking QR Code
+            </Text>
+
+            <View style={styles.qrContainer}>
+              {bookingQR ? (
+                <QRCode
+                  value={bookingQR}
+                  size={220}
+                  color="#172B4D"
+                  backgroundColor="#FFFFFF"
+                />
+              ) : (
+                <Text>
+                  Booking reference unavailable.
+                </Text>
+              )}
+            </View>
+
+            <Text style={styles.qrInstruction}>
+              Let the cashier scan this QR code to retrieve your booking.
+            </Text>
+          </>
+        )}
+
+        <View style={styles.divider} />
+
+        {/* BOOKING DETAILS */}
         <Text style={styles.label}>
           Booking Reference
         </Text>
 
-        <Text style={styles.value}>
-          {booking.booking_reference || bookingId}
+        <Text style={styles.reference}>
+          {booking.booking_reference || "Unavailable"}
         </Text>
 
         <Text style={styles.label}>
-          Amount to Pay
+          Total Amount
         </Text>
 
         <Text style={styles.amount}>
           ₱
-          {Number(booking.total_amount).toLocaleString("en-PH", {
+          {Number(booking.total_amount || 0).toLocaleString("en-PH", {
             minimumFractionDigits: 2,
           })}
         </Text>
-      </View>
-
-      {/* OPERATOR GCASH DETAILS */}
-
-      <View style={styles.card}>
-        <Text style={styles.sectionTitle}>
-          Operator GCash Account
-        </Text>
-
-        <View style={styles.qrContainer}>
-          {qrUrl ? (
-            <Image
-              source={{ uri: qrUrl }}
-              style={styles.qr}
-              resizeMode="contain"
-              onError={() => {
-                Alert.alert(
-                  "QR Image Error",
-                  "Unable to display the operator's QR image. Please contact the operator."
-                );
-              }}
-            />
-          ) : (
-            <View style={styles.qrPlaceholder}>
-              <Ionicons
-                name="qr-code-outline"
-                size={65}
-                color="#94A3B8"
-              />
-
-              <Text style={styles.muted}>
-                QR image unavailable
-              </Text>
-            </View>
-          )}
-        </View>
-
-        <Text style={styles.qrCaption}>
-          Scan this QR using your GCash app.
-        </Text>
 
         <Text style={styles.label}>
-          Account Name
+          Booking Status
         </Text>
 
         <Text style={styles.value}>
-          {operatorPayment.account_name}
+          {booking.booking_status?.toUpperCase() || "UNKNOWN"}
         </Text>
 
         <Text style={styles.label}>
-          GCash Mobile Number
+          Payment Status
         </Text>
 
-        <Text style={styles.number}>
-          {operatorPayment.account_number}
+        <Text
+          style={[
+            styles.value,
+            isPaid ? styles.paidColor : styles.unpaidColor,
+          ]}
+        >
+          {booking.payment_status?.toUpperCase() || "UNKNOWN"}
         </Text>
 
-        <Text style={styles.warning}>
-          Before confirming your transfer, check that the recipient name
-          displayed in GCash matches the operator's account details.
-        </Text>
+        {booking.expires_at && !isPaid && (
+          <>
+            <Text style={styles.label}>
+              Payment Deadline
+            </Text>
+
+            <Text style={styles.value}>
+              {new Date(booking.expires_at).toLocaleString()}
+            </Text>
+          </>
+        )}
       </View>
 
-      {/* PAYMENT PROOF */}
-
-      <View style={styles.card}>
-        <Text style={styles.sectionTitle}>
-          Submit Payment Proof
-        </Text>
-
-        <Text style={styles.label}>
-          GCash Reference Number
-        </Text>
-
-        <TextInput
-          style={styles.input}
-          value={reference}
-          onChangeText={setReference}
-          placeholder="Enter transaction reference"
-          autoCapitalize="characters"
-        />
+      {/* PAID: VIEW TICKET */}
+      {isPaid ? (
 
         <TouchableOpacity
-          style={styles.upload}
-          onPress={chooseProof}
+          style={styles.button}
+          onPress={viewTicket}
         >
           <Ionicons
-            name="image-outline"
-            size={25}
-            color="#2563EB"
+            name="ticket-outline"
+            size={20}
+            color="#FFFFFF"
           />
 
-          <Text style={styles.uploadText}>
-            {proof
-              ? "Change Screenshot"
-              : "Upload GCash Screenshot"}
+          <Text style={styles.buttonText}>
+            View Boarding Ticket
           </Text>
         </TouchableOpacity>
 
-        {proof && (
-          <Image
-            source={{ uri: proof.uri }}
-            style={styles.proof}
-            resizeMode="contain"
-          />
-        )}
+      ) : (
 
-        <Text style={styles.warning}>
-          Your payment will remain pending until the operator or cashier
-          verifies the actual GCash transaction.
-        </Text>
-      </View>
+        <>
+          {/* PAYMENT INSTRUCTIONS */}
+          {!isExpired && (
+            <View style={styles.instructionCard}>
+              <Ionicons
+                name="information-circle-outline"
+                size={22}
+                color="#0891B2"
+              />
 
-      {/* SUBMIT BUTTON */}
+              <Text style={styles.instructionText}>
+                Pay the displayed amount directly to the cashier.
+                Your boarding ticket will become available after
+                the cashier confirms your payment.
+              </Text>
+            </View>
+          )}
 
+          {/* MANUAL REFRESH BACKUP */}
+          <TouchableOpacity
+            style={styles.refreshButton}
+            onPress={() => loadBooking(false)}
+            disabled={refreshing}
+          >
+            {refreshing ? (
+              <ActivityIndicator color="#0891B2" />
+            ) : (
+              <>
+                <Ionicons
+                  name="refresh-outline"
+                  size={19}
+                  color="#0891B2"
+                />
+
+                <Text style={styles.refreshText}>
+                  Refresh Payment Status
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </>
+      )}
+
+      {/* BACK TO HOME */}
       <TouchableOpacity
-        style={[
-          styles.button,
-          submitting && styles.disabledButton,
-        ]}
-        onPress={submitPayment}
-        disabled={submitting}
+        style={styles.homeButton}
+        onPress={() => navigation.navigate("MainTabs")}
       >
-        {submitting ? (
-          <ActivityIndicator color="#FFFFFF" />
-        ) : (
-          <Text style={styles.buttonText}>
-            Submit Payment for Verification
-          </Text>
-        )}
+        <Text style={styles.homeButtonText}>
+          Back to Home
+        </Text>
       </TouchableOpacity>
     </ScrollView>
   );
 }
 
-// =========================================
 // STYLES
-// =========================================
-
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
+    flexGrow: 1,
     backgroundColor: "#F3F6FB",
-  },
-
-  content: {
     padding: 18,
-    paddingBottom: 40,
+    paddingBottom: 35,
   },
 
   center: {
     flex: 1,
+    backgroundColor: "#F3F6FB",
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#F3F6FB",
     padding: 25,
-    gap: 12,
+  },
+
+  header: {
+    alignItems: "center",
+    marginBottom: 22,
+    marginTop: 15,
   },
 
   title: {
-    fontSize: 24,
+    fontSize: 23,
     fontWeight: "bold",
     color: "#172B4D",
+    marginTop: 12,
   },
 
   subtitle: {
     color: "#64748B",
-    marginTop: 7,
-    lineHeight: 21,
-  },
-
-  muted: {
-    color: "#64748B",
-    marginTop: 6,
     textAlign: "center",
+    marginTop: 7,
+    fontSize: 14,
   },
 
   card: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 15,
-    padding: 18,
-    marginTop: 17,
+    borderRadius: 18,
+    padding: 22,
+    borderWidth: 1,
+    borderColor: "#DCE3EF",
+  },
+
+  pendingBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FEF3C7",
+    padding: 10,
+    borderRadius: 20,
+    alignSelf: "center",
+  },
+
+  pendingText: {
+    color: "#B45309",
+    fontSize: 11,
+    fontWeight: "bold",
+    marginLeft: 6,
+  },
+
+  qrTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#172B4D",
+    textAlign: "center",
+    marginTop: 22,
+  },
+
+  qrContainer: {
+    alignSelf: "center",
+    backgroundColor: "#FFFFFF",
+    padding: 15,
+    marginTop: 18,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: "#E2E8F0",
   },
 
-  sectionTitle: {
-    fontSize: 17,
+  qrInstruction: {
+    color: "#64748B",
+    textAlign: "center",
+    marginTop: 15,
+    lineHeight: 21,
+  },
+
+  statusContainer: {
+    alignItems: "center",
+    paddingVertical: 12,
+  },
+
+  paidTitle: {
+    color: "#16A34A",
+    fontSize: 21,
     fontWeight: "bold",
-    color: "#172B4D",
-    marginBottom: 10,
+    marginTop: 12,
+  },
+
+  expiredTitle: {
+    color: "#DC2626",
+    fontSize: 21,
+    fontWeight: "bold",
+    marginTop: 12,
+  },
+
+  statusDescription: {
+    color: "#64748B",
+    textAlign: "center",
+    lineHeight: 21,
+    marginTop: 8,
+  },
+
+  divider: {
+    height: 1,
+    backgroundColor: "#E2E8F0",
+    marginVertical: 20,
   },
 
   label: {
     color: "#64748B",
     fontSize: 13,
-    marginTop: 13,
+    marginTop: 15,
+  },
+
+  reference: {
+    color: "#0891B2",
+    fontSize: 20,
+    fontWeight: "bold",
+    marginTop: 5,
+  },
+
+  amount: {
+    color: "#16A34A",
+    fontSize: 27,
+    fontWeight: "bold",
+    marginTop: 5,
   },
 
   value: {
     color: "#172B4D",
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "600",
-    marginTop: 4,
+    marginTop: 5,
   },
 
-  amount: {
-    fontSize: 30,
-    fontWeight: "bold",
-    color: "#2563EB",
-    marginTop: 4,
+  paidColor: {
+    color: "#16A34A",
   },
 
-  number: {
-    fontSize: 21,
-    fontWeight: "bold",
-    color: "#0077CC",
-    marginTop: 4,
+  unpaidColor: {
+    color: "#B45309",
   },
 
-  qrContainer: {
-    backgroundColor: "#FFFFFF",
+  instructionCard: {
+    flexDirection: "row",
+    backgroundColor: "#E0F2FE",
+    padding: 15,
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    padding: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 250,
-    marginTop: 10,
+    marginTop: 18,
+    alignItems: "flex-start",
   },
 
-  qr: {
-    width: 230,
-    height: 230,
-  },
-
-  qrPlaceholder: {
-    alignItems: "center",
-    justifyContent: "center",
-    height: 230,
-  },
-
-  qrCaption: {
-    color: "#64748B",
-    textAlign: "center",
-    marginTop: 10,
-    fontSize: 13,
-  },
-
-  input: {
-    borderWidth: 1,
-    borderColor: "#CBD5E1",
-    borderRadius: 10,
-    padding: 13,
-    marginTop: 8,
-    backgroundColor: "#FFFFFF",
-    color: "#172B4D",
-  },
-
-  upload: {
-    borderWidth: 1,
-    borderStyle: "dashed",
-    borderColor: "#93C5FD",
-    borderRadius: 12,
-    padding: 18,
-    alignItems: "center",
-    marginTop: 15,
-    gap: 8,
-  },
-
-  uploadText: {
-    color: "#2563EB",
-    fontWeight: "600",
-  },
-
-  proof: {
-    width: "100%",
-    height: 220,
-    marginTop: 12,
-  },
-
-  warning: {
-    color: "#92400E",
-    backgroundColor: "#FEF3C7",
-    padding: 12,
-    borderRadius: 9,
-    marginTop: 15,
-    lineHeight: 20,
+  instructionText: {
+    color: "#155E75",
+    flex: 1,
+    marginLeft: 10,
+    lineHeight: 21,
     fontSize: 13,
   },
 
   button: {
-    backgroundColor: "#2563EB",
+    backgroundColor: "#0891B2",
     padding: 16,
     borderRadius: 12,
     alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
     marginTop: 20,
-  },
-
-  disabledButton: {
-    opacity: 0.6,
   },
 
   buttonText: {
     color: "#FFFFFF",
     fontWeight: "bold",
+    fontSize: 15,
+    marginLeft: 8,
+  },
+
+  refreshButton: {
+    borderWidth: 1,
+    borderColor: "#0891B2",
+    padding: 15,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    marginTop: 18,
+  },
+
+  refreshText: {
+    color: "#0891B2",
+    fontWeight: "bold",
+    marginLeft: 8,
+  },
+
+  homeButton: {
+    padding: 15,
+    alignItems: "center",
+    marginTop: 10,
+  },
+
+  homeButtonText: {
+    color: "#64748B",
+    fontWeight: "600",
+  },
+
+  loadingText: {
+    color: "#64748B",
+    marginTop: 12,
   },
 });

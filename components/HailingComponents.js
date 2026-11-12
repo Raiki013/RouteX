@@ -25,7 +25,26 @@ import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "../config/supabase";
 
 // ========================================
-// NOTIFICATION CONFIGURATION
+// CONFIGURATION
+// ========================================
+
+const ALERT_DISTANCE = 300;
+
+// Reject bus coordinates older than 90 seconds.
+const BUS_LOCATION_MAX_AGE_SECONDS = 90;
+
+// Passenger GPS update preferences.
+const PASSENGER_GPS_TIME_INTERVAL = 1000;
+const PASSENGER_GPS_DISTANCE_INTERVAL = 1;
+
+// Backup distance check.
+const DISTANCE_CHECK_INTERVAL = 3000;
+
+const NEARBY_CHANNEL = "routex-passenger-nearby-custom-v6";
+const NEARBY_SOUND = "passenger_nearby.wav";
+
+// ========================================
+// NOTIFICATION HANDLER
 // ========================================
 
 Notifications.setNotificationHandler({
@@ -37,25 +56,7 @@ Notifications.setNotificationHandler({
   }),
 });
 
-const ALERT_DISTANCE = 300;
-
-export const HAIL_CHANNELS = {
-  received: "routex-hail-received-custom-v5",
-  accepted: "routex-hail-accepted-custom-v5",
-  nearby: "routex-passenger-nearby-custom-v5",
-};
-
-const HAIL_SOUNDS = {
-  received: "hail_received.wav",
-  accepted: "hail_accepted.wav",
-  nearby: "passenger_nearby.wav",
-};
-
 let notificationSetupPromise = null;
-
-// ========================================
-// SETUP NOTIFICATION CHANNELS
-// ========================================
 
 export async function setupHailNotifications() {
   if (notificationSetupPromise) {
@@ -64,60 +65,47 @@ export async function setupHailNotifications() {
 
   notificationSetupPromise = (async () => {
     try {
-      let permission = await Notifications.getPermissionsAsync();
+      let permission =
+        await Notifications.getPermissionsAsync();
 
       if (!permission.granted) {
-        permission = await Notifications.requestPermissionsAsync();
+        permission =
+          await Notifications.requestPermissionsAsync();
       }
 
       if (!permission.granted) {
-        console.log("NOTIFICATION PERMISSION DENIED");
+        console.log(
+          "PASSENGER NOTIFICATION PERMISSION DENIED"
+        );
+
         return false;
       }
 
       if (Platform.OS === "android") {
         await Notifications.setNotificationChannelAsync(
-          HAIL_CHANNELS.received,
+          NEARBY_CHANNEL,
           {
-            name: "Hail Received",
-            description: "New passenger hail requests",
-            importance: Notifications.AndroidImportance.MAX,
-            sound: HAIL_SOUNDS.received,
-            enableVibrate: true,
-            vibrationPattern: [0, 300, 200, 300],
-          }
-        );
+            name: "Selected Bus Nearby",
+            description:
+              "Alerts when your selected bus is within 300 meters",
 
-        await Notifications.setNotificationChannelAsync(
-          HAIL_CHANNELS.accepted,
-          {
-            name: "Hail Accepted",
-            description: "Passenger hail acceptance alerts",
-            importance: Notifications.AndroidImportance.MAX,
-            sound: HAIL_SOUNDS.accepted,
-            enableVibrate: true,
-            vibrationPattern: [0, 200, 100, 200],
-          }
-        );
+            importance:
+              Notifications.AndroidImportance.MAX,
 
-        await Notifications.setNotificationChannelAsync(
-          HAIL_CHANNELS.nearby,
-          {
-            name: "Passenger Nearby",
-            description: "Passenger proximity alerts",
-            importance: Notifications.AndroidImportance.MAX,
-            sound: HAIL_SOUNDS.nearby,
+            sound: NEARBY_SOUND,
             enableVibrate: true,
             vibrationPattern: [0, 500, 200, 500],
           }
         );
       }
 
-      console.log("ROUTEX NOTIFICATION CHANNELS READY");
-
       return true;
     } catch (error) {
-      console.log("NOTIFICATION SETUP ERROR:", error);
+      console.log(
+        "NOTIFICATION SETUP ERROR:",
+        error?.message || error
+      );
+
       return false;
     }
   })();
@@ -130,65 +118,77 @@ export async function setupHailNotifications() {
 }
 
 // ========================================
-// SEND NOTIFICATION
+// SEND PROXIMITY NOTIFICATION
 // ========================================
 
-async function sendHailNotification(type, title, body) {
+async function sendNearbyNotification(busName) {
   try {
-    const selectedChannel = HAIL_CHANNELS[type];
-    const selectedSound = HAIL_SOUNDS[type];
-
-    if (!selectedChannel || !selectedSound) {
-      console.log("UNKNOWN NOTIFICATION TYPE:", type);
-      return;
-    }
-
     const allowed = await setupHailNotifications();
 
     if (!allowed) {
-      console.log("NOTIFICATION PERMISSION NOT AVAILABLE");
-      return;
+      return false;
     }
 
     const content = {
-      title,
-      body,
-      priority: Notifications.AndroidNotificationPriority.MAX,
+      title: "Your Bus is Nearby!",
 
-      ...(Platform.OS === "ios" && {
-        sound: selectedSound,
-      }),
+      body: `${
+        busName || "Your selected bus"
+      } is within 300 meters. Get ready!`,
+
+      sound:
+        Platform.OS === "ios"
+          ? NEARBY_SOUND
+          : undefined,
+
+      priority:
+        Notifications.AndroidNotificationPriority.MAX,
+
+      ...(Platform.OS === "android"
+        ? { channelId: NEARBY_CHANNEL }
+        : {}),
     };
-
-    let trigger = null;
-
-    if (Platform.OS === "android") {
-      trigger = {
-        type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-        seconds: 1,
-        channelId: selectedChannel,
-      };
-    }
 
     await Notifications.scheduleNotificationAsync({
       content,
-      trigger,
+
+      trigger:
+        Platform.OS === "android"
+          ? {
+              type:
+                Notifications.SchedulableTriggerInputTypes
+                  .TIME_INTERVAL,
+
+              seconds: 1,
+              channelId: NEARBY_CHANNEL,
+            }
+          : null,
     });
 
-    console.log("NOTIFICATION SCHEDULED:", type);
+    Vibration.vibrate([0, 500, 200, 500]);
+
+    console.log("NEARBY NOTIFICATION SCHEDULED");
+
+    return true;
   } catch (error) {
-    console.log("SEND NOTIFICATION ERROR:", error);
+    console.log(
+      "NEARBY NOTIFICATION ERROR:",
+      error?.message || error
+    );
+
+    return false;
   }
 }
 
 // ========================================
-// DISTANCE CALCULATION
+// HELPER FUNCTIONS
 // ========================================
 
 function getDistanceMeters(lat1, lon1, lat2, lon2) {
   const earthRadius = 6371000;
 
-  const toRadians = (value) => (value * Math.PI) / 180;
+  const toRadians = (value) =>
+    (value * Math.PI) / 180;
 
   const dLat = toRadians(lat2 - lat1);
   const dLon = toRadians(lon2 - lon1);
@@ -199,14 +199,22 @@ function getDistanceMeters(lat1, lon1, lat2, lon2) {
       Math.cos(toRadians(lat2)) *
       Math.sin(dLon / 2) ** 2;
 
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-  return earthRadius * c;
+  return (
+    earthRadius *
+    2 *
+    Math.atan2(
+      Math.sqrt(a),
+      Math.sqrt(1 - a)
+    )
+  );
 }
 
 function formatDistance(distance) {
-  if (distance === null || !Number.isFinite(distance)) {
-    return "Waiting for GPS";
+  if (
+    distance === null ||
+    !Number.isFinite(distance)
+  ) {
+    return "Waiting for bus GPS";
   }
 
   if (distance < 1000) {
@@ -214,18 +222,6 @@ function formatDistance(distance) {
   }
 
   return `${(distance / 1000).toFixed(2)} km`;
-}
-
-function isRecent(date, seconds = 60) {
-  if (!date) return false;
-
-  const timestamp = new Date(date).getTime();
-
-  if (!Number.isFinite(timestamp)) return false;
-
-  const age = Date.now() - timestamp;
-
-  return age >= 0 && age <= seconds * 1000;
 }
 
 function hasValidCoordinate(value) {
@@ -237,718 +233,745 @@ function hasValidCoordinate(value) {
   );
 }
 
+function isBusMarkable(bus) {
+  const rawStatus =
+    bus?.availability_status ??
+    bus?.bus_status ??
+    bus?.availability ??
+    "";
+
+  const status = String(rawStatus)
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+
+  return ["available", "standing"].includes(status);
+}
+
+function getTripId(bus) {
+  return (
+    bus?.trip_id ??
+    bus?.active_trip?.trip_id ??
+    null
+  );
+}
+
+function getBusName(bus) {
+  return (
+    bus?.bus_name ||
+    bus?.name ||
+    "Selected bus"
+  );
+}
+
 // ========================================
-// PASSENGER HAIL BUTTON
+// PASSENGER BUS MARKING COMPONENT
 // ========================================
 
 export function PassengerHailButton({ bus, user }) {
-  const [activeHail, setActiveHail] = useState(null);
+  const [markedBus, setMarkedBus] = useState(null);
+  const [distance, setDistance] = useState(null);
+
   const [loading, setLoading] = useState(false);
+  const [checking, setChecking] = useState(true);
 
-  const watcher = useRef(null);
-  const previousHailRef = useRef(null);
+  const [locationPermission, setLocationPermission] =
+    useState(false);
 
-  const acceptedNotifiedIds = useRef(new Set());
-  const proximityNotifiedIds = useRef(new Set());
+  // ========================================
+  // REFS
+  // ========================================
 
-  // ----------------------------------------
-  // STOP GPS WATCHER
-  // ----------------------------------------
+  const passengerPositionRef = useRef(null);
 
-  const stopWatcher = useCallback(() => {
-    if (watcher.current) {
-      watcher.current.remove();
-      watcher.current = null;
+  const locationWatcherRef = useRef(null);
+
+  const locationStartPromiseRef = useRef(null);
+
+  const checkingRef = useRef(false);
+
+  const markedBusRef = useRef(null);
+
+  const notifiedRef = useRef(false);
+
+  const mountedRef = useRef(true);
+
+  const checkBusDistanceRef = useRef(null);
+
+  // ========================================
+  // BUS INFORMATION
+  // ========================================
+
+  const busId = bus?.bus_id;
+
+  const tripId = getTripId(bus);
+
+  const busName = getBusName(bus);
+
+  const markable = isBusMarkable(bus);
+
+  // ========================================
+  // KEEP REFS UPDATED
+  // ========================================
+
+  useEffect(() => {
+    markedBusRef.current = markedBus;
+
+    notifiedRef.current = Boolean(
+      markedBus?.notified_at
+    );
+  }, [markedBus]);
+
+  // ========================================
+  // STOP PASSENGER GPS
+  // ========================================
+
+  const stopPassengerLocation = useCallback(() => {
+    if (locationWatcherRef.current) {
+      locationWatcherRef.current.remove();
+
+      locationWatcherRef.current = null;
     }
+
+    passengerPositionRef.current = null;
   }, []);
 
-  // ----------------------------------------
-  // LOAD PASSENGER REQUEST
-  // ----------------------------------------
+  // ========================================
+  // START PASSENGER GPS
+  // ========================================
+  // Passenger coordinates remain on the device.
+  // They are NEVER uploaded to Supabase.
+  // ========================================
 
-  const loadMyHail = useCallback(async () => {
-    if (!user?.id) return;
-
-    const { data, error } = await supabase
-      .from("passenger_hails")
-      .select("*")
-      .eq("passenger_id", user.id)
-      .in("status", ["pending", "accepted"])
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (error) {
-      console.log("LOAD MY HAIL ERROR:", error.message);
-      return;
+  const startPassengerLocation = useCallback(async () => {
+    // Prevent multiple GPS watchers from starting.
+    if (locationWatcherRef.current) {
+      return true;
     }
 
-    const previous = previousHailRef.current;
-
-    if (data) {
-      // ------------------------------------
-      // PASSENGER: ACCEPTED NOTIFICATION
-      // ------------------------------------
-
-      if (
-        data.status === "accepted" &&
-        previous?.hail_id === data.hail_id &&
-        previous.status === "pending" &&
-        !acceptedNotifiedIds.current.has(data.hail_id)
-      ) {
-        acceptedNotifiedIds.current.add(data.hail_id);
-
-        await sendHailNotification(
-          "accepted",
-          "Pickup Accepted!",
-          "The bus operator has accepted your pickup request."
-        );
-
-        Vibration.vibrate([0, 200, 100, 200]);
-      }
-
-      // ------------------------------------
-      // PASSENGER: PROXIMITY NOTIFICATION
-      // ------------------------------------
-
-      if (
-          data.status === "accepted" &&
-          data.proximity_notified_at &&
-          !proximityNotifiedIds.current.has(data.hail_id)
-        ) {
-         proximityNotifiedIds.current.add(data.hail_id);
-
-        await sendHailNotification(
-          "nearby",
-          "Bus is Nearby!",
-          "Your bus is within 300 meters. Get ready for pickup!"
-        );
-
-        Vibration.vibrate([0, 500, 200, 500]);
-
-        console.log(
-          "PASSENGER PROXIMITY NOTIFICATION SENT:",
-          data.hail_id
-        );
-      }
-
-      // Remember previously notified requests.
-      if (data.proximity_notified_at) {
-        proximityNotifiedIds.current.add(data.hail_id);
-      }
-
-      if (data.status === "accepted" && previous?.status === "accepted") {
-        acceptedNotifiedIds.current.add(data.hail_id);
-      }
+    if (locationStartPromiseRef.current) {
+      return locationStartPromiseRef.current;
     }
 
-    previousHailRef.current = data || null;
-    setActiveHail(data || null);
-  }, [user?.id]);
-
-  // ----------------------------------------
-  // SAVE PASSENGER GPS
-  // ----------------------------------------
-
-  const savePassengerLocation = useCallback(
-    async (hailId, position) => {
-      if (!user?.id) return;
-
-      const { latitude, longitude } = position.coords;
-
-      const { error } = await supabase
-        .from("passenger_hails")
-        .update({
-          passenger_latitude: latitude,
-          passenger_longitude: longitude,
-          recorded_at: new Date().toISOString(),
-        })
-        .eq("hail_id", hailId)
-        .eq("passenger_id", user.id)
-        .in("status", ["pending", "accepted"]);
-
-      if (error) {
-        console.log("SAVE HAIL LOCATION ERROR:", error.message);
-      }
-    },
-    [user?.id]
-  );
-
-  // ----------------------------------------
-  // START GPS WATCHER
-  // ----------------------------------------
-
-  const startWatcher = useCallback(
-    async (hail) => {
-      if (!hail || watcher.current) return;
-
+    const startPromise = (async () => {
       try {
-        const permission =
+        let permission =
           await Location.getForegroundPermissionsAsync();
 
         if (permission.status !== "granted") {
-          console.log("PASSENGER GPS PERMISSION NOT GRANTED");
-          return;
+          permission =
+            await Location.requestForegroundPermissionsAsync();
         }
 
-        watcher.current = await Location.watchPositionAsync(
-          {
-            accuracy: Location.Accuracy.BestForNavigation,
-            timeInterval: 5000,
-            distanceInterval: 5,
-          },
-          async (position) => {
-            await savePassengerLocation(
-              hail.hail_id,
-              position
-            );
+        if (permission.status !== "granted") {
+          if (mountedRef.current) {
+            setLocationPermission(false);
           }
+
+          return false;
+        }
+
+        if (mountedRef.current) {
+          setLocationPermission(true);
+        }
+
+        // Get initial passenger location.
+        const current =
+          await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.BestForNavigation,
+          });
+
+        passengerPositionRef.current = current.coords;
+
+        // Check immediately after receiving the first GPS position.
+        checkBusDistanceRef.current?.();
+
+        // Start continuous foreground GPS updates.
+        if (!locationWatcherRef.current) {
+          locationWatcherRef.current =
+            await Location.watchPositionAsync(
+              {
+                accuracy:
+                  Location.Accuracy.BestForNavigation,
+
+                timeInterval:
+                  PASSENGER_GPS_TIME_INTERVAL,
+
+                distanceInterval:
+                  PASSENGER_GPS_DISTANCE_INTERVAL,
+              },
+
+              (position) => {
+                passengerPositionRef.current =
+                  position.coords;
+
+                console.log(
+                  "PASSENGER GPS UPDATED:",
+                  position.coords.latitude,
+                  position.coords.longitude
+                );
+
+                // Immediately check the bus distance.
+                checkBusDistanceRef.current?.();
+              }
+            );
+        }
+
+        return true;
+      } catch (error) {
+        console.log(
+          "PASSENGER GPS ERROR:",
+          error?.message || error
         );
 
-        console.log("PASSENGER HAIL GPS WATCHER STARTED");
-      } catch (error) {
-        console.log("HAIL LOCATION WATCH ERROR:", error.message);
+        return false;
       }
-    },
-    [savePassengerLocation]
-  );
+    })();
 
-  // ----------------------------------------
-  // MANAGE GPS ACCORDING TO APP STATE
-  // ----------------------------------------
+    locationStartPromiseRef.current = startPromise;
 
-  useEffect(() => {
+    try {
+      return await startPromise;
+    } finally {
+      locationStartPromiseRef.current = null;
+    }
+  }, []);
+
+  // ========================================
+  // LOAD EXISTING BUS MARK
+  // ========================================
+
+  const loadMyMark = useCallback(async () => {
     if (
-      !activeHail ||
-      !["pending", "accepted"].includes(activeHail.status)
+      !user?.id ||
+      busId == null ||
+      tripId == null
     ) {
-      stopWatcher();
+      if (mountedRef.current) {
+        setMarkedBus(null);
+        setChecking(false);
+      }
+
       return;
     }
 
-    const startIfActive = () => {
-      if (AppState.currentState === "active") {
-        startWatcher(activeHail);
+    try {
+      const { data, error } = await supabase
+        .from("passenger_marked_buses")
+        .select("*")
+        .eq("passenger_id", user.id)
+        .eq("bus_id", Number(busId))
+        .eq("trip_id", Number(tripId))
+        .maybeSingle();
+
+      if (error) {
+        throw error;
       }
-    };
 
-    startIfActive();
+      if (mountedRef.current) {
+        setMarkedBus(data || null);
+        markedBusRef.current = data || null;
 
-    const subscription = AppState.addEventListener(
-      "change",
-      (nextState) => {
-        if (nextState === "active") {
-          startWatcher(activeHail);
-        } else {
-          stopWatcher();
-        }
+        notifiedRef.current = Boolean(
+          data?.notified_at
+        );
+
+        setChecking(false);
       }
-    );
-
-    return () => {
-      subscription.remove();
-      stopWatcher();
-    };
-  }, [
-    activeHail?.hail_id,
-    activeHail?.status,
-    startWatcher,
-    stopWatcher,
-  ]);
-
-  // ----------------------------------------
-  // REALTIME + POLLING
-  // ----------------------------------------
-
-  useEffect(() => {
-    if (!user?.id) return;
-
-    loadMyHail();
-
-    const channel = supabase
-      .channel(`passenger-hail-${user.id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "passenger_hails",
-          filter: `passenger_id=eq.${user.id}`,
-        },
-        loadMyHail
-      )
-      .subscribe((status) => {
-        console.log("PASSENGER HAIL REALTIME:", status);
-      });
-
-    const interval = setInterval(() => {
-      loadMyHail();
-    }, 5000);
-
-    return () => {
-      clearInterval(interval);
-      supabase.removeChannel(channel);
-      stopWatcher();
-    };
-  }, [user?.id, loadMyHail, stopWatcher]);
-
-  // ----------------------------------------
-  // CREATE HAIL REQUEST
-  // ----------------------------------------
-
-  const sendHailRequest = async () => {
-    if (!user?.id || !bus) return;
-
-    if (bus.availability_status === "not_available") {
-      Alert.alert(
-        "Bus Unavailable",
-        "This bus is not accepting passengers."
+    } catch (error) {
+      console.log(
+        "LOAD MARKED BUS ERROR:",
+        error?.message || error
       );
-      return;
-    }
 
-    if (!bus.trip_id || !bus.operator_id) {
+      if (mountedRef.current) {
+        setChecking(false);
+      }
+    }
+  }, [user?.id, busId, tripId]);
+
+  // ========================================
+  // MARK BUS
+  // ========================================
+
+  const markBus = async () => {
+    if (
+      !user?.id ||
+      busId == null ||
+      tripId == null
+    ) {
       Alert.alert(
-        "Unable to Hail",
+        "Unable to Mark Bus",
         "This bus does not have a valid active trip."
       );
+
+      return;
+    }
+
+    if (!markable) {
+      Alert.alert(
+        "Bus Unavailable",
+        "You can only mark buses that are Available or Standing."
+      );
+
       return;
     }
 
     setLoading(true);
 
     try {
-      const permission =
-        await Location.requestForegroundPermissionsAsync();
+      // Start passenger foreground GPS.
+      const hasPermission =
+        await startPassengerLocation();
 
-      if (permission.status !== "granted") {
+      if (!hasPermission) {
         Alert.alert(
           "Location Permission Required",
-          "Allow location access so the operator can see where you are."
+          "Allow RouteX to access your location while using the app so it can calculate the distance to your selected bus. Your location will stay on your device."
         );
+
         return;
       }
 
-      const position = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.BestForNavigation,
-      });
-
-      const { latitude, longitude } = position.coords;
+      // Request notification permission.
+      await setupHailNotifications();
 
       const { data, error } = await supabase
-        .from("passenger_hails")
+        .from("passenger_marked_buses")
         .insert({
           passenger_id: user.id,
-          operator_id: bus.operator_id,
-          bus_id: String(bus.bus_id),
-          trip_id: String(bus.trip_id),
-          status: "pending",
-          passenger_latitude: latitude,
-          passenger_longitude: longitude,
-          recorded_at: new Date().toISOString(),
+          bus_id: Number(busId),
+          trip_id: Number(tripId),
         })
         .select("*")
         .single();
 
-      if (error) throw error;
+      if (error) {
+        // Already marked? Load the existing record.
+        if (error.code === "23505") {
+          await loadMyMark();
+          return;
+        }
 
-      setActiveHail(data);
-      previousHailRef.current = data;
+        throw error;
+      }
+
+      setMarkedBus(data);
+
+      markedBusRef.current = data;
+
+      notifiedRef.current = false;
 
       Alert.alert(
-        "Hail Request Sent",
-        "Your request has been sent to the bus operator. Keep RouteX open so your location can update."
+        "Bus Marked",
+        `${busName} has been added to your selected buses. RouteX will alert you when it is within 300 meters.`
       );
+
+      // Immediately attempt a distance check.
+      setTimeout(() => {
+        checkBusDistanceRef.current?.();
+      }, 500);
     } catch (error) {
-      console.log("CREATE HAIL ERROR:", error.message);
+      console.log(
+        "MARK BUS ERROR:",
+        error?.message || error
+      );
 
       Alert.alert(
-        "Hail Request Failed",
-        error.message || "Unable to send your request."
+        "Unable to Mark Bus",
+        error?.message || "Please try again."
       );
     } finally {
-      setLoading(false);
+      if (mountedRef.current) {
+        setLoading(false);
+      }
     }
   };
 
-  // ----------------------------------------
-  // CANCEL HAIL REQUEST
-  // ----------------------------------------
+  // ========================================
+  // UNMARK BUS
+  // ========================================
 
-  const cancelHailRequest = async () => {
-    if (!activeHail) return;
-
-    Alert.alert(
-      "Cancel Hail Request?",
-      "The operator will no longer receive your pickup request.",
-      [
-        {
-          text: "Keep Request",
-          style: "cancel",
-        },
-        {
-          text: "Cancel Request",
-          style: "destructive",
-          onPress: async () => {
-            const { error } = await supabase
-              .from("passenger_hails")
-              .update({ status: "cancelled" })
-              .eq("hail_id", activeHail.hail_id)
-              .eq("passenger_id", user.id);
-
-            if (error) {
-              Alert.alert("Error", error.message);
-              return;
-            }
-
-            setActiveHail(null);
-            previousHailRef.current = null;
-            stopWatcher();
-          },
-        },
-      ]
-    );
-  };
-
-  // ----------------------------------------
-  // PASSENGER HAIL UI
-  // ----------------------------------------
-
-  if (loading) {
-    return (
-      <View style={styles.hailCard}>
-        <ActivityIndicator color="#0891B2" />
-        <Text style={styles.hailText}>
-          Sending hail request...
-        </Text>
-      </View>
-    );
-  }
-
-  if (activeHail) {
-    const accepted = activeHail.status === "accepted";
-
-    return (
-      <View style={styles.hailCard}>
-        <View style={styles.hailHeader}>
-          <Ionicons
-            name={accepted ? "checkmark-circle" : "time"}
-            size={25}
-            color={accepted ? "#16A34A" : "#D97706"}
-          />
-
-          <View style={{ flex: 1 }}>
-            <Text style={styles.hailTitle}>
-              {accepted
-                ? "Pickup Accepted!"
-                : "Waiting for Operator"}
-            </Text>
-
-            <Text style={styles.hailText}>
-              {accepted
-                ? "The operator accepted your request. Keep your location enabled."
-                : "Your hail request has been sent."}
-            </Text>
-          </View>
-        </View>
-
-        <TouchableOpacity
-          style={styles.cancelHailButton}
-          onPress={cancelHailRequest}
-        >
-          <Text style={styles.cancelHailText}>
-            Cancel Request
-          </Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
-  return (
-    <TouchableOpacity
-      style={styles.hailButton}
-      onPress={sendHailRequest}
-      activeOpacity={0.85}
-    >
-      <Ionicons name="hand-right" size={21} color="#FFFFFF" />
-
-      <Text style={styles.hailButtonText}>
-        Hail This Bus
-      </Text>
-    </TouchableOpacity>
-  );
-}
-
-// ========================================
-// OPERATOR HAIL REQUESTS
-// ========================================
-
-export function OperatorHailRequests({ buses = [] }) {
-  const [requests, setRequests] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [processingId, setProcessingId] = useState(null);
-
-  const receivedNotifiedIds = useRef(new Set());
-  const proximityNotifiedIds = useRef(new Set());
-  const initialLoadDone = useRef(false);
-  const loadingRequestsRef = useRef(false);
-
-  // ----------------------------------------
-  // SETUP NOTIFICATIONS
-  // ----------------------------------------
-
-  useEffect(() => {
-    setupHailNotifications();
-  }, []);
-
-  // ----------------------------------------
-  // OPERATOR PROXIMITY NOTIFICATION
-  // ----------------------------------------
-
-  const sendProximityAlert = async (request, distance) => {
-    try {
-      Vibration.vibrate([0, 500, 200, 500]);
-
-      await sendHailNotification(
-        "nearby",
-        "Passenger is Nearby!",
-        `Your passenger is ${formatDistance(distance)} away.`
-      );
-    } catch (error) {
-      console.log("PROXIMITY ALERT ERROR:", error.message);
-    }
-  };
-
-  // ----------------------------------------
-  // LOAD HAIL REQUESTS
-  // ----------------------------------------
-
-  const loadRequests = useCallback(async () => {
-    if (loadingRequestsRef.current) return;
-
-    const activeBuses = buses.filter(
-      (bus) =>
-        bus.bus_id !== null &&
-        bus.bus_id !== undefined
-    );
-
-    if (activeBuses.length === 0) {
-      setRequests([]);
-      setLoading(false);
-      initialLoadDone.current = true;
+  const unmarkBus = async () => {
+    if (!markedBus?.id || !user?.id) {
       return;
     }
 
-    loadingRequestsRef.current = true;
+    setLoading(true);
 
     try {
-      const busIds = activeBuses.map(
-        (bus) => String(bus.bus_id)
-      );
+      const { error } = await supabase
+        .from("passenger_marked_buses")
+        .delete()
+        .eq("id", markedBus.id)
+        .eq("passenger_id", user.id);
 
-      const { data, error } = await supabase
-        .from("passenger_hails")
-        .select("*")
-        .in("bus_id", busIds)
-        .in("status", ["pending", "accepted"])
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-
-      // ------------------------------------
-      // CALCULATE PASSENGER DISTANCES
-      // ------------------------------------
-
-      const combined = (data || []).map((request) => {
-        const bus = activeBuses.find(
-          (item) =>
-            String(item.bus_id) === String(request.bus_id)
-        );
-
-        let distance = null;
-        const busLocation = bus?.location;
-
-        const hasValidCoordinates =
-          hasValidCoordinate(request.passenger_latitude) &&
-          hasValidCoordinate(request.passenger_longitude) &&
-          hasValidCoordinate(busLocation?.latitude) &&
-          hasValidCoordinate(busLocation?.longitude);
-
-        if (
-          busLocation &&
-          hasValidCoordinates &&
-          isRecent(busLocation.recorded_at, 60) &&
-          isRecent(request.recorded_at, 60)
-        ) {
-          const passengerLatitude = Number(
-            request.passenger_latitude
-          );
-
-          const passengerLongitude = Number(
-            request.passenger_longitude
-          );
-
-          const busLatitude = Number(busLocation.latitude);
-          const busLongitude = Number(busLocation.longitude);
-
-          distance = getDistanceMeters(
-            passengerLatitude,
-            passengerLongitude,
-            busLatitude,
-            busLongitude
-          );
-        }
-
-        console.log("HAIL DISTANCE CHECK:", {
-          hailId: request.hail_id,
-          status: request.status,
-          distance,
-          passengerGPSAge: request.recorded_at
-            ? Math.round(
-                (Date.now() -
-                  new Date(request.recorded_at).getTime()) /
-                  1000
-              )
-            : "missing",
-          busGPSAge: busLocation?.recorded_at
-            ? Math.round(
-                (Date.now() -
-                  new Date(busLocation.recorded_at).getTime()) /
-                  1000
-              )
-            : "missing",
-        });
-
-        return {
-          ...request,
-          busName: bus?.bus_name || "RouteX Bus",
-          plateNumber:
-            bus?.plate_number || "Plate unavailable",
-          distance,
-        };
-      });
-
-      setRequests(combined);
-
-      // ------------------------------------
-      // INITIAL LOAD
-      // ------------------------------------
-
-      if (!initialLoadDone.current) {
-        combined.forEach((request) => {
-          if (request.status === "pending") {
-            receivedNotifiedIds.current.add(request.hail_id);
-          }
-
-          if (request.proximity_notified_at) {
-            proximityNotifiedIds.current.add(request.hail_id);
-          }
-        });
-
-        initialLoadDone.current = true;
-      } else {
-        // ----------------------------------
-        // NEW HAIL REQUEST NOTIFICATION
-        // ----------------------------------
-
-        for (const request of combined) {
-          const requestAge =
-            Date.now() -
-            new Date(request.created_at).getTime();
-
-          if (
-            request.status === "pending" &&
-            requestAge >= 0 &&
-            requestAge <= 60000 &&
-            !receivedNotifiedIds.current.has(request.hail_id)
-          ) {
-            receivedNotifiedIds.current.add(request.hail_id);
-
-            await sendHailNotification(
-              "received",
-              "New Passenger Request",
-              "A passenger is requesting a pickup."
-            );
-          }
-        }
+      if (error) {
+        throw error;
       }
 
-      // ------------------------------------
-      // CHECK ACCEPTED PASSENGERS WITHIN 300M
-      // ------------------------------------
+      setMarkedBus(null);
 
-      for (const request of combined) {
-        if (
-          request.status === "accepted" &&
-          request.distance !== null &&
-          request.distance <= ALERT_DISTANCE &&
-          !request.proximity_notified_at &&
-          !proximityNotifiedIds.current.has(request.hail_id)
-        ) {
-          const {
-            data: updatedHail,
-            error: updateError,
-          } = await supabase
-            .from("passenger_hails")
-            .update({
-              proximity_notified_at: new Date().toISOString(),
-            })
-            .eq("hail_id", request.hail_id)
-            .eq("status", "accepted")
-            .is("proximity_notified_at", null)
-            .select("hail_id, proximity_notified_at")
-            .maybeSingle();
+      markedBusRef.current = null;
 
-          if (updateError) {
-            console.log(
-              "SAVE PROXIMITY ALERT ERROR:",
-              updateError.message
-            );
-          } else if (updatedHail) {
-            proximityNotifiedIds.current.add(request.hail_id);
+      notifiedRef.current = false;
 
-            await sendProximityAlert(
-              request,
-              request.distance
-            );
+      setDistance(null);
 
-            console.log(
-              "OPERATOR PROXIMITY NOTIFICATION SENT:",
-              request.hail_id,
-              request.distance
-            );
-          }
+      stopPassengerLocation();
+
+      Alert.alert(
+        "Bus Unmarked",
+        "This bus was removed from your marked buses."
+      );
+    } catch (error) {
+      console.log(
+        "UNMARK BUS ERROR:",
+        error?.message || error
+      );
+
+      Alert.alert(
+        "Unable to Unmark Bus",
+        error?.message || "Please try again."
+      );
+    } finally {
+      if (mountedRef.current) {
+        setLoading(false);
+      }
+    }
+  };
+
+  // ========================================
+  // CHECK BUS DISTANCE
+  // ========================================
+
+  const checkBusDistance = useCallback(async () => {
+    if (
+      checkingRef.current ||
+      !markedBusRef.current ||
+      markedBusRef.current.notified_at ||
+      notifiedRef.current ||
+      !passengerPositionRef.current ||
+      busId == null ||
+      tripId == null ||
+      !user?.id ||
+      AppState.currentState !== "active"
+    ) {
+      return;
+    }
+
+    checkingRef.current = true;
+
+    try {
+      // Get the latest bus GPS location.
+      const { data, error } = await supabase
+        .from("bus_locations")
+        .select(
+          "latitude, longitude, recorded_at"
+        )
+        .eq("bus_id", Number(busId))
+        .eq("trip_id", Number(tripId))
+        .order("recorded_at", {
+          ascending: false,
+        })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) {
+        throw error;
+      }
+
+      // No valid bus location.
+      if (
+        !data ||
+        !hasValidCoordinate(data.latitude) ||
+        !hasValidCoordinate(data.longitude) ||
+        !data.recorded_at
+      ) {
+        if (mountedRef.current) {
+          setDistance(null);
         }
 
-        if (request.proximity_notified_at) {
-          proximityNotifiedIds.current.add(request.hail_id);
+        return;
+      }
+
+      // Check how old the bus GPS location is.
+      const gpsAgeSeconds =
+        (Date.now() -
+          new Date(data.recorded_at).getTime()) /
+        1000;
+
+      if (
+        !Number.isFinite(gpsAgeSeconds) ||
+        gpsAgeSeconds < 0 ||
+        gpsAgeSeconds >
+          BUS_LOCATION_MAX_AGE_SECONDS
+      ) {
+        console.log(
+          "BUS GPS IS OUTDATED:",
+          gpsAgeSeconds,
+          "seconds"
+        );
+
+        if (mountedRef.current) {
+          setDistance(null);
+        }
+
+        return;
+      }
+
+      // Get passenger's current local coordinates.
+      const passenger =
+        passengerPositionRef.current;
+
+      const currentDistance = getDistanceMeters(
+        Number(passenger.latitude),
+        Number(passenger.longitude),
+        Number(data.latitude),
+        Number(data.longitude)
+      );
+
+      if (mountedRef.current) {
+        setDistance(currentDistance);
+      }
+
+      console.log(
+        "BUS DISTANCE:",
+        Math.round(currentDistance),
+        "meters"
+      );
+
+      // ========================================
+      // WITHIN 300 METERS
+      // ========================================
+
+      if (
+        currentDistance <= ALERT_DISTANCE &&
+        !markedBusRef.current?.notified_at &&
+        !notifiedRef.current
+      ) {
+        console.log(
+          "BUS ENTERED 300 METER ALERT ZONE"
+        );
+
+        // Claim notification using a database null guard.
+        const { data: updatedMark, error: updateError } =
+          await supabase
+            .from("passenger_marked_buses")
+            .update({
+              notified_at: new Date().toISOString(),
+            })
+            .eq("id", markedBusRef.current.id)
+            .eq("passenger_id", user.id)
+            .is("notified_at", null)
+            .select("*")
+            .maybeSingle();
+
+        if (updateError) {
+          throw updateError;
+        }
+
+        // Another request already claimed the notification.
+        if (!updatedMark) {
+          console.log(
+            "NOTIFICATION ALREADY CLAIMED"
+          );
+
+          const { data: latestMark } = await supabase
+            .from("passenger_marked_buses")
+            .select("*")
+            .eq("id", markedBusRef.current.id)
+            .eq("passenger_id", user.id)
+            .maybeSingle();
+
+          if (latestMark) {
+            markedBusRef.current = latestMark;
+            notifiedRef.current = Boolean(
+              latestMark.notified_at
+            );
+
+            if (mountedRef.current) {
+              setMarkedBus(latestMark);
+            }
+          }
+
+          return;
+        }
+
+        // Send the actual notification.
+        const notificationSent =
+          await sendNearbyNotification(busName);
+
+        if (notificationSent) {
+          // Keep the successful notification recorded.
+          markedBusRef.current = updatedMark;
+
+          notifiedRef.current = true;
+
+          if (mountedRef.current) {
+            setMarkedBus(updatedMark);
+          }
+
+          console.log(
+            "PASSENGER PROXIMITY NOTIFICATION SENT:",
+            busId,
+            tripId
+          );
+        } else {
+          // Notification failed. Reset the database field
+          // so the next distance check can retry.
+          const { error: resetError } = await supabase
+            .from("passenger_marked_buses")
+            .update({
+              notified_at: null,
+            })
+            .eq("id", updatedMark.id)
+            .eq("passenger_id", user.id);
+
+          if (resetError) {
+            console.log(
+              "RESET NOTIFICATION ERROR:",
+              resetError
+            );
+          }
+
+          const retryMark = {
+            ...updatedMark,
+            notified_at: null,
+          };
+
+          markedBusRef.current = retryMark;
+
+          notifiedRef.current = false;
+
+          if (mountedRef.current) {
+            setMarkedBus(retryMark);
+          }
+
+          console.log(
+            "NOTIFICATION FAILED. WILL RETRY."
+          );
         }
       }
     } catch (error) {
-      console.log("LOAD HAIL REQUESTS ERROR:", error.message);
+      console.log(
+        "CHECK BUS DISTANCE ERROR:",
+        error?.message || error
+      );
     } finally {
-      loadingRequestsRef.current = false;
-      setLoading(false);
+      checkingRef.current = false;
     }
-  }, [buses]);
+  }, [busId, tripId, user?.id, busName]);
 
-  // ----------------------------------------
-  // REALTIME AND POLLING
-  // ----------------------------------------
+  // ========================================
+  // KEEP DISTANCE CHECK REF UPDATED
+  // ========================================
 
   useEffect(() => {
-    loadRequests();
+    checkBusDistanceRef.current =
+      checkBusDistance;
 
+    return () => {
+      checkBusDistanceRef.current = null;
+    };
+  }, [checkBusDistance]);
+
+  // ========================================
+  // LOAD MARK WHEN BUS/TRIP CHANGES
+  // ========================================
+
+  useEffect(() => {
+    mountedRef.current = true;
+
+    setChecking(true);
+
+    setMarkedBus(null);
+
+    markedBusRef.current = null;
+
+    notifiedRef.current = false;
+
+    setDistance(null);
+
+    passengerPositionRef.current = null;
+
+    loadMyMark();
+
+    return () => {
+      mountedRef.current = false;
+
+      stopPassengerLocation();
+    };
+  }, [
+    loadMyMark,
+    stopPassengerLocation,
+  ]);
+
+  // ========================================
+  // PASSENGER GPS LIFECYCLE
+  // ========================================
+
+  useEffect(() => {
+    if (!markedBus) {
+      stopPassengerLocation();
+      return;
+    }
+
+    const startIfActive = () => {
+      if (AppState.currentState === "active") {
+        startPassengerLocation();
+      }
+    };
+
+    startIfActive();
+
+    const subscription =
+      AppState.addEventListener(
+        "change",
+        (state) => {
+          if (state === "active") {
+            startPassengerLocation();
+
+            // Check immediately when returning to the app.
+            checkBusDistanceRef.current?.();
+          } else {
+            stopPassengerLocation();
+          }
+        }
+      );
+
+    return () => {
+      subscription.remove();
+
+      stopPassengerLocation();
+    };
+  }, [
+    markedBus?.id,
+    startPassengerLocation,
+    stopPassengerLocation,
+  ]);
+
+  // ========================================
+  // REALTIME BUS GPS + BACKUP POLLING
+  // ========================================
+
+  useEffect(() => {
+    if (!markedBus) {
+      return;
+    }
+
+    // Check immediately.
+    checkBusDistanceRef.current?.();
+
+    // Backup check every 3 seconds.
+    const interval = setInterval(() => {
+      checkBusDistanceRef.current?.();
+    }, DISTANCE_CHECK_INTERVAL);
+
+    // Listen for bus GPS changes.
     const channel = supabase
-      .channel("operator-hail-requests")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "passenger_hails",
-        },
-        loadRequests
+      .channel(
+        `marked-bus-location-${busId}-${tripId}-${user?.id}`
       )
       .on(
         "postgres_changes",
@@ -956,233 +979,169 @@ export function OperatorHailRequests({ buses = [] }) {
           event: "*",
           schema: "public",
           table: "bus_locations",
+          filter: `bus_id=eq.${busId}`,
         },
-        loadRequests
+        (payload) => {
+          console.log(
+            "BUS GPS REALTIME UPDATE:",
+            payload.eventType
+          );
+
+          // Immediately recalculate distance.
+          checkBusDistanceRef.current?.();
+        }
       )
       .subscribe((status) => {
-        console.log("OPERATOR HAIL REALTIME:", status);
+        console.log(
+          "BUS LOCATION REALTIME STATUS:",
+          status
+        );
       });
-
-    const interval = setInterval(loadRequests, 5000);
 
     return () => {
       clearInterval(interval);
+
       supabase.removeChannel(channel);
     };
-  }, [loadRequests]);
+  }, [
+    markedBus?.id,
+    busId,
+    tripId,
+    user?.id,
+  ]);
 
-  // ----------------------------------------
-  // ACCEPT OR REJECT REQUEST
-  // ----------------------------------------
+  // ========================================
+  // LOADING UI
+  // ========================================
 
-  const respondToHail = async (request, response) => {
-    setProcessingId(request.hail_id);
+  if (checking) {
+    return (
+      <View style={styles.hailCard}>
+        <ActivityIndicator color="#0891B2" />
 
-    try {
-      const updateData =
-        response === "accepted"
-          ? {
-              status: "accepted",
-              accepted_at: new Date().toISOString(),
-            }
-          : {
-              status: "rejected",
-            };
-
-      const { error } = await supabase
-        .from("passenger_hails")
-        .update(updateData)
-        .eq("hail_id", request.hail_id)
-        .eq("status", "pending");
-
-      if (error) throw error;
-
-      await loadRequests();
-
-      Alert.alert(
-        response === "accepted"
-          ? "Request Accepted"
-          : "Request Rejected",
-        response === "accepted"
-          ? "Passenger location monitoring is now active. You will receive an alert within 300 meters."
-          : "The passenger has been notified that the request was rejected."
-      );
-    } catch (error) {
-      Alert.alert("Request Error", error.message);
-    } finally {
-      setProcessingId(null);
-    }
-  };
-
-  // ----------------------------------------
-  // COMPLETE REQUEST
-  // ----------------------------------------
-
-  const completeHail = async (request) => {
-    setProcessingId(request.hail_id);
-
-    try {
-      const { error } = await supabase
-        .from("passenger_hails")
-        .update({
-          status: "completed",
-          completed_at: new Date().toISOString(),
-        })
-        .eq("hail_id", request.hail_id)
-        .eq("status", "accepted");
-
-      if (error) throw error;
-
-      await loadRequests();
-    } catch (error) {
-      Alert.alert("Error", error.message);
-    } finally {
-      setProcessingId(null);
-    }
-  };
-
-  // ----------------------------------------
-  // COUNTS
-  // ----------------------------------------
-
-  const pendingCount = requests.filter(
-    (item) => item.status === "pending"
-  ).length;
-
-  const acceptedCount = requests.filter(
-    (item) => item.status === "accepted"
-  ).length;
-
-  // ----------------------------------------
-  // OPERATOR HAIL UI
-  // ----------------------------------------
-
-  return (
-    <View style={styles.operatorCard}>
-      <View style={styles.operatorHeader}>
-        <View style={styles.operatorIcon}>
-          <Ionicons name="people" size={22} color="#0891B2" />
-        </View>
-
-        <View style={{ flex: 1 }}>
-          <Text style={styles.operatorTitle}>
-            Passengers on Your Route
-          </Text>
-
-          <Text style={styles.operatorSubtitle}>
-            {pendingCount} pending · {acceptedCount} accepted
-          </Text>
-        </View>
-
-        <Text style={styles.operatorCount}>
-          {requests.length}
+        <Text style={styles.hailText}>
+          Checking your marked bus...
         </Text>
       </View>
+    );
+  }
 
-      {loading ? (
-        <ActivityIndicator
-          color="#0891B2"
-          style={{ marginTop: 15 }}
-        />
-      ) : requests.length === 0 ? (
-        <View style={styles.noRequests}>
+  if (loading) {
+    return (
+      <View style={styles.hailCard}>
+        <ActivityIndicator color="#0891B2" />
+
+        <Text style={styles.hailText}>
+          Please wait...
+        </Text>
+      </View>
+    );
+  }
+
+  // ========================================
+  // MARKED BUS UI
+  // ========================================
+
+  if (markedBus) {
+    const alreadyNotified = Boolean(
+      markedBus.notified_at
+    );
+
+    return (
+      <View style={styles.hailCard}>
+        <View style={styles.hailHeader}>
           <Ionicons
-            name="person-add-outline"
-            size={30}
-            color="#94A3B8"
+            name={
+              alreadyNotified
+                ? "notifications"
+                : "bookmark"
+            }
+            size={23}
+            color={
+              alreadyNotified
+                ? "#16A34A"
+                : "#0891B2"
+            }
           />
 
-          <Text style={styles.noRequestsText}>
-            No passengers have requested a pickup on your active route.
-          </Text>
-        </View>
-      ) : (
-        requests.map((request) => (
-          <View key={request.hail_id} style={styles.requestItem}>
-            <View style={styles.requestTop}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.requestBusName}>
-                  {request.busName}
-                </Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.hailTitle}>
+              {alreadyNotified
+                ? "Your Bus is Nearby!"
+                : "Bus Marked"}
+            </Text>
 
-                <Text style={styles.requestPlate}>
-                  {request.plateNumber}
-                </Text>
-              </View>
-
-              <View
-                style={[
-                  styles.requestStatus,
-                  request.status === "accepted"
-                    ? styles.acceptedStatus
-                    : styles.pendingStatus,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.requestStatusText,
-                    request.status === "accepted"
-                      ? { color: "#15803D" }
-                      : { color: "#B45309" },
-                  ]}
-                >
-                  {request.status.toUpperCase()}
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.distanceRow}>
-              <Ionicons
-                name="location"
-                size={17}
-                color="#0891B2"
-              />
-
-              <Text style={styles.distanceText}>
-                Passenger distance: {formatDistance(request.distance)}
-              </Text>
-            </View>
-
-            {request.status === "pending" ? (
-              <View style={styles.actionRow}>
-                <TouchableOpacity
-                  style={styles.acceptButton}
-                  disabled={processingId === request.hail_id}
-                  onPress={() => respondToHail(request, "accepted")}
-                >
-                  <Text style={styles.actionButtonText}>
-                    {processingId === request.hail_id
-                      ? "Please wait..."
-                      : "Accept"}
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.rejectButton}
-                  disabled={processingId === request.hail_id}
-                  onPress={() => respondToHail(request, "rejected")}
-                >
-                  <Text style={styles.actionButtonText}>
-                    Reject
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <TouchableOpacity
-                style={styles.completeButton}
-                disabled={processingId === request.hail_id}
-                onPress={() => completeHail(request)}
-              >
-                <Text style={styles.actionButtonText}>
-                  Mark as Completed
-                </Text>
-              </TouchableOpacity>
-            )}
+            <Text style={styles.hailText}>
+              {alreadyNotified
+                ? `${busName} has reached the 300-meter alert zone.`
+                : `Distance: ${formatDistance(
+                    distance
+                  )}. We will notify you within 300 meters.`}
+            </Text>
           </View>
-        ))
-      )}
-    </View>
+        </View>
+
+        {!locationPermission && (
+          <Text style={styles.permissionText}>
+            Allow location access while using RouteX
+            to calculate distance.
+          </Text>
+        )}
+
+        <TouchableOpacity
+          style={styles.cancelHailButton}
+          onPress={unmarkBus}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.cancelHailText}>
+            Unmark This Bus
+          </Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  // ========================================
+  // NOT MARKED BUS UI
+  // ========================================
+
+  return (
+    <TouchableOpacity
+      style={[
+        styles.hailButton,
+        !markable && styles.disabledButton,
+      ]}
+      onPress={markBus}
+      activeOpacity={0.85}
+      disabled={!markable}
+    >
+      <Ionicons
+        name={
+          markable
+            ? "bookmark-outline"
+            : "ban-outline"
+        }
+        size={20}
+        color="#FFFFFF"
+      />
+
+      <Text style={styles.hailButtonText}>
+        {markable
+          ? "Mark This Bus"
+          : "Bus Not Available"}
+      </Text>
+    </TouchableOpacity>
   );
+}
+
+// ========================================
+// OPERATOR COMPONENT
+// ========================================
+// Operators no longer receive passenger hail requests.
+// Keep this export for compatibility with existing imports.
+
+export function OperatorHailRequests() {
+  return null;
 }
 
 // ========================================
@@ -1199,6 +1158,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 9,
     marginTop: 14,
+  },
+
+  disabledButton: {
+    backgroundColor: "#94A3B8",
   },
 
   hailButtonText: {
@@ -1235,6 +1198,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
+  permissionText: {
+    color: "#B45309",
+    fontSize: 11,
+    marginTop: 9,
+  },
+
   cancelHailButton: {
     marginTop: 12,
     padding: 10,
@@ -1247,155 +1216,5 @@ const styles = StyleSheet.create({
     color: "#B91C1C",
     fontWeight: "700",
     fontSize: 12,
-  },
-
-  operatorCard: {
-    backgroundColor: "#FFFFFF",
-    marginHorizontal: 12,
-    marginBottom: 12,
-    padding: 14,
-    borderRadius: 15,
-  },
-
-  operatorHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-
-  operatorIcon: {
-    width: 43,
-    height: 43,
-    borderRadius: 12,
-    backgroundColor: "#CFFAFE",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  operatorTitle: {
-    fontSize: 15,
-    color: "#0F172A",
-    fontWeight: "800",
-  },
-
-  operatorSubtitle: {
-    color: "#64748B",
-    fontSize: 11,
-    marginTop: 3,
-  },
-
-  operatorCount: {
-    fontSize: 23,
-    fontWeight: "800",
-    color: "#0891B2",
-  },
-
-  noRequests: {
-    alignItems: "center",
-    padding: 20,
-    marginTop: 10,
-    backgroundColor: "#F8FAFC",
-    borderRadius: 12,
-  },
-
-  noRequestsText: {
-    textAlign: "center",
-    color: "#64748B",
-    fontSize: 12,
-    lineHeight: 18,
-    marginTop: 8,
-  },
-
-  requestItem: {
-    borderTopWidth: 1,
-    borderTopColor: "#E2E8F0",
-    marginTop: 13,
-    paddingTop: 13,
-  },
-
-  requestTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-
-  requestBusName: {
-    color: "#0F172A",
-    fontWeight: "800",
-    fontSize: 13,
-  },
-
-  requestPlate: {
-    color: "#64748B",
-    fontSize: 11,
-    marginTop: 3,
-  },
-
-  requestStatus: {
-    borderRadius: 20,
-    paddingHorizontal: 9,
-    paddingVertical: 6,
-  },
-
-  pendingStatus: {
-    backgroundColor: "#FEF3C7",
-  },
-
-  acceptedStatus: {
-    backgroundColor: "#DCFCE7",
-  },
-
-  requestStatusText: {
-    fontWeight: "800",
-    fontSize: 10,
-  },
-
-  distanceRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginTop: 12,
-  },
-
-  distanceText: {
-    color: "#475569",
-    fontSize: 12,
-    fontWeight: "600",
-  },
-
-  actionRow: {
-    flexDirection: "row",
-    gap: 9,
-    marginTop: 12,
-  },
-
-  acceptButton: {
-    flex: 1,
-    padding: 11,
-    borderRadius: 9,
-    backgroundColor: "#16A34A",
-    alignItems: "center",
-  },
-
-  rejectButton: {
-    flex: 1,
-    padding: 11,
-    borderRadius: 9,
-    backgroundColor: "#DC2626",
-    alignItems: "center",
-  },
-
-  completeButton: {
-    marginTop: 12,
-    padding: 11,
-    borderRadius: 9,
-    backgroundColor: "#0891B2",
-    alignItems: "center",
-  },
-
-  actionButtonText: {
-    color: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: "800",
   },
 });
