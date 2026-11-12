@@ -109,9 +109,9 @@ RouteX uses device GPS to provide bus location updates during active trips. Pass
 
 RouteX is an ongoing academic software development project. Features and improvements are continuously being implemented and tested.
 
-## Developers
+## Developer
 
-**RouteX Development Team**
+**Mars Zeus Emmanuel Salinga**
 
 Developed as an academic project using React Native, Expo, and Supabase.
 
