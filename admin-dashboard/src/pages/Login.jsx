@@ -51,7 +51,12 @@ export default function Login() {
   return (
     <div className="login-page">
       <div className="login-card">
-        <div className="login-logo">RX</div>
+        <div className="login-logo">
+          <img
+            src="/routex-logo.png"
+            alt="RouteX Logo"
+          />
+        </div>
 
         <h1>RouteX Admin</h1>
         <p className="login-subtitle">

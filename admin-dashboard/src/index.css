@@ -134,6 +134,24 @@ input {
   font-size: 11px;
 }
 
+.login-logo {
+  width: 100px;
+  height: 100px;
+  margin: 0 auto 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+}
+
+.login-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  background: transparent;
+}
+
 /* LOADING */
 
 .loading-screen {
@@ -230,6 +248,63 @@ input {
     font-size: 24px;
   }
 }
+
+
+/* ROUTEX SIDEBAR BRAND */
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 15px 18px;
+  min-height: 115px;
+  box-sizing: border-box;
+  background: transparent !important;
+}
+
+.sidebar-brand img.brand-logo {
+  display: block;
+  width: 75px !important;
+  height: 75px !important;
+  max-width: 75px !important;
+  max-height: 75px !important;
+  object-fit: contain;
+  flex: 0 0 75px;
+  border: none;
+  border-radius: 0;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.sidebar-brand-text {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+}
+
+.sidebar-brand-text h2 {
+  margin: 0;
+  font-size: 21px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.sidebar-brand-text span {
+  display: block;
+  font-size: 10px;
+  letter-spacing: 2px;
+  margin-top: 5px;
+  white-space: nowrap;
+}
+
+/* CENTER LOGO WHEN SIDEBAR IS COLLAPSED */
+.admin-sidebar.collapsed .sidebar-brand {
+  justify-content: center;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
 
 
 /* ADMIN DASHBOARD LAYOUT */

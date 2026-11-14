@@ -386,7 +386,6 @@ export default function Dashboard() {
 
         paymentCounts[status] = (paymentCounts[status] || 0) + 1;
 
-        // Only paid bookings count toward revenue
         if (status === "paid") {
           recordedPaymentAmount += Number(booking.total_amount || 0);
         }
@@ -1245,16 +1244,21 @@ export default function Dashboard() {
           sidebarOpen ? "" : "collapsed"
         }`}
       >
+        {/* SIDEBAR BRAND WITH ROUTEX IMAGE LOGO */}
         <div className="sidebar-brand">
-          <div className="brand-logo">RX</div>
+        <img
+          src="/routex-logo-white.png"
+          alt="RouteX Logo"
+          className="brand-logo"
+        />
 
-          {sidebarOpen && (
-            <div>
-              <h2>RouteX</h2>
-              <span>ADMIN PANEL</span>
-            </div>
-          )}
-        </div>
+        {sidebarOpen && (
+          <div className="sidebar-brand-text">
+            <h2>RouteX</h2>
+            <span>ADMIN PANEL</span>
+          </div>
+        )}
+      </div>
 
         <div className="sidebar-section-title">
           {sidebarOpen && "MAIN MENU"}
