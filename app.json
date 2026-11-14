@@ -5,8 +5,9 @@
     "slug": "RouteX",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/routex-logo.png",
     "userInterfaceStyle": "light",
+
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
@@ -15,11 +16,12 @@
         ]
       }
     },
+
     "android": {
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/routex-logo.png",
+        "backgroundColor": "#0755C9"
       },
       "permissions": [
         "android.permission.CAMERA",
@@ -33,9 +35,11 @@
       ],
       "package": "com.anonymous.RouteX"
     },
+
     "web": {
       "favicon": "./assets/favicon.png"
     },
+
     "plugins": [
       "expo-status-bar",
       [
@@ -75,6 +79,7 @@
         }
       ]
     ],
+
     "extra": {
       "eas": {
         "projectId": "004dab7d-48b1-4d17-a5b1-2348073c0908"
