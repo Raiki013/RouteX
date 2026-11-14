@@ -11,7 +11,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   StatusBar,
-  Alert,
+  Modal,
 } from "react-native";
 
 import {
@@ -30,6 +30,36 @@ export default function CashierDashboardScreen({ navigation }) {
   const [pendingBookings, setPendingBookings] = useState(0);
   const [paidBookings, setPaidBookings] = useState(0);
   const [recentBookings, setRecentBookings] = useState([]);
+
+  // CUSTOM ALERT STATES
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [alertTitle, setAlertTitle] = useState("");
+  const [alertMessage, setAlertMessage] = useState("");
+  const [alertType, setAlertType] = useState("error");
+  const [alertAction, setAlertAction] = useState(null);
+
+  const showAlert = (
+    title,
+    message,
+    type = "error",
+    action = null
+  ) => {
+    setAlertTitle(title);
+    setAlertMessage(message);
+    setAlertType(type);
+    setAlertAction(() => action);
+    setAlertVisible(true);
+  };
+
+  const closeAlert = () => {
+    setAlertVisible(false);
+
+    if (alertAction) {
+      const action = alertAction;
+      setAlertAction(null);
+      action();
+    }
+  };
 
   const formatAmount = (amount) => {
     return `₱${Number(amount || 0).toLocaleString("en-PH", {
@@ -58,7 +88,7 @@ export default function CashierDashboardScreen({ navigation }) {
     }
 
     try {
-      // Check logged-in user.
+      // CHECK LOGGED-IN USER
       const {
         data: { user },
         error: authError,
@@ -71,7 +101,7 @@ export default function CashierDashboardScreen({ navigation }) {
         return;
       }
 
-      // Check cashier/admin access.
+      // CHECK CASHIER/ADMIN ACCESS
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("user_level")
@@ -81,21 +111,22 @@ export default function CashierDashboardScreen({ navigation }) {
       if (profileError) throw profileError;
 
       if (!["cashier", "admin"].includes(profile?.user_level)) {
-        Alert.alert(
+        showAlert(
           "Access Denied",
-          "Only cashiers and administrators can access this dashboard."
+          "Only cashiers and administrators can access this dashboard.",
+          "warning",
+          () => navigation.goBack()
         );
 
-        navigation.goBack();
         return;
       }
 
-      // Display the user's email as a safe fallback.
+      // DISPLAY USER EMAIL
       setCashierName(
         user.email ? user.email.split("@")[0] : "Cashier"
       );
 
-      // Load dashboard statistics and recent bookings.
+      // LOAD DASHBOARD STATISTICS AND RECENT BOOKINGS
       const [
         pendingResult,
         paidResult,
@@ -144,9 +175,10 @@ export default function CashierDashboardScreen({ navigation }) {
     } catch (error) {
       console.log("Cashier Dashboard Error:", error.message);
 
-      Alert.alert(
+      showAlert(
         "Dashboard Error",
-        error.message || "Unable to load cashier dashboard."
+        error.message || "Unable to load cashier dashboard.",
+        "error"
       );
     } finally {
       setLoading(false);
@@ -459,6 +491,55 @@ export default function CashierDashboardScreen({ navigation }) {
           </Text>
         </View>
       </ScrollView>
+
+      {/* SWEETALERT-STYLE MODAL */}
+      <Modal
+        transparent
+        visible={alertVisible}
+        animationType="fade"
+        onRequestClose={closeAlert}
+      >
+        <View style={styles.alertOverlay}>
+          <View style={styles.alertBox}>
+            <View
+              style={[
+                styles.alertIconContainer,
+                alertType === "warning"
+                  ? styles.warningAlertIcon
+                  : styles.errorAlertIcon,
+              ]}
+            >
+              <Ionicons
+                name={
+                  alertType === "warning"
+                    ? "warning-outline"
+                    : "close-circle-outline"
+                }
+                size={43}
+                color={alertType === "warning" ? "#D97706" : "#DC2626"}
+              />
+            </View>
+
+            <Text style={styles.alertTitle}>
+              {alertTitle}
+            </Text>
+
+            <Text style={styles.alertMessage}>
+              {alertMessage}
+            </Text>
+
+            <TouchableOpacity
+              style={styles.alertButton}
+              onPress={closeAlert}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.alertButtonText}>
+                OK
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -799,5 +880,71 @@ const styles = StyleSheet.create({
     color: "#94A3B8",
     fontSize: 10,
     fontWeight: "600",
+  },
+
+  // ALERT MODAL
+  alertOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.50)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 25,
+  },
+
+  alertBox: {
+    width: "100%",
+    maxWidth: 350,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 23,
+    padding: 25,
+    alignItems: "center",
+    elevation: 10,
+  },
+
+  alertIconContainer: {
+    width: 78,
+    height: 78,
+    borderRadius: 39,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 17,
+  },
+
+  errorAlertIcon: {
+    backgroundColor: "#FEE2E2",
+  },
+
+  warningAlertIcon: {
+    backgroundColor: "#FEF3C7",
+  },
+
+  alertTitle: {
+    color: "#0F172A",
+    fontSize: 20,
+    fontWeight: "900",
+    textAlign: "center",
+  },
+
+  alertMessage: {
+    color: "#64748B",
+    fontSize: 13,
+    lineHeight: 21,
+    textAlign: "center",
+    marginTop: 10,
+  },
+
+  alertButton: {
+    width: "100%",
+    backgroundColor: "#0891B2",
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+    marginTop: 23,
+  },
+
+  alertButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "800",
   },
 });

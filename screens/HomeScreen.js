@@ -1,5 +1,9 @@
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useState,
+} from "react";
 
 import {
   View,
@@ -9,151 +13,536 @@ import {
   ScrollView,
   ActivityIndicator,
   RefreshControl,
-  TextInput,
   Modal,
-  Alert,
+  ImageBackground,
+  Image,
 } from "react-native";
 
 import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "../config/supabase";
 
 const C = {
-  blue: "#2563EB",
+  blue: "#1A8AE5",
   navy: "#172B4D",
   background: "#F3F7FC",
   white: "#FFFFFF",
   gray: "#64748B",
   light: "#E2E8F0",
   green: "#16A34A",
+  red: "#DC2626",
+  orange: "#F59E0B",
+  paleBlue: "#EFF6FF",
+  paleGreen: "#F0FDF4",
 };
+
+const GCASH_BUCKET = "operator-gcash-qr";
+
+// =====================================
+// CUSTOM ALERT
+// =====================================
+
+function SweetAlert({
+  visible,
+  title,
+  message,
+  type = "info",
+  confirmText = "OK",
+  onConfirm,
+}) {
+  const alertColors = {
+    success: "#16A34A",
+    error: "#DC2626",
+    warning: "#F59E0B",
+    info: "#2563EB",
+  };
+
+  const alertIcons = {
+    success: "checkmark-circle",
+    error: "close-circle",
+    warning: "warning",
+    info: "information-circle",
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      statusBarTranslucent
+      onRequestClose={onConfirm}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.alertBox}>
+          <View
+            style={[
+              styles.alertIcon,
+              { backgroundColor: `${alertColors[type]}15` },
+            ]}
+          >
+            <Ionicons
+              name={alertIcons[type]}
+              size={55}
+              color={alertColors[type]}
+            />
+          </View>
+
+          <Text style={styles.alertTitle}>{title}</Text>
+          <Text style={styles.alertMessage}>{message}</Text>
+
+          <TouchableOpacity
+            style={[
+              styles.alertButton,
+              { backgroundColor: alertColors[type] },
+            ]}
+            onPress={onConfirm}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.alertButtonText}>
+              {confirmText}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+// =====================================
+// HOME SCREEN
+// =====================================
 
 export default function HomeScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const [userName, setUserName] = useState("User");
-  const [userLevel, setUserLevel] = useState("");
+  const [user, setUser] = useState(null);
+  const [profile, setProfile] = useState(null);
 
   const [assignedBus, setAssignedBus] = useState(null);
   const [activeTrip, setActiveTrip] = useState(null);
 
-  // Add Bus Modal
-  const [addBusModal, setAddBusModal] = useState(false);
-  const [newBusName, setNewBusName] = useState("");
-  const [newPlateNumber, setNewPlateNumber] = useState("");
-  const [newBusType, setNewBusType] = useState("Ordinary");
-  const [newCapacity, setNewCapacity] = useState("");
-  const [savingBus, setSavingBus] = useState(false);
+  // NOTIFICATIONS
+  const [hasUnreadNotifications, setHasUnreadNotifications] =
+    useState(false);
 
-  // =========================================
-  // LOAD HOME
-  // =========================================
+  // PASSENGER BOOKINGS
+  const [bookings, setBookings] = useState([]);
+  const [bookingsLoading, setBookingsLoading] = useState(false);
+  const [showAllBookings, setShowAllBookings] = useState(false);
+
+  // GCASH QR CODE
+  const [showGcashQR, setShowGcashQR] = useState(false);
+  const [gcashQRUrl, setGcashQRUrl] = useState(null);
+  const [gcashQRLoading, setGcashQRLoading] = useState(false);
+  const [gcashQRError, setGcashQRError] = useState(false);
+
+  // ALERT
+  const [alertConfig, setAlertConfig] = useState({
+    visible: false,
+    title: "",
+    message: "",
+    type: "info",
+  });
+
+  const showAlert = (title, message, type = "info") => {
+    setAlertConfig({
+      visible: true,
+      title,
+      message,
+      type,
+    });
+  };
+
+  const closeAlert = () => {
+    setAlertConfig((prev) => ({
+      ...prev,
+      visible: false,
+    }));
+  };
+
+  const alertModal = (
+    <SweetAlert
+      visible={alertConfig.visible}
+      title={alertConfig.title}
+      message={alertConfig.message}
+      type={alertConfig.type}
+      onConfirm={closeAlert}
+    />
+  );
+
+  // =====================================
+  // LOAD PASSENGER BOOKINGS
+  // =====================================
+
+  const loadPassengerBookings = async (userId) => {
+    try {
+      setBookingsLoading(true);
+
+      const { data, error } = await supabase
+        .from("bookings")
+        .select(`
+          booking_id,
+          booking_reference,
+          booking_status,
+          payment_status,
+          total_amount,
+          passenger_count,
+          payment_method,
+          ticket_code,
+          created_at
+        `)
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(5);
+
+      if (error) throw error;
+
+      setBookings(data || []);
+    } catch (error) {
+      console.error(
+        "Passenger bookings loading error:",
+        error
+      );
+    } finally {
+      setBookingsLoading(false);
+    }
+  };
+
+  // =====================================
+  // LOAD HOME DATA
+  // =====================================
 
   const loadHome = useCallback(async () => {
     try {
       const {
-        data: { user },
+        data: { user: currentUser },
         error: authError,
       } = await supabase.auth.getUser();
 
       if (authError) throw authError;
-      if (!user) throw new Error("Please log in again.");
 
-      const { data: profile, error: profileError } =
+      if (!currentUser) {
+        setUser(null);
+        setProfile(null);
+        setAssignedBus(null);
+        setActiveTrip(null);
+        setBookings([]);
+        setShowAllBookings(false);
+        setHasUnreadNotifications(false);
+        return;
+      }
+
+      setUser(currentUser);
+
+      // LOAD USER PROFILE
+      const { data: profileData, error: profileError } =
         await supabase
           .from("profiles")
-          .select("id, full_name, user_level")
-          .eq("id", user.id)
+          .select(`
+            id,
+            full_name,
+            email,
+            user_level,
+            gcash_account_name,
+            gcash_account_number
+          `)
+          .eq("id", currentUser.id)
           .maybeSingle();
 
       if (profileError) throw profileError;
-      if (!profile) throw new Error("User profile not found.");
 
-      setUserName(profile.full_name || user.email || "User");
-      setUserLevel(profile.user_level);
-
-      // OPERATOR
-      if (profile.user_level === "operator") {
-        const { data: buses, error: busError } =
-          await supabase
-            .from("buses")
-            .select(
-              "bus_id, bus_name, plate_number, bus_type, capacity, operator_id"
-            )
-            .eq("operator_id", user.id);
-
-        if (busError) throw busError;
-
-        const { data: trips, error: tripError } =
-          await supabase
-            .from("bus_trips")
-            .select(
-              "trip_id, bus_id, destination, status, started_at"
-            )
-            .eq("operator_id", user.id)
-            .eq("status", "active")
-            .limit(1);
-
-        if (tripError) throw tripError;
-
-        const active = trips?.[0] || null;
-
-        const bus =
-          (active &&
-            (buses || []).find(
-              (item) =>
-                String(item.bus_id) === String(active.bus_id)
-            )) ||
-          (buses || [])[0] ||
-          null;
-
-        setAssignedBus(bus);
-        setActiveTrip(active);
-      }
+      setProfile(profileData);
 
       // PASSENGER
-      else if (profile.user_level === "user") {
+      if (profileData?.user_level !== "operator") {
         setAssignedBus(null);
         setActiveTrip(null);
-      } else {
-        throw new Error("Unauthorized account role.");
-      }
-    } catch (error) {
-      console.log("HOME SCREEN ERROR:", error.message || error);
 
-      Alert.alert(
-        "Unable to Load Home",
-        error.message || "Please try again."
+        await loadPassengerBookings(currentUser.id);
+
+        return;
+      }
+
+      // LOAD OPERATOR'S ASSIGNED BUS
+      const { data: buses, error: busError } =
+        await supabase
+          .from("buses")
+          .select(
+            "bus_id, bus_name, plate_number, bus_type, capacity, company, bus_status, availability_status"
+          )
+          .eq("operator_id", currentUser.id)
+          .order("created_at", { ascending: false });
+
+      if (busError) throw busError;
+
+      // LOAD OPERATOR'S ACTIVE TRIP
+      const { data: trips, error: tripError } =
+        await supabase
+          .from("bus_trips")
+          .select(
+            "trip_id, bus_id, destination, status, started_at"
+          )
+          .eq("operator_id", currentUser.id)
+          .eq("status", "active")
+          .order("started_at", { ascending: false })
+          .limit(1);
+
+      if (tripError) throw tripError;
+
+      const currentTrip = trips?.[0] || null;
+
+      setActiveTrip(currentTrip);
+
+      // PREFER BUS USED BY ACTIVE TRIP
+      let selectedBus = null;
+
+      if (currentTrip) {
+        selectedBus =
+          buses?.find(
+            (bus) =>
+              String(bus.bus_id) ===
+              String(currentTrip.bus_id)
+          ) || null;
+      }
+
+      // OTHERWISE SHOW FIRST ASSIGNED BUS
+      if (!selectedBus && buses?.length > 0) {
+        selectedBus = buses[0];
+      }
+
+      setAssignedBus(selectedBus);
+      setBookings([]);
+      setShowAllBookings(false);
+
+    } catch (error) {
+      console.error("Home screen loading error:", error);
+
+      showAlert(
+        "Unable to load",
+        "Please refresh the screen and try again.",
+        "error"
       );
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
-  // =========================================
-  // INITIAL LOAD
-  // =========================================
+  // =====================================
+  // LOAD WHEN SCREEN OPENS
+  // =====================================
 
   useEffect(() => {
-    const initialize = async () => {
-      await loadHome();
-      setLoading(false);
+    loadHome();
+
+    const unsubscribe = navigation.addListener(
+      "focus",
+      () => {
+        loadHome();
+      }
+    );
+
+    return unsubscribe;
+  }, [navigation, loadHome]);
+
+  // =====================================
+  // NOTIFICATION SYSTEM
+  // =====================================
+
+  useEffect(() => {
+    let channel;
+    let isMounted = true;
+
+    const loadUnreadNotifications = async (userId) => {
+      const { count, error } = await supabase
+        .from("notifications")
+        .select("id", {
+          count: "exact",
+          head: true,
+        })
+        .eq("user_id", userId)
+        .eq("is_read", false);
+
+      if (error) {
+        console.log(
+          "UNREAD NOTIFICATIONS ERROR:",
+          error
+        );
+        return;
+      }
+
+      if (isMounted) {
+        setHasUnreadNotifications((count || 0) > 0);
+      }
     };
 
-    initialize();
-  }, [loadHome]);
+    const initializeNotifications = async () => {
+      try {
+        const {
+          data: { user: currentUser },
+          error,
+        } = await supabase.auth.getUser();
 
-  // =========================================
-  // REFRESH
-  // =========================================
+        if (error) throw error;
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await loadHome();
-    setRefreshing(false);
+        if (!currentUser) {
+          if (isMounted) {
+            setHasUnreadNotifications(false);
+          }
+          return;
+        }
+
+        await loadUnreadNotifications(currentUser.id);
+
+        if (!isMounted) return;
+
+        // REALTIME LISTENER
+        channel = supabase
+          .channel(`home-notifications-${currentUser.id}`)
+          .on(
+            "postgres_changes",
+            {
+              event: "*",
+              schema: "public",
+              table: "notifications",
+              filter: `user_id=eq.${currentUser.id}`,
+            },
+            () => {
+              loadUnreadNotifications(currentUser.id);
+            }
+          )
+          .subscribe((status) => {
+            console.log(
+              "HOME NOTIFICATIONS REALTIME:",
+              status
+            );
+          });
+
+      } catch (error) {
+        console.log(
+          "NOTIFICATION INITIALIZATION ERROR:",
+          error
+        );
+      }
+    };
+
+    initializeNotifications();
+
+    // REFRESH UNREAD COUNT WHEN RETURNING HOME
+    const unsubscribeFocus = navigation.addListener(
+      "focus",
+      async () => {
+        const {
+          data: { user: currentUser },
+        } = await supabase.auth.getUser();
+
+        if (currentUser && isMounted) {
+          loadUnreadNotifications(currentUser.id);
+        }
+      }
+    );
+
+    return () => {
+      isMounted = false;
+
+      unsubscribeFocus();
+
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
+    };
+  }, [navigation]);
+
+  // =====================================
+  // GCASH QR CODE
+  // =====================================
+
+  const openGcashQR = async () => {
+    try {
+      setShowGcashQR(true);
+      setGcashQRLoading(true);
+      setGcashQRUrl(null);
+      setGcashQRError(false);
+
+      const {
+        data: { user: currentUser },
+        error: authError,
+      } = await supabase.auth.getUser();
+
+      if (authError) throw authError;
+
+      if (!currentUser) {
+        throw new Error("Please log in first.");
+      }
+
+      // SAME FILE PATH USED BY OPERATOR GCASH SCREEN
+      const filePath =
+        `${currentUser.id}/operator-image.jpg`;
+
+      const { data, error } = await supabase.storage
+        .from(GCASH_BUCKET)
+        .createSignedUrl(filePath, 3600);
+
+      if (error) {
+        console.log("GCASH QR LOAD ERROR:", error);
+
+        setGcashQRError(true);
+        return;
+      }
+
+      if (!data?.signedUrl) {
+        setGcashQRError(true);
+        return;
+      }
+
+      setGcashQRUrl(data.signedUrl);
+
+    } catch (error) {
+      console.log("GCASH QR ERROR:", error);
+
+      setGcashQRError(true);
+    } finally {
+      setGcashQRLoading(false);
+    }
   };
 
-  // =========================================
+  // CLOSE GCASH QR MODAL
+  const closeGcashQR = () => {
+    setShowGcashQR(false);
+  };
+
+  // =====================================
+  // PULL TO REFRESH
+  // =====================================
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    loadHome();
+  };
+
+  // =====================================
+  // USER INFORMATION
+  // =====================================
+
+  const fullName =
+    profile?.full_name ||
+    user?.user_metadata?.full_name ||
+    user?.email?.split("@")[0] ||
+    "User";
+
+  const firstName = fullName.split(" ")[0];
+
+  const isOperator =
+    profile?.user_level === "operator";
+
+  // SHOW ONLY THREE RECENT BOOKINGS INITIALLY
+  const displayedBookings = showAllBookings
+    ? bookings
+    : bookings.slice(0, 3);
+
+  // =====================================
   // NAVIGATION
-  // =========================================
+  // =====================================
 
   const openBooking = () => {
     navigation.navigate("Booking");
@@ -167,795 +556,1123 @@ export default function HomeScreen({ navigation }) {
     navigation.navigate("Profile");
   };
 
+  const openNotifications = () => {
+    navigation.navigate("Notifications");
+  };
+
   const openDocking = () => {
     navigation.navigate("OperatorDocking");
   };
 
-  const openTicketScanner = () => {
+  const openScanner = () => {
     navigation.navigate("OperatorTicketScanner");
   };
 
-  // =========================================
-  // ADD BUS
-  // =========================================
-
-  const resetBusForm = () => {
-    setNewBusName("");
-    setNewPlateNumber("");
-    setNewBusType("Ordinary");
-    setNewCapacity("");
+  const openTrip = () => {
+    navigation.navigate("Live Tracking");
   };
 
-  const handleAddBus = async () => {
-    const trimmedName = newBusName.trim();
-    const trimmedPlate = newPlateNumber.trim();
-    const parsedCapacity = Number(newCapacity);
+  // OPEN PAYMENT SCREEN
+  const openPayment = (bookingId) => {
+    navigation.navigate("Payment", {
+      bookingId: bookingId,
+    });
+  };
 
-    if (!trimmedName || !trimmedPlate || !newCapacity.trim()) {
-      Alert.alert(
-        "Missing Information",
-        "Please complete all bus information."
-      );
-      return;
-    }
+  // OPEN TICKET SCREEN
+  const openTicket = (bookingId) => {
+    navigation.navigate("Ticket", {
+      bookingId: bookingId,
+    });
+  };
 
-    if (!["Ordinary", "Airconditioned"].includes(newBusType)) {
-      Alert.alert("Invalid Bus Type", "Select a valid bus type.");
-      return;
-    }
+  // =====================================
+  // FORMAT BOOKING DATE
+  // =====================================
 
-    if (!Number.isInteger(parsedCapacity) || parsedCapacity <= 0) {
-      Alert.alert(
-        "Invalid Capacity",
-        "Enter a valid passenger capacity."
-      );
-      return;
-    }
+  const formatBookingDate = (date) => {
+    if (!date) return "Date unavailable";
 
-    try {
-      setSavingBus(true);
-
-      const {
-        data: { user },
-        error: authError,
-      } = await supabase.auth.getUser();
-
-      if (authError) throw authError;
-      if (!user) throw new Error("Please log in again.");
-
-      const { data: profile, error: profileError } =
-        await supabase
-          .from("profiles")
-          .select("user_level")
-          .eq("id", user.id)
-          .maybeSingle();
-
-      if (profileError) throw profileError;
-
-      if (!profile || profile.user_level !== "operator") {
-        throw new Error("Only operators can register buses.");
+    return new Date(date).toLocaleDateString(
+      "en-PH",
+      {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
       }
-
-      const { error: insertError } = await supabase
-        .from("buses")
-        .insert({
-          bus_name: trimmedName,
-          plate_number: trimmedPlate.toUpperCase(),
-          bus_type: newBusType,
-          capacity: parsedCapacity,
-          operator_id: user.id,
-        });
-
-      if (insertError) throw insertError;
-
-      resetBusForm();
-      setAddBusModal(false);
-
-      await loadHome();
-
-      Alert.alert(
-        "Success",
-        "Your bus has been registered successfully."
-      );
-    } catch (error) {
-      console.log("ADD BUS ERROR:", error);
-
-      Alert.alert(
-        "Unable to Add Bus",
-        error.message || "Something went wrong."
-      );
-    } finally {
-      setSavingBus(false);
-    }
+    );
   };
 
-  // =========================================
-  // LOADING
-  // =========================================
+  // =====================================
+  // BOOKING STATUS
+  // =====================================
+
+  const getBookingStatus = (booking) => {
+    const bookingStatus =
+      booking.booking_status?.toLowerCase();
+
+    const paymentStatus =
+      booking.payment_status?.toLowerCase();
+
+    if (bookingStatus === "cancelled") {
+      return {
+        label: "Cancelled",
+        color: C.red,
+        background: "#FEE2E2",
+      };
+    }
+
+    if (bookingStatus === "completed") {
+      return {
+        label: "Completed",
+        color: C.gray,
+        background: "#F1F5F9",
+      };
+    }
+
+    if (
+      bookingStatus === "confirmed" &&
+      paymentStatus === "paid"
+    ) {
+      return {
+        label: "Confirmed",
+        color: C.green,
+        background: C.paleGreen,
+      };
+    }
+
+    if (paymentStatus === "pending") {
+      return {
+        label: "Payment Pending",
+        color: C.orange,
+        background: "#FEF3C7",
+      };
+    }
+
+    return {
+      label: "Request Pending",
+      color: C.orange,
+      background: "#FEF3C7",
+    };
+  };
+
+  // =====================================
+  // LOADING SCREEN
+  // =====================================
 
   if (loading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color={C.blue} />
-        <Text style={styles.loadingText}>Loading RouteX...</Text>
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator
+          size="large"
+          color={C.blue}
+        />
+
+        <Text style={styles.loadingText}>
+          Loading your dashboard...
+        </Text>
+
+        {alertModal}
       </View>
     );
   }
 
-  // =========================================
+  // =====================================
   // MAIN SCREEN
-  // =========================================
+  // =====================================
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-        />
-      }
-    >
-      {/* HEADER */}
-
-      <View style={styles.header}>
-        <View style={styles.logoContainer}>
-          <Ionicons name="bus" size={25} color={C.white} />
-        </View>
-
-        <View style={styles.logoTextContainer}>
-          <Text style={styles.logo}>RouteX</Text>
-          <Text style={styles.logoSubtitle}>
-            BUS BOOKING & TRACKING
-          </Text>
-        </View>
-
-        <TouchableOpacity
-          style={styles.profileButton}
-          onPress={openProfile}
-        >
-          <Ionicons
-            name="person-outline"
-            size={22}
-            color={C.navy}
+    <>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[C.blue]}
+            tintColor={C.blue}
           />
-        </TouchableOpacity>
-      </View>
-
-      {/* ===================================== */}
-      {/* PASSENGER HOME */}
-      {/* ===================================== */}
-
-      {userLevel === "user" && (
-        <>
-          <View style={styles.welcomeSection}>
+        }
+      >
+        {/* HEADER */}
+        <View style={styles.header}>
+          <View>
             <Text style={styles.greeting}>
-              Hello, {userName}!
+              {isOperator
+                ? "Operator Dashboard"
+                : "Welcome back,"}
             </Text>
 
-            <Text style={styles.welcomeText}>
-              Where would you like to go today?
+            <Text style={styles.userName}>
+              {isOperator
+                ? `Hello, ${firstName}! 👋`
+                : `${firstName}! 👋`}
+            </Text>
+
+            <Text style={styles.headerSubtitle}>
+              {isOperator
+                ? "Manage your assigned bus and trips."
+                : "Where would you like to go today?"}
             </Text>
           </View>
 
-          {/* BOOK A BUS */}
-
+          {/* NOTIFICATION BELL */}
           <TouchableOpacity
-            style={styles.actionCard}
-            onPress={openBooking}
-            activeOpacity={0.85}
+            style={styles.profileButton}
+            onPress={openNotifications}
+            activeOpacity={0.8}
           >
-            <View style={styles.actionIcon}>
-              <Ionicons
-                name="bus"
-                size={27}
-                color={C.blue}
-              />
-            </View>
-
-            <View style={styles.actionDetails}>
-              <Text style={styles.actionTitle}>
-                Book a Bus
-              </Text>
-
-              <Text style={styles.actionSubtitle}>
-                Find available buses and book your trip.
-              </Text>
-            </View>
-
             <Ionicons
-              name="chevron-forward"
-              size={22}
-              color={C.gray}
-            />
-          </TouchableOpacity>
-
-          {/* LIVE TRACKING */}
-
-          <TouchableOpacity
-            style={styles.actionCard}
-            onPress={openTracking}
-            activeOpacity={0.85}
-          >
-            <View style={styles.actionIcon}>
-              <Ionicons
-                name="navigate"
-                size={27}
-                color={C.blue}
-              />
-            </View>
-
-            <View style={styles.actionDetails}>
-              <Text style={styles.actionTitle}>
-                Live Bus Tracking
-              </Text>
-
-              <Text style={styles.actionSubtitle}>
-                View buses currently traveling on the road.
-              </Text>
-            </View>
-
-            <Ionicons
-              name="chevron-forward"
-              size={22}
-              color={C.gray}
-            />
-          </TouchableOpacity>
-
-          <View style={styles.infoCard}>
-            <Ionicons
-              name="information-circle-outline"
-              size={22}
+              name="notifications-outline"
+              size={23}
               color={C.blue}
             />
 
-            <Text style={styles.infoText}>
-              Book your trip and track your bus in real time
-              using RouteX.
-            </Text>
-          </View>
-        </>
-      )}
+            {hasUnreadNotifications && (
+              <View style={styles.notificationDot} />
+            )}
+          </TouchableOpacity>
+        </View>
 
-      {/* ===================================== */}
-      {/* OPERATOR HOME */}
-      {/* ===================================== */}
-
-      {userLevel === "operator" && (
-        <>
-          <View style={styles.welcomeSection}>
-            <Text style={styles.greeting}>
-              Welcome, {userName}!
-            </Text>
-
-            <Text style={styles.welcomeText}>
-              Manage your bus, trips, and passengers.
-            </Text>
-          </View>
-
-          {/* MY BUS HEADER */}
-
-          <View style={styles.sectionHeader}>
-            <View>
-              <Text style={styles.sectionHeading}>
-                My Bus
+        {isOperator ? (
+          <>
+            {/* OPERATOR: ASSIGNED BUS */}
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>
+                My Assigned Bus
               </Text>
 
-              <Text style={styles.sectionSubtitle}>
-                Your registered bus information
-              </Text>
+              <View style={styles.assignedBadge}>
+                <View style={styles.greenDot} />
+
+                <Text style={styles.assignedBadgeText}>
+                  Admin Assigned
+                </Text>
+              </View>
             </View>
 
-            <TouchableOpacity
-              style={styles.addBusButton}
-              onPress={() => setAddBusModal(true)}
-              activeOpacity={0.8}
-            >
-              <Ionicons
-                name="add"
-                size={19}
-                color={C.white}
-              />
-
-              <Text style={styles.addBusButtonText}>
-                Add Bus
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* BUS INFORMATION */}
-
-          <View style={styles.card}>
             {assignedBus ? (
-              <>
-                <View style={styles.operatorBusHeader}>
-                  <View style={styles.busIconLarge}>
+              <View style={styles.busCard}>
+                <View style={styles.busCardTop}>
+                  <View style={styles.busIconContainer}>
                     <Ionicons
                       name="bus"
-                      size={32}
+                      size={29}
                       color={C.blue}
                     />
                   </View>
 
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.busNameLarge}>
-                      {assignedBus.bus_name ||
-                        `Bus ${assignedBus.bus_id}`}
-                    </Text>
-
-                    <Text style={styles.plateNumber}>
-                      {assignedBus.plate_number ||
-                        "No plate number"}
-                    </Text>
-                  </View>
-
-                  <View style={styles.assignedBadge}>
-                    <Text style={styles.assignedText}>
-                      Assigned
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={styles.busInformation}>
-                  <View style={styles.busInfoItem}>
-                    <Ionicons
-                      name="snow-outline"
-                      size={20}
-                      color={C.blue}
-                    />
-
-                    <View>
-                      <Text style={styles.busInfoLabel}>
-                        Bus Type
-                      </Text>
-
-                      <Text style={styles.busInfoValue}>
-                        {assignedBus.bus_type || "Not specified"}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.busInfoItem}>
-                    <Ionicons
-                      name="people-outline"
-                      size={20}
-                      color={C.blue}
-                    />
-
-                    <View>
-                      <Text style={styles.busInfoLabel}>
-                        Capacity
-                      </Text>
-
-                      <Text style={styles.busInfoValue}>
-                        {assignedBus.capacity ?? "Not specified"} passengers
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-
-                <View style={styles.divider} />
-
-                {/* TRIP STATUS */}
-
-                <View style={styles.tripStatusRow}>
-                  <Text style={styles.statusLabel}>
-                    Current Status
-                  </Text>
-
-                  <View
-                    style={[
-                      styles.tripStatusBadge,
-                      activeTrip
-                        ? styles.tripActiveBadge
-                        : styles.tripInactiveBadge,
-                    ]}
-                  >
+                  <View style={styles.busStatusContainer}>
                     <View
                       style={[
                         styles.statusDot,
                         {
-                          backgroundColor: activeTrip
-                            ? C.green
-                            : C.gray,
+                          backgroundColor:
+                            assignedBus.bus_status === "online"
+                              ? C.green
+                              : C.gray,
                         },
                       ]}
                     />
 
-                    <Text
-                      style={[
-                        styles.statusValue,
-                        {
-                          color: activeTrip
-                            ? C.green
-                            : C.gray,
-                        },
-                      ]}
-                    >
-                      {activeTrip ? "Trip Active" : "Not Started"}
+                    <Text style={styles.busStatusText}>
+                      {assignedBus.bus_status || "offline"}
                     </Text>
                   </View>
                 </View>
 
-                {activeTrip && (
-                  <View style={styles.tripInfo}>
-                    <Text style={styles.tripInfoLabel}>
-                      Current Destination
-                    </Text>
+                <Text style={styles.busName}>
+                  {assignedBus.bus_name || "Unnamed Bus"}
+                </Text>
 
-                    <Text style={styles.tripInfoValue}>
-                      {activeTrip.destination || "Not specified"}
+                <Text style={styles.companyName}>
+                  {assignedBus.company ||
+                    "Company not assigned"}
+                </Text>
+
+                <View style={styles.plateContainer}>
+                  <Text style={styles.plateLabel}>
+                    PLATE NUMBER
+                  </Text>
+
+                  <Text style={styles.plateNumber}>
+                    {assignedBus.plate_number ||
+                      "Not available"}
+                  </Text>
+                </View>
+
+                <View style={styles.busDetails}>
+                  <View style={styles.busDetailItem}>
+                    <Ionicons
+                      name="construct-outline"
+                      size={17}
+                      color={C.gray}
+                    />
+
+                    <Text style={styles.busDetailText}>
+                      {assignedBus.bus_type ||
+                        "Bus type unavailable"}
                     </Text>
                   </View>
-                )}
 
-                <TouchableOpacity
-                  style={styles.primaryButton}
-                  onPress={openTracking}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons
-                    name={activeTrip ? "navigate" : "play"}
-                    size={19}
-                    color={C.white}
-                  />
+                  <View style={styles.busDetailItem}>
+                    <Ionicons
+                      name="people-outline"
+                      size={17}
+                      color={C.gray}
+                    />
 
-                  <Text style={styles.primaryButtonText}>
-                    {activeTrip
-                      ? "Manage Active Trip"
-                      : "Start a Trip"}
-                  </Text>
-                </TouchableOpacity>
-              </>
+                    <Text style={styles.busDetailText}>
+                      {assignedBus.capacity || 0} seats
+                    </Text>
+                  </View>
+                </View>
+              </View>
             ) : (
-              <View style={styles.noBusContainer}>
+              <View style={styles.emptyCard}>
                 <View style={styles.emptyIcon}>
                   <Ionicons
                     name="bus-outline"
-                    size={35}
-                    color="#94A3B8"
+                    size={30}
+                    color={C.gray}
                   />
                 </View>
 
                 <Text style={styles.emptyTitle}>
-                  No Bus Registered
+                  No Bus Assigned Yet
                 </Text>
 
-                <Text style={styles.emptyText}>
-                  Register a bus to start managing trips and
-                  GPS tracking.
+                <Text style={styles.emptyDescription}>
+                  Your assigned bus will appear here once
+                  the administrator registers and assigns
+                  one to your account.
                 </Text>
-
-                <TouchableOpacity
-                  style={styles.primaryButton}
-                  onPress={() => setAddBusModal(true)}
-                >
-                  <Ionicons
-                    name="add"
-                    size={20}
-                    color={C.white}
-                  />
-
-                  <Text style={styles.primaryButtonText}>
-                    Register My Bus
-                  </Text>
-                </TouchableOpacity>
               </View>
             )}
-          </View>
 
-          {/* OPERATOR ACTIONS */}
-
-          <Text style={styles.sectionHeading}>
-            Operator Tools
-          </Text>
-
-          {/* SCAN BOARDING TICKET */}
-
-          <TouchableOpacity
-            style={styles.actionCard}
-            onPress={openTicketScanner}
-            activeOpacity={0.85}
-          >
-            <View style={[styles.actionIcon, styles.scanIcon]}>
-              <Ionicons
-                name="qr-code"
-                size={27}
-                color={C.blue}
-              />
-            </View>
-
-            <View style={styles.actionDetails}>
-              <Text style={styles.actionTitle}>
-                Scan Boarding Ticket
-              </Text>
-
-              <Text style={styles.actionSubtitle}>
-                Scan and verify passenger tickets before boarding.
+            {/* OPERATOR: TRIP STATUS */}
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>
+                Current Trip
               </Text>
             </View>
 
-            <Ionicons
-              name="chevron-forward"
-              size={22}
-              color={C.gray}
-            />
-          </TouchableOpacity>
+            <View style={styles.tripCard}>
+              <View style={styles.tripCardHeader}>
+                <View style={styles.tripIcon}>
+                  <Ionicons
+                    name="navigate-outline"
+                    size={22}
+                    color={activeTrip ? C.green : C.blue}
+                  />
+                </View>
 
-          {/* BUS DOCKING */}
-
-          <TouchableOpacity
-            style={styles.actionCard}
-            onPress={openDocking}
-            activeOpacity={0.85}
-          >
-            <View style={styles.actionIcon}>
-              <Ionicons
-                name="git-branch-outline"
-                size={27}
-                color={C.blue}
-              />
-            </View>
-
-            <View style={styles.actionDetails}>
-              <Text style={styles.actionTitle}>
-                Manage Bus Docking
-              </Text>
-
-              <Text style={styles.actionSubtitle}>
-                View and manage your bus terminal docking.
-              </Text>
-            </View>
-
-            <Ionicons
-              name="chevron-forward"
-              size={22}
-              color={C.gray}
-            />
-          </TouchableOpacity>
-
-          {/* LIVE TRACKING */}
-
-          <TouchableOpacity
-            style={styles.actionCard}
-            onPress={openTracking}
-            activeOpacity={0.85}
-          >
-            <View style={styles.actionIcon}>
-              <Ionicons
-                name="navigate"
-                size={27}
-                color={C.blue}
-              />
-            </View>
-
-            <View style={styles.actionDetails}>
-              <Text style={styles.actionTitle}>
-                Live Tracking
-              </Text>
-
-              <Text style={styles.actionSubtitle}>
-                Start or manage your active trip and GPS location.
-              </Text>
-            </View>
-
-            <Ionicons
-              name="chevron-forward"
-              size={22}
-              color={C.gray}
-            />
-          </TouchableOpacity>
-        </>
-      )}
-
-      {/* ===================================== */}
-      {/* ADD BUS MODAL */}
-      {/* ===================================== */}
-
-      <Modal
-        visible={addBusModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => {
-          if (!savingBus) setAddBusModal(false);
-        }}
-      >
-        <View style={styles.modalOverlay}>
-          <ScrollView
-            contentContainerStyle={styles.modalScroll}
-            keyboardShouldPersistTaps="handled"
-          >
-            <View style={styles.modalContainer}>
-              <View style={styles.modalHeader}>
-                <View>
-                  <Text style={styles.modalTitle}>
-                    Register a Bus
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.tripTitle}>
+                    {activeTrip
+                      ? "Trip in Progress"
+                      : "No Active Trip"}
                   </Text>
 
-                  <Text style={styles.modalSubtitle}>
-                    Enter your bus information.
+                  <Text style={styles.tripSubtitle}>
+                    {activeTrip
+                      ? "Your bus currently has an active trip."
+                      : "You do not have an active trip right now."}
                   </Text>
                 </View>
 
-                <TouchableOpacity
-                  onPress={() => setAddBusModal(false)}
-                  disabled={savingBus}
+                <View
+                  style={[
+                    styles.tripStatusBadge,
+                    activeTrip
+                      ? styles.activeBadge
+                      : styles.inactiveBadge,
+                  ]}
                 >
-                  <Ionicons
-                    name="close-circle"
-                    size={28}
-                    color={C.gray}
-                  />
-                </TouchableOpacity>
-              </View>
-
-              <Text style={styles.modalLabel}>Bus Name</Text>
-
-              <View style={styles.modalInputContainer}>
-                <Ionicons
-                  name="bus-outline"
-                  size={20}
-                  color={C.blue}
-                />
-
-                <TextInput
-                  style={styles.modalInput}
-                  placeholder="Enter bus name"
-                  value={newBusName}
-                  onChangeText={setNewBusName}
-                  editable={!savingBus}
-                />
-              </View>
-
-              <Text style={styles.modalLabel}>
-                Plate Number
-              </Text>
-
-              <View style={styles.modalInputContainer}>
-                <Ionicons
-                  name="card-outline"
-                  size={20}
-                  color={C.blue}
-                />
-
-                <TextInput
-                  style={styles.modalInput}
-                  placeholder="Enter plate number"
-                  value={newPlateNumber}
-                  onChangeText={setNewPlateNumber}
-                  autoCapitalize="characters"
-                  editable={!savingBus}
-                />
-              </View>
-
-              <Text style={styles.modalLabel}>Bus Type</Text>
-
-              <View style={styles.busTypeContainer}>
-                {["Ordinary", "Airconditioned"].map((type) => (
-                  <TouchableOpacity
-                    key={type}
+                  <Text
                     style={[
-                      styles.busTypeOption,
-                      newBusType === type &&
-                        styles.busTypeSelected,
+                      styles.tripStatusText,
+                      activeTrip
+                        ? styles.activeStatusText
+                        : styles.inactiveStatusText,
                     ]}
-                    onPress={() => setNewBusType(type)}
-                    disabled={savingBus}
                   >
-                    <Ionicons
-                      name={
-                        type === "Ordinary"
-                          ? "bus-outline"
-                          : "snow-outline"
-                      }
-                      size={22}
-                      color={
-                        newBusType === type
-                          ? C.white
-                          : C.blue
-                      }
-                    />
-
-                    <Text
-                      style={[
-                        styles.busTypeText,
-                        newBusType === type &&
-                          styles.busTypeTextSelected,
-                      ]}
-                    >
-                      {type}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                    {activeTrip ? "ACTIVE" : "IDLE"}
+                  </Text>
+                </View>
               </View>
 
-              <Text style={styles.modalLabel}>
-                Passenger Capacity
-              </Text>
+              {activeTrip && (
+                <View style={styles.destinationContainer}>
+                  <Text style={styles.destinationLabel}>
+                    DESTINATION
+                  </Text>
 
-              <View style={styles.modalInputContainer}>
-                <Ionicons
-                  name="people-outline"
-                  size={20}
-                  color={C.blue}
-                />
-
-                <TextInput
-                  style={styles.modalInput}
-                  placeholder="Enter capacity"
-                  value={newCapacity}
-                  onChangeText={(value) =>
-                    setNewCapacity(value.replace(/[^0-9]/g, ""))
-                  }
-                  keyboardType="number-pad"
-                  editable={!savingBus}
-                />
-              </View>
-
-              <View style={styles.assignmentNotice}>
-                <Ionicons
-                  name="information-circle"
-                  size={20}
-                  color={C.blue}
-                />
-
-                <Text style={styles.assignmentText}>
-                  This bus will automatically be assigned to
-                  your operator account.
-                </Text>
-              </View>
+                  <Text style={styles.destinationText}>
+                    {activeTrip.destination ||
+                      "Not specified"}
+                  </Text>
+                </View>
+              )}
 
               <TouchableOpacity
                 style={[
-                  styles.modalSaveButton,
-                  savingBus && { opacity: 0.7 },
+                  styles.primaryButton,
+                  !assignedBus && styles.disabledButton,
                 ]}
-                onPress={handleAddBus}
-                disabled={savingBus}
+                onPress={openTrip}
+                disabled={!assignedBus}
+                activeOpacity={0.85}
               >
-                {savingBus ? (
-                  <ActivityIndicator color={C.white} />
-                ) : (
-                  <>
-                    <Ionicons
-                      name="checkmark-circle"
-                      size={20}
-                      color={C.white}
-                    />
+                <Ionicons
+                  name="navigate"
+                  size={18}
+                  color={C.white}
+                  style={{ marginRight: 8 }}
+                />
 
-                    <Text style={styles.modalSaveText}>
-                      Save Bus
-                    </Text>
-                  </>
-                )}
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.modalCancelButton}
-                onPress={() => setAddBusModal(false)}
-                disabled={savingBus}
-              >
-                <Text style={styles.modalCancelText}>
-                  Cancel
+                <Text style={styles.primaryButtonText}>
+                  {activeTrip
+                    ? "Manage Active Trip"
+                    : "Open Trip Tracking"}
                 </Text>
               </TouchableOpacity>
             </View>
-          </ScrollView>
+
+            {/* OPERATOR: QUICK ACTIONS */}
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>
+                Quick Actions
+              </Text>
+            </View>
+
+            <View style={styles.actionGrid}>
+              {/* TICKET SCANNER */}
+              <TouchableOpacity
+                style={styles.actionCard}
+                onPress={openScanner}
+                activeOpacity={0.8}
+              >
+                <View
+                  style={[
+                    styles.actionIcon,
+                    styles.scannerIcon,
+                  ]}
+                >
+                  <Ionicons
+                    name="qr-code-outline"
+                    size={25}
+                    color={C.blue}
+                  />
+                </View>
+
+                <Text style={styles.actionTitle}>
+                  Ticket Scanner
+                </Text>
+
+                <Text style={styles.actionDescription}>
+                  Scan passenger tickets
+                </Text>
+              </TouchableOpacity>
+
+              {/* BUS DOCKING */}
+              <TouchableOpacity
+                style={styles.actionCard}
+                onPress={openDocking}
+                activeOpacity={0.8}
+              >
+                <View
+                  style={[
+                    styles.actionIcon,
+                    styles.dockingIcon,
+                  ]}
+                >
+                  <Ionicons
+                    name="location-outline"
+                    size={25}
+                    color={C.green}
+                  />
+                </View>
+
+                <Text style={styles.actionTitle}>
+                  Bus Docking
+                </Text>
+
+                <Text style={styles.actionDescription}>
+                  Manage bus docking
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* SHOW GCASH QR CODE */}
+            <TouchableOpacity
+              style={styles.gcashQRShortcut}
+              onPress={openGcashQR}
+              activeOpacity={0.85}
+            >
+              <View style={styles.gcashQRIcon}>
+                <Ionicons
+                  name="qr-code"
+                  size={24}
+                  color="#087CFF"
+                />
+              </View>
+
+              <View style={{ flex: 1 }}>
+                <Text style={styles.gcashQRTitle}>
+                  Show GCash QR Code
+                </Text>
+
+                <Text style={styles.gcashQRDescription}>
+                  Display your uploaded GCash payment QR code
+                </Text>
+              </View>
+
+              <Ionicons
+                name="chevron-forward"
+                size={21}
+                color={C.gray}
+              />
+            </TouchableOpacity>
+
+            {/* LIVE TRACKING SHORTCUT */}
+            <TouchableOpacity
+              style={styles.trackingShortcut}
+              onPress={openTracking}
+              activeOpacity={0.8}
+            >
+              <View style={styles.trackingShortcutIcon}>
+                <Ionicons
+                  name="map-outline"
+                  size={22}
+                  color={C.blue}
+                />
+              </View>
+
+              <View style={{ flex: 1 }}>
+                <Text style={styles.trackingShortcutTitle}>
+                  Live Tracking
+                </Text>
+
+                <Text
+                  style={styles.trackingShortcutDescription}
+                >
+                  View the live tracking screen
+                </Text>
+              </View>
+
+              <Ionicons
+                name="chevron-forward"
+                size={21}
+                color={C.gray}
+              />
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            {/* PASSENGER: BOOKING HERO */}
+            <ImageBackground
+              source={require("../assets/booking-bg.jpg")}
+              style={styles.passengerHero}
+              imageStyle={styles.heroImage}
+              resizeMode="cover"
+            >
+              <View style={styles.heroOverlay} />
+
+              <View style={styles.heroTextContainer}>
+                <Text style={styles.heroEyebrow}>
+                  TRAVEL WITH ROUTEX
+                </Text>
+
+                <Text style={styles.heroTitle}>
+                  Your next trip starts here.
+                </Text>
+
+                <Text style={styles.heroSubtitle}>
+                  Find a bus, choose your seat, and book
+                  your journey with ease.
+                </Text>
+
+                <TouchableOpacity
+                  style={styles.heroButton}
+                  onPress={openBooking}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.heroButtonText}>
+                    Book a Bus
+                  </Text>
+
+                  <Ionicons
+                    name="arrow-forward"
+                    size={18}
+                    color={C.white}
+                    style={{ marginLeft: 8 }}
+                  />
+                </TouchableOpacity>
+              </View>
+            </ImageBackground>
+
+            {/* PASSENGER: MY BOOKINGS */}
+            <View style={styles.sectionHeader}>
+              <View>
+                <Text style={styles.sectionTitle}>
+                  My Bookings
+                </Text>
+
+                <Text style={styles.bookingSectionSubtitle}>
+                  Your recent booking requests and tickets
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                onPress={() =>
+                  user && loadPassengerBookings(user.id)
+                }
+                activeOpacity={0.7}
+              >
+                <Ionicons
+                  name="refresh-outline"
+                  size={21}
+                  color={C.blue}
+                />
+              </TouchableOpacity>
+            </View>
+
+            {bookingsLoading ? (
+              <View style={styles.bookingLoading}>
+                <ActivityIndicator
+                  size="small"
+                  color={C.blue}
+                />
+
+                <Text style={styles.bookingLoadingText}>
+                  Loading your bookings...
+                </Text>
+              </View>
+            ) : bookings.length === 0 ? (
+              <View style={styles.noBookingsCard}>
+                <View style={styles.noBookingsIcon}>
+                  <Ionicons
+                    name="ticket-outline"
+                    size={29}
+                    color={C.blue}
+                  />
+                </View>
+
+                <Text style={styles.noBookingsTitle}>
+                  No Bookings Yet
+                </Text>
+
+                <Text style={styles.noBookingsText}>
+                  Your booking requests and previous trips
+                  will appear here.
+                </Text>
+
+                <TouchableOpacity
+                  style={styles.bookNowButton}
+                  onPress={openBooking}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.bookNowButtonText}>
+                    Book a Bus
+                  </Text>
+
+                  <Ionicons
+                    name="arrow-forward"
+                    size={16}
+                    color={C.white}
+                  />
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <>
+                {displayedBookings.map((booking) => {
+                  const status = getBookingStatus(booking);
+
+                  const bookingStatus =
+                    booking.booking_status?.toLowerCase();
+
+                  const hasTicket =
+                    bookingStatus === "confirmed" &&
+                    booking.payment_status?.toLowerCase() ===
+                      "paid" &&
+                    !!booking.ticket_code;
+
+                  const isCancelled =
+                    bookingStatus === "cancelled";
+
+                  const isCompleted =
+                    bookingStatus === "completed";
+
+                  const isProcessing =
+                    !hasTicket &&
+                    !isCancelled &&
+                    !isCompleted;
+
+                  return (
+                    <TouchableOpacity
+                      key={booking.booking_id}
+                      style={styles.bookingCard}
+                      onPress={() => {
+                        if (isProcessing) {
+                          openPayment(booking.booking_id);
+                        }
+                      }}
+                      disabled={!isProcessing}
+                      activeOpacity={
+                        isProcessing ? 0.75 : 1
+                      }
+                    >
+                      <View style={styles.bookingTopRow}>
+                        <View style={styles.bookingIcon}>
+                          <Ionicons
+                            name={
+                              hasTicket
+                                ? "ticket"
+                                : "time-outline"
+                            }
+                            size={23}
+                            color={
+                              hasTicket ? C.green : C.blue
+                            }
+                          />
+                        </View>
+
+                        <View style={styles.bookingMainInfo}>
+                          <Text style={styles.bookingReference}>
+                            {booking.booking_reference ||
+                              `Booking #${booking.booking_id}`}
+                          </Text>
+
+                          <Text style={styles.bookingDate}>
+                            {formatBookingDate(
+                              booking.created_at
+                            )}
+                          </Text>
+                        </View>
+
+                        <View
+                          style={[
+                            styles.bookingStatusBadge,
+                            {
+                              backgroundColor:
+                                status.background,
+                            },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.bookingStatusText,
+                              { color: status.color },
+                            ]}
+                          >
+                            {status.label}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View style={styles.bookingDivider} />
+
+                      <View style={styles.bookingDetailsRow}>
+                        <View style={styles.bookingDetail}>
+                          <Ionicons
+                            name="person-outline"
+                            size={16}
+                            color={C.gray}
+                          />
+
+                          <Text style={styles.bookingDetailText}>
+                            {booking.passenger_count || 1}
+                            {" "}Passenger(s)
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View style={styles.bookingBottomRow}>
+                        <View>
+                          <Text style={styles.bookingAmountLabel}>
+                            TOTAL AMOUNT
+                          </Text>
+
+                          <Text style={styles.bookingAmount}>
+                            ₱
+                            {Number(
+                              booking.total_amount || 0
+                            ).toLocaleString("en-PH", {
+                              minimumFractionDigits: 2,
+                            })}
+                          </Text>
+                        </View>
+
+                        {hasTicket ? (
+                          <TouchableOpacity
+                            style={styles.viewTicketButton}
+                            onPress={() =>
+                              openTicket(booking.booking_id)
+                            }
+                            activeOpacity={0.85}
+                          >
+                            <Ionicons
+                              name="qr-code-outline"
+                              size={17}
+                              color={C.white}
+                            />
+
+                            <Text style={styles.viewTicketText}>
+                              View Ticket
+                            </Text>
+                          </TouchableOpacity>
+                        ) : (
+                          <View style={styles.requestIndicator}>
+                            <Ionicons
+                              name={
+                                isCancelled
+                                  ? "close-circle-outline"
+                                  : isCompleted
+                                  ? "checkmark-circle-outline"
+                                  : "hourglass-outline"
+                              }
+                              size={15}
+                              color={
+                                isCancelled
+                                  ? C.red
+                                  : isCompleted
+                                  ? C.gray
+                                  : C.orange
+                              }
+                            />
+
+                            <Text
+                              style={[
+                                styles.requestIndicatorText,
+                                isCancelled && {
+                                  color: C.red,
+                                },
+                                isCompleted && {
+                                  color: C.gray,
+                                },
+                              ]}
+                            >
+                              {isCancelled
+                                ? "Cancelled"
+                                : isCompleted
+                                ? "Completed"
+                                : "Tap to continue"}
+                            </Text>
+
+                            {isProcessing && (
+                              <Ionicons
+                                name="chevron-forward"
+                                size={15}
+                                color={C.orange}
+                              />
+                            )}
+                          </View>
+                        )}
+                      </View>
+
+                      {isProcessing && (
+                        <View
+                          style={styles.continuePaymentHint}
+                        >
+                          <Ionicons
+                            name="information-circle-outline"
+                            size={14}
+                            color={C.blue}
+                          />
+
+                          <Text
+                            style={styles.continuePaymentText}
+                          >
+                            Tap to view your payment details
+                          </Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+
+                {bookings.length > 3 && (
+                  <TouchableOpacity
+                    style={styles.seeMoreButton}
+                    onPress={() =>
+                      setShowAllBookings(!showAllBookings)
+                    }
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.seeMoreText}>
+                      {showAllBookings
+                        ? "Show Less"
+                        : "See All Bookings"}
+                    </Text>
+
+                    <Ionicons
+                      name={
+                        showAllBookings
+                          ? "chevron-up"
+                          : "chevron-down"
+                      }
+                      size={17}
+                      color={C.blue}
+                    />
+                  </TouchableOpacity>
+                )}
+              </>
+            )}
+
+            {/* PASSENGER: BOOKING FEATURES */}
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>
+                Explore RouteX
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={styles.featureCard}
+              onPress={openBooking}
+              activeOpacity={0.8}
+            >
+              <View style={styles.featureIcon}>
+                <Ionicons
+                  name="bus-outline"
+                  size={25}
+                  color={C.blue}
+                />
+              </View>
+
+              <View style={{ flex: 1 }}>
+                <Text style={styles.featureTitle}>
+                  Book a Bus
+                </Text>
+
+                <Text style={styles.featureDescription}>
+                  Browse available buses and reserve your seat.
+                </Text>
+              </View>
+
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={C.gray}
+              />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.featureCard}
+              onPress={openTracking}
+              activeOpacity={0.8}
+            >
+              <View style={styles.featureIcon}>
+                <Ionicons
+                  name="map-outline"
+                  size={25}
+                  color={C.blue}
+                />
+              </View>
+
+              <View style={{ flex: 1 }}>
+                <Text style={styles.featureTitle}>
+                  Live Bus Tracking
+                </Text>
+
+                <Text style={styles.featureDescription}>
+                  Check the live location of buses during
+                  their trips.
+                </Text>
+              </View>
+
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={C.gray}
+              />
+            </TouchableOpacity>
+
+            <View style={styles.infoCard}>
+              <Ionicons
+                name="information-circle-outline"
+                size={22}
+                color={C.blue}
+              />
+
+              <View style={{ flex: 1 }}>
+                <Text style={styles.infoTitle}>
+                  Travel made easier
+                </Text>
+
+                <Text style={styles.infoDescription}>
+                  Book your bus, manage your reservations,
+                  and keep track of your journey using RouteX.
+                </Text>
+              </View>
+            </View>
+          </>
+        )}
+
+        <Text style={styles.footerText}>
+          RouteX • Your journey, made easier.
+        </Text>
+      </ScrollView>
+
+      {/* ALERT MODAL */}
+      {alertModal}
+
+      {/* =====================================
+          GCASH QR CODE MODAL
+      ===================================== */}
+
+      <Modal
+        visible={showGcashQR}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={closeGcashQR}
+      >
+        <View style={styles.gcashModalOverlay}>
+          <View style={styles.gcashModalContainer}>
+
+            {/* MODAL HEADER */}
+            <View style={styles.gcashModalHeader}>
+              <View>
+                <Text style={styles.gcashModalTitle}>
+                  My GCash QR Code
+                </Text>
+
+                <Text style={styles.gcashModalSubtitle}>
+                  Your registered GCash payment details
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                style={styles.gcashCloseButton}
+                onPress={closeGcashQR}
+                activeOpacity={0.8}
+              >
+                <Ionicons
+                  name="close"
+                  size={23}
+                  color={C.navy}
+                />
+              </TouchableOpacity>
+            </View>
+
+
+              {/* GCASH ACCOUNT DETAILS */}
+                <View style={styles.gcashAccountContainer}>
+                  <View style={styles.gcashAccountRow}>
+                    <View style={styles.gcashAccountIcon}>
+                      <Ionicons
+                        name="person-outline"
+                        size={19}
+                        color={C.blue}
+                      />
+                    </View>
+
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.gcashAccountLabel}>
+                        ACCOUNT NAME
+                      </Text>
+
+                      <Text style={styles.gcashAccountValue}>
+                        {profile?.gcash_account_name || "Not provided"}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.gcashAccountDivider} />
+
+                  <View style={styles.gcashAccountRow}>
+                    <View style={styles.gcashAccountIcon}>
+                      <Ionicons
+                        name="phone-portrait-outline"
+                        size={19}
+                        color={C.blue}
+                      />
+                    </View>
+
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.gcashAccountLabel}>
+                        GCASH MOBILE NUMBER
+                      </Text>
+
+                      <Text style={styles.gcashAccountValue}>
+                        {profile?.gcash_account_number || "Not provided"}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+            {/* QR IMAGE CONTENT */}
+            <View style={styles.gcashQRImageContainer}>
+              {gcashQRLoading ? (
+                <View style={styles.gcashQRMessage}>
+                  <ActivityIndicator
+                    size="large"
+                    color={C.blue}
+                  />
+
+                  <Text style={styles.gcashQRMessageText}>
+                    Loading your GCash QR code...
+                  </Text>
+                </View>
+              ) : gcashQRError || !gcashQRUrl ? (
+                <View style={styles.gcashQRMessage}>
+                  <Ionicons
+                    name="image-outline"
+                    size={55}
+                    color="#94A3B8"
+                  />
+
+                  <Text style={styles.gcashQRErrorTitle}>
+                    No QR Code Available
+                  </Text>
+
+                  <Text style={styles.gcashQRMessageText}>
+                    Please upload your GCash QR code in
+                    your Profile settings.
+                  </Text>
+
+                  <TouchableOpacity
+                    style={styles.gcashRetryButton}
+                    onPress={openGcashQR}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons
+                      name="refresh"
+                      size={17}
+                      color={C.white}
+                    />
+
+                    <Text style={styles.gcashRetryText}>
+                      Try Again
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <Image
+                  source={{ uri: gcashQRUrl }}
+                  style={styles.gcashQRImage}
+                  resizeMode="contain"
+                />
+              )}
+            </View>
+
+            <Text style={styles.gcashModalFooter}>
+              RouteX • GCash Payment
+            </Text>
+
+          </View>
         </View>
       </Modal>
-
-      <Text style={styles.footer}>
-        RouteX · Bus Booking & Tracking
-      </Text>
-    </ScrollView>
+    </>
   );
 }
 
-// =============================================
+// =====================================
 // STYLES
-// =============================================
+// =====================================
 
 const styles = StyleSheet.create({
   container: {
@@ -964,276 +1681,139 @@ const styles = StyleSheet.create({
   },
 
   content: {
-    paddingBottom: 20,
+    padding: 20,
+    paddingBottom: 35,
   },
 
-  center: {
+  loadingContainer: {
     flex: 1,
+    backgroundColor: C.background,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: C.background,
   },
 
   loadingText: {
-    marginTop: 12,
     color: C.gray,
     fontSize: 13,
+    marginTop: 12,
   },
 
   header: {
     flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 20,
-    paddingTop: 55,
-    paddingBottom: 15,
-  },
-
-  logoContainer: {
-    width: 46,
-    height: 46,
-    borderRadius: 14,
-    backgroundColor: C.blue,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-
-  logoTextContainer: {
-    flex: 1,
-    marginLeft: 11,
-  },
-
-  logo: {
-    fontSize: 22,
-    fontWeight: "bold",
-    color: C.navy,
-  },
-
-  logoSubtitle: {
-    fontSize: 9,
-    color: C.gray,
-    letterSpacing: 1,
-    marginTop: 2,
-  },
-
-  profileButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 13,
-    backgroundColor: C.white,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-
-  welcomeSection: {
-    paddingHorizontal: 20,
-    paddingTop: 15,
-    paddingBottom: 20,
+    marginBottom: 28,
+    marginTop: 10,
   },
 
   greeting: {
+    color: C.gray,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+
+  userName: {
+    color: C.navy,
     fontSize: 25,
-    fontWeight: "bold",
-    color: C.navy,
+    fontWeight: "900",
+    marginTop: 4,
   },
 
-  welcomeText: {
+  headerSubtitle: {
     color: C.gray,
-    fontSize: 14,
-    marginTop: 5,
-  },
-
-  actionCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: C.white,
-    marginHorizontal: 20,
-    marginBottom: 14,
-    padding: 17,
-    borderRadius: 17,
-    borderWidth: 1,
-    borderColor: "#EAF0F7",
-  },
-
-  actionIcon: {
-    width: 50,
-    height: 50,
-    borderRadius: 14,
-    backgroundColor: "#EFF6FF",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-
-  scanIcon: {
-    backgroundColor: "#DBEAFE",
-  },
-
-  actionDetails: {
-    flex: 1,
-    marginLeft: 13,
-    marginRight: 8,
-  },
-
-  actionTitle: {
-    color: C.navy,
-    fontSize: 14,
-    fontWeight: "bold",
-  },
-
-  actionSubtitle: {
-    color: C.gray,
-    fontSize: 11,
-    lineHeight: 16,
-    marginTop: 5,
-  },
-
-  infoCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#EAF3FF",
-    marginHorizontal: 20,
-    marginTop: 8,
-    padding: 15,
-    borderRadius: 14,
-    gap: 10,
-  },
-
-  infoText: {
-    flex: 1,
-    color: C.navy,
     fontSize: 12,
-    lineHeight: 18,
+    marginTop: 6,
+  },
+
+  profileButton: {
+    width: 47,
+    height: 47,
+    borderRadius: 15,
+    backgroundColor: C.white,
+    alignItems: "center",
+    justifyContent: "center",
+    elevation: 2,
+  },
+
+  notificationDot: {
+    position: "absolute",
+    top: 9,
+    right: 10,
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    backgroundColor: C.red,
+    borderWidth: 1,
+    borderColor: C.white,
   },
 
   sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginHorizontal: 20,
     marginBottom: 13,
+    marginTop: 8,
   },
 
-  sectionHeading: {
-    fontSize: 18,
-    fontWeight: "bold",
+  sectionTitle: {
     color: C.navy,
-    marginHorizontal: 20,
-    marginBottom: 13,
-  },
-
-  sectionSubtitle: {
-    color: C.gray,
-    fontSize: 11,
-    marginTop: 4,
-  },
-
-  card: {
-    backgroundColor: C.white,
-    marginHorizontal: 20,
-    padding: 18,
-    borderRadius: 19,
-    marginBottom: 22,
-    borderWidth: 1,
-    borderColor: "#EAF0F7",
-  },
-
-  operatorBusHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-
-  busIconLarge: {
-    width: 55,
-    height: 55,
-    borderRadius: 15,
-    backgroundColor: "#EFF6FF",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 12,
-  },
-
-  busNameLarge: {
     fontSize: 17,
-    color: C.navy,
-    fontWeight: "bold",
-  },
-
-  plateNumber: {
-    color: C.gray,
-    fontSize: 11,
-    marginTop: 4,
+    fontWeight: "900",
   },
 
   assignedBadge: {
-    backgroundColor: "#DCFCE7",
-    paddingHorizontal: 9,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-
-  assignedText: {
-    color: C.green,
-    fontSize: 10,
-    fontWeight: "bold",
-  },
-
-  busInformation: {
-    backgroundColor: "#F8FAFC",
-    borderRadius: 13,
-    padding: 14,
-    marginTop: 18,
-    gap: 15,
-  },
-
-  busInfoItem: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-  },
-
-  busInfoLabel: {
-    color: C.gray,
-    fontSize: 11,
-  },
-
-  busInfoValue: {
-    color: C.navy,
-    fontSize: 13,
-    fontWeight: "bold",
-    marginTop: 3,
-  },
-
-  divider: {
-    height: 1,
-    backgroundColor: C.light,
-    marginVertical: 17,
-  },
-
-  tripStatusRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 13,
-  },
-
-  statusLabel: {
-    color: C.gray,
-    fontSize: 13,
-  },
-
-  tripStatusBadge: {
-    flexDirection: "row",
-    alignItems: "center",
+    backgroundColor: C.paleGreen,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 20,
   },
 
-  tripActiveBadge: {
-    backgroundColor: "#DCFCE7",
+  greenDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: C.green,
+    marginRight: 6,
   },
 
-  tripInactiveBadge: {
-    backgroundColor: "#F1F5F9",
+  assignedBadgeText: {
+    color: C.green,
+    fontSize: 10,
+    fontWeight: "800",
+  },
+
+  busCard: {
+    backgroundColor: C.white,
+    borderRadius: 20,
+    padding: 18,
+    marginBottom: 25,
+    elevation: 2,
+  },
+
+  busCardTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+
+  busIconContainer: {
+    width: 53,
+    height: 53,
+    borderRadius: 16,
+    backgroundColor: C.paleBlue,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  busStatusContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: C.background,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 20,
   },
 
   statusDot: {
@@ -1243,236 +1823,893 @@ const styles = StyleSheet.create({
     marginRight: 6,
   },
 
-  statusValue: {
-    fontWeight: "bold",
-    fontSize: 11,
-  },
-
-  tripInfo: {
-    marginBottom: 8,
-  },
-
-  tripInfoLabel: {
+  busStatusText: {
     color: C.gray,
-    fontSize: 12,
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "capitalize",
   },
 
-  tripInfoValue: {
+  busName: {
     color: C.navy,
-    fontWeight: "bold",
-    marginTop: 4,
-    fontSize: 14,
-  },
-
-  primaryButton: {
-    backgroundColor: C.blue,
-    borderRadius: 12,
-    padding: 15,
-    alignItems: "center",
-    justifyContent: "center",
-    flexDirection: "row",
+    fontSize: 19,
+    fontWeight: "900",
     marginTop: 15,
   },
 
-  primaryButtonText: {
-    color: C.white,
-    fontWeight: "bold",
-    fontSize: 14,
-    marginLeft: 8,
+  companyName: {
+    color: C.gray,
+    fontSize: 12,
+    marginTop: 4,
   },
 
-  addBusButton: {
-    backgroundColor: C.blue,
+  plateContainer: {
+    backgroundColor: C.background,
+    borderRadius: 13,
+    padding: 13,
+    marginTop: 17,
+  },
+
+  plateLabel: {
+    color: C.gray,
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 1,
+  },
+
+  plateNumber: {
+    color: C.navy,
+    fontSize: 18,
+    fontWeight: "900",
+    letterSpacing: 1.5,
+    marginTop: 5,
+  },
+
+  busDetails: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    borderRadius: 10,
-    gap: 4,
+    marginTop: 16,
+    gap: 20,
   },
 
-  addBusButtonText: {
-    color: C.white,
-    fontSize: 12,
-    fontWeight: "bold",
-  },
-
-  noBusContainer: {
+  busDetailItem: {
+    flexDirection: "row",
     alignItems: "center",
-    padding: 10,
+  },
+
+  busDetailText: {
+    color: C.gray,
+    fontSize: 11,
+    marginLeft: 6,
+  },
+
+  emptyCard: {
+    backgroundColor: C.white,
+    borderRadius: 20,
+    padding: 25,
+    alignItems: "center",
+    marginBottom: 25,
+    elevation: 1,
   },
 
   emptyIcon: {
     width: 65,
     height: 65,
-    borderRadius: 20,
-    backgroundColor: "#F1F5F9",
+    borderRadius: 22,
+    backgroundColor: C.background,
     justifyContent: "center",
     alignItems: "center",
+    marginBottom: 14,
   },
 
   emptyTitle: {
     color: C.navy,
-    fontWeight: "bold",
-    fontSize: 15,
-    marginTop: 12,
+    fontSize: 16,
+    fontWeight: "900",
     textAlign: "center",
   },
 
-  emptyText: {
+  emptyDescription: {
     color: C.gray,
     fontSize: 12,
     textAlign: "center",
-    marginTop: 6,
     lineHeight: 19,
+    marginTop: 8,
   },
 
-  footer: {
-    textAlign: "center",
-    color: "#94A3B8",
-    fontSize: 10,
-    padding: 25,
-  },
-
-  // MODAL
-
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(15, 23, 42, 0.55)",
-    justifyContent: "center",
-    padding: 20,
-  },
-
-  modalScroll: {
-    flexGrow: 1,
-    justifyContent: "center",
-  },
-
-  modalContainer: {
+  tripCard: {
     backgroundColor: C.white,
-    width: "100%",
     borderRadius: 20,
-    padding: 22,
+    padding: 18,
+    marginBottom: 25,
+    elevation: 2,
   },
 
-  modalHeader: {
+  tripCardHeader: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 22,
+    alignItems: "center",
   },
 
-  modalTitle: {
-    fontSize: 21,
-    fontWeight: "bold",
+  tripIcon: {
+    width: 45,
+    height: 45,
+    borderRadius: 14,
+    backgroundColor: C.paleBlue,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+
+  tripTitle: {
     color: C.navy,
+    fontSize: 15,
+    fontWeight: "800",
   },
 
-  modalSubtitle: {
-    fontSize: 12,
+  tripSubtitle: {
     color: C.gray,
+    fontSize: 11,
+    marginTop: 4,
+  },
+
+  tripStatusBadge: {
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+
+  activeBadge: {
+    backgroundColor: C.paleGreen,
+  },
+
+  inactiveBadge: {
+    backgroundColor: C.background,
+  },
+
+  tripStatusText: {
+    fontSize: 10,
+    fontWeight: "800",
+  },
+
+  activeStatusText: {
+    color: C.green,
+  },
+
+  inactiveStatusText: {
+    color: C.gray,
+  },
+
+  destinationContainer: {
+    borderTopWidth: 1,
+    borderTopColor: C.light,
+    marginTop: 17,
+    paddingTop: 14,
+  },
+
+  destinationLabel: {
+    color: C.gray,
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 1,
+  },
+
+  destinationText: {
+    color: C.navy,
+    fontSize: 16,
+    fontWeight: "800",
     marginTop: 5,
   },
 
-  modalLabel: {
+  primaryButton: {
+    backgroundColor: C.blue,
+    borderRadius: 13,
+    padding: 14,
+    marginTop: 17,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  primaryButtonText: {
+    color: C.white,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+
+  disabledButton: {
+    backgroundColor: "#94A3B8",
+  },
+
+  actionGrid: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 16,
+  },
+
+  actionCard: {
+    flex: 1,
+    backgroundColor: C.white,
+    borderRadius: 18,
+    padding: 15,
+    elevation: 1,
+  },
+
+  actionIcon: {
+    width: 47,
+    height: 47,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+
+  scannerIcon: {
+    backgroundColor: C.paleBlue,
+  },
+
+  dockingIcon: {
+    backgroundColor: C.paleGreen,
+  },
+
+  actionTitle: {
     color: C.navy,
-    fontSize: 13,
-    fontWeight: "bold",
+    fontSize: 14,
+    fontWeight: "800",
+  },
+
+  actionDescription: {
+    color: C.gray,
+    fontSize: 11,
+    marginTop: 5,
+    lineHeight: 16,
+  },
+
+  // GCASH QR SHORTCUT
+  gcashQRShortcut: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: C.white,
+    borderRadius: 17,
+    padding: 15,
+    marginBottom: 14,
+    elevation: 1,
+  },
+
+  gcashQRIcon: {
+    width: 47,
+    height: 47,
+    borderRadius: 14,
+    backgroundColor: C.paleBlue,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 13,
+  },
+
+  gcashQRTitle: {
+    color: C.navy,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+
+  gcashQRDescription: {
+    color: C.gray,
+    fontSize: 11,
+    marginTop: 5,
+  },
+
+  trackingShortcut: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: C.white,
+    borderRadius: 17,
+    padding: 15,
+    marginTop: 2,
+  },
+
+  trackingShortcutIcon: {
+    width: 43,
+    height: 43,
+    borderRadius: 13,
+    backgroundColor: C.paleBlue,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+
+  trackingShortcutTitle: {
+    color: C.navy,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+
+  trackingShortcutDescription: {
+    color: C.gray,
+    fontSize: 11,
+    marginTop: 4,
+  },
+
+  // PASSENGER HERO
+  passengerHero: {
+    minHeight: 240,
+    borderRadius: 23,
+    padding: 22,
+    justifyContent: "center",
+    overflow: "hidden",
+    backgroundColor: "#0B1729",
+  },
+
+  heroImage: {
+    borderRadius: 23,
+    opacity: 0.35,
+  },
+
+  heroOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0, 0, 0, 0.55)",
+  },
+
+  heroTextContainer: {
+    flex: 1,
+    zIndex: 2,
+    elevation: 2,
+  },
+
+  heroEyebrow: {
+    color: "#BFDBFE",
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 1.5,
     marginBottom: 8,
   },
 
-  modalInputContainer: {
+  heroTitle: {
+    color: "#FFFFFF",
+    fontSize: 24,
+    fontWeight: "900",
+    lineHeight: 30,
+    maxWidth: 250,
+    textShadowColor: "rgba(0,0,0,0.9)",
+    textShadowOffset: { width: 1, height: 2 },
+    textShadowRadius: 5,
+  },
+
+  heroSubtitle: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 9,
+    maxWidth: 250,
+    textShadowColor: "rgba(0,0,0,0.9)",
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 4,
+  },
+
+  heroButton: {
+    backgroundColor: C.blue,
+    borderRadius: 12,
+    paddingHorizontal: 15,
+    paddingVertical: 11,
+    alignSelf: "flex-start",
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: C.background,
-    borderRadius: 11,
-    paddingHorizontal: 13,
-    height: 52,
-    marginBottom: 17,
+    marginTop: 17,
   },
 
-  modalInput: {
-    flex: 1,
-    marginLeft: 10,
-    color: C.navy,
-    fontSize: 14,
+  heroButtonText: {
+    color: C.white,
+    fontSize: 13,
+    fontWeight: "800",
   },
 
-  busTypeContainer: {
-    flexDirection: "row",
-    gap: 10,
+  // PASSENGER BOOKINGS
+  bookingSectionSubtitle: {
+    color: C.gray,
+    fontSize: 11,
+    marginTop: 4,
+  },
+
+  bookingLoading: {
+    backgroundColor: C.white,
+    padding: 25,
+    borderRadius: 17,
+    alignItems: "center",
     marginBottom: 18,
   },
 
-  busTypeOption: {
-    flex: 1,
-    minHeight: 65,
+  bookingLoadingText: {
+    color: C.gray,
+    fontSize: 12,
+    marginTop: 9,
+  },
+
+  noBookingsCard: {
+    backgroundColor: C.white,
+    borderRadius: 19,
+    padding: 22,
+    alignItems: "center",
+    marginBottom: 20,
     borderWidth: 1,
     borderColor: C.light,
-    borderRadius: 11,
+  },
+
+  noBookingsIcon: {
+    width: 62,
+    height: 62,
+    borderRadius: 20,
+    backgroundColor: C.paleBlue,
     justifyContent: "center",
     alignItems: "center",
-    gap: 5,
-    padding: 8,
   },
 
-  busTypeSelected: {
-    backgroundColor: C.blue,
-    borderColor: C.blue,
-  },
-
-  busTypeText: {
+  noBookingsTitle: {
+    fontSize: 16,
+    fontWeight: "800",
     color: C.navy,
-    fontSize: 11,
-    fontWeight: "bold",
+    marginTop: 13,
+  },
+
+  noBookingsText: {
+    fontSize: 12,
+    color: C.gray,
     textAlign: "center",
+    lineHeight: 19,
+    marginTop: 6,
   },
 
-  busTypeTextSelected: {
-    color: C.white,
-  },
-
-  assignmentNotice: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#EFF6FF",
-    padding: 12,
-    borderRadius: 10,
-    gap: 9,
-    marginBottom: 18,
-  },
-
-  assignmentText: {
-    flex: 1,
-    color: C.blue,
-    fontSize: 11,
-    lineHeight: 17,
-  },
-
-  modalSaveButton: {
-    backgroundColor: C.blue,
-    padding: 15,
-    borderRadius: 11,
+  bookNowButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
+    backgroundColor: C.blue,
+    paddingHorizontal: 18,
+    paddingVertical: 11,
+    borderRadius: 11,
+    marginTop: 16,
   },
 
-  modalSaveText: {
+  bookNowButtonText: {
     color: C.white,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+
+  bookingCard: {
+    backgroundColor: C.white,
+    borderRadius: 17,
+    padding: 15,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: C.light,
+    elevation: 1,
+  },
+
+  bookingTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  bookingIcon: {
+    width: 43,
+    height: 43,
+    borderRadius: 13,
+    backgroundColor: C.paleBlue,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  bookingMainInfo: {
+    flex: 1,
+    marginLeft: 11,
+  },
+
+  bookingReference: {
+    color: C.navy,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+
+  bookingDate: {
+    color: C.gray,
+    fontSize: 11,
+    marginTop: 4,
+  },
+
+  bookingStatusBadge: {
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderRadius: 9,
+  },
+
+  bookingStatusText: {
+    fontSize: 9,
+    fontWeight: "800",
+  },
+
+  bookingDivider: {
+    height: 1,
+    backgroundColor: C.light,
+    marginVertical: 13,
+  },
+
+  bookingDetailsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 17,
+  },
+
+  bookingDetail: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  bookingDetailText: {
+    color: C.gray,
+    fontSize: 11,
+    marginLeft: 6,
+  },
+
+  bookingBottomRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 15,
+  },
+
+  bookingAmountLabel: {
+    color: C.gray,
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 0.7,
+  },
+
+  bookingAmount: {
+    color: C.navy,
+    fontSize: 16,
+    fontWeight: "900",
+    marginTop: 4,
+  },
+
+  viewTicketButton: {
+    backgroundColor: C.blue,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+
+  viewTicketText: {
+    color: C.white,
+    fontSize: 11,
+    fontWeight: "800",
+  },
+
+  requestIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+
+  requestIndicatorText: {
+    color: C.orange,
+    fontSize: 10,
+    fontWeight: "700",
+  },
+
+  continuePaymentHint: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderTopWidth: 1,
+    borderTopColor: C.light,
+    marginTop: 12,
+    paddingTop: 10,
+    gap: 6,
+  },
+
+  continuePaymentText: {
+    color: C.blue,
+    fontSize: 10,
+    fontWeight: "700",
+  },
+
+  seeMoreButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 13,
+    marginBottom: 10,
+    gap: 7,
+  },
+
+  seeMoreText: {
+    color: C.blue,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+
+  // PASSENGER FEATURES
+  featureCard: {
+    backgroundColor: C.white,
+    borderRadius: 18,
+    padding: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+    elevation: 1,
+  },
+
+  featureIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 15,
+    backgroundColor: C.paleBlue,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 13,
+  },
+
+  bookingFeatureIcon: {
+    backgroundColor: C.paleGreen,
+  },
+
+  featureTitle: {
+    color: C.navy,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+
+  featureDescription: {
+    color: C.gray,
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 5,
+    paddingRight: 5,
+  },
+
+  infoCard: {
+    backgroundColor: C.paleBlue,
+    borderRadius: 17,
+    padding: 16,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginTop: 12,
+  },
+
+  infoTitle: {
+    color: C.navy,
+    fontSize: 13,
+    fontWeight: "800",
+    marginLeft: 11,
+  },
+
+  infoDescription: {
+    color: C.gray,
+    fontSize: 11,
+    lineHeight: 17,
+    marginLeft: 11,
+    marginTop: 5,
+  },
+
+  footerText: {
+    color: "#94A3B8",
+    textAlign: "center",
+    fontSize: 11,
+    marginTop: 27,
+  },
+
+  // SWEET ALERT MODAL
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.55)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 25,
+  },
+
+  alertBox: {
+    width: "100%",
+    maxWidth: 360,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    padding: 24,
+    alignItems: "center",
+    elevation: 10,
+  },
+
+  alertIcon: {
+    width: 85,
+    height: 85,
+    borderRadius: 45,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 15,
+  },
+
+  alertTitle: {
+    fontSize: 21,
+    fontWeight: "bold",
+    color: "#172B4D",
+    textAlign: "center",
+  },
+
+  alertMessage: {
+    fontSize: 14,
+    color: "#64748B",
+    textAlign: "center",
+    lineHeight: 21,
+    marginTop: 10,
+  },
+
+  alertButton: {
+    width: "100%",
+    padding: 14,
+    borderRadius: 10,
+    alignItems: "center",
+    marginTop: 23,
+  },
+
+  alertButtonText: {
+    color: "#FFFFFF",
     fontWeight: "bold",
     fontSize: 14,
   },
 
-  modalCancelButton: {
-    padding: 13,
+  // =====================================
+  // GCASH QR MODAL STYLES
+  // =====================================
+
+  gcashModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.65)",
+    justifyContent: "center",
     alignItems: "center",
+    padding: 22,
+  },
+
+  gcashModalContainer: {
+    width: "100%",
+    maxWidth: 380,
+    backgroundColor: C.white,
+    borderRadius: 22,
+    padding: 20,
+    elevation: 10,
+  },
+
+  gcashModalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 18,
+  },
+
+  gcashModalTitle: {
+    color: C.navy,
+    fontSize: 19,
+    fontWeight: "900",
+  },
+
+  gcashModalSubtitle: {
+    color: C.gray,
+    fontSize: 12,
     marginTop: 5,
   },
 
-  modalCancelText: {
-    color: C.gray,
-    fontWeight: "600",
+  gcashCloseButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: C.background,
+    justifyContent: "center",
+    alignItems: "center",
   },
+
+  gcashQRImageContainer: {
+    width: "100%",
+    height: 320,
+    backgroundColor: "#F8FAFC",
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: C.light,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 12,
+  },
+
+  gcashQRImage: {
+    width: "100%",
+    height: "100%",
+  },
+
+  gcashQRMessage: {
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 20,
+  },
+
+  gcashQRMessageText: {
+    color: C.gray,
+    fontSize: 12,
+    textAlign: "center",
+    lineHeight: 19,
+    marginTop: 12,
+  },
+
+  gcashQRErrorTitle: {
+    color: C.navy,
+    fontSize: 15,
+    fontWeight: "800",
+    marginTop: 12,
+  },
+
+  gcashRetryButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: C.blue,
+    paddingHorizontal: 17,
+    paddingVertical: 10,
+    borderRadius: 10,
+    marginTop: 16,
+    gap: 7,
+  },
+
+  gcashRetryText: {
+    color: C.white,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+
+  gcashModalFooter: {
+    color: "#94A3B8",
+    fontSize: 10,
+    textAlign: "center",
+    marginTop: 15,
+  },
+
+  gcashAccountContainer: {
+  backgroundColor: C.paleBlue,
+  borderRadius: 15,
+  padding: 14,
+  marginBottom: 15,
+},
+
+gcashAccountRow: {
+  flexDirection: "row",
+  alignItems: "center",
+},
+
+gcashAccountIcon: {
+  width: 40,
+  height: 40,
+  borderRadius: 12,
+  backgroundColor: C.white,
+  alignItems: "center",
+  justifyContent: "center",
+  marginRight: 12,
+},
+
+gcashAccountLabel: {
+  color: C.gray,
+  fontSize: 9,
+  fontWeight: "800",
+  letterSpacing: 0.8,
+},
+
+gcashAccountValue: {
+  color: C.navy,
+  fontSize: 14,
+  fontWeight: "800",
+  marginTop: 4,
+},
+
+gcashAccountDivider: {
+  height: 1,
+  backgroundColor: "#D8E7F8",
+  marginVertical: 12,
+},
 });
+
+

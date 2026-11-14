@@ -1,13 +1,14 @@
 import React from "react";
-import { View, Text, StyleSheet } from "react-native";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { View, Text, StyleSheet, Image } from "react-native";
 
 export default function AppHeader() {
   return (
     <View style={styles.header}>
-      <View style={styles.left}>
-        <MaterialCommunityIcons name="bus" size={24} color="#fff" />
-      </View>
+      <Image
+        source={require("../assets/routex-logo-white.png")}
+        style={styles.logo}
+        resizeMode="contain"
+      />
 
       <Text style={styles.title}>RouteX</Text>
     </View>
@@ -16,29 +17,26 @@ export default function AppHeader() {
 
 const styles = StyleSheet.create({
   header: {
-    width: "100%",        
-    height: 90,
-    backgroundColor: "#06B6D4",
+    height: 90, // Reduced from 60
+    backgroundColor: "#1A8AE5",
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 20,
-    paddingTop: 35,
-    elevation: 5,
+    paddingHorizontal: 16,
   },
-
-  left: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
-    backgroundColor: "rgba(255,255,255,0.25)",
-    justifyContent: "center",
-    alignItems: "center",
+  logo: {
+    width: 60,
+    height: 60,
+    marginRight: 8,
+    marginTop: 20,
+    marginBottom: -10,
+    marginLeft: -10
   },
-
   title: {
-    marginLeft: 12,
-    fontSize: 24,
+    color: "#FFFFFF",
+    fontSize: 25,
     fontWeight: "bold",
-    color: "#fff",
+    marginTop: 20,
+    marginLeft: -10,
+    marginBottom: -10,
   },
 });

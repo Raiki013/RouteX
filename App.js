@@ -1,10 +1,23 @@
 
 import "./tasks/backgroundLocation";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
+
+import {
+  View,
+  Image,
+  ActivityIndicator,
+  StyleSheet,
+} from "react-native";
+
+import * as SplashScreen from "expo-splash-screen";
+
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+
+// Keep native splash visible while React loads
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 // AUTH
 import LoginScreen from "./screens/LoginScreen";
@@ -14,10 +27,9 @@ import SignupScreen from "./screens/SignupScreen";
 import BottomTabs from "./navigation/BottomTabs";
 
 // PASSENGER
-import BusListScreen from "./screens/BusListScreen";
 import PaymentScreen from "./screens/PaymentScreen";
-import TerminalBookingScreen from "./screens/TerminalBookingScreen";
 import TicketScreen from "./screens/TicketScreen";
+import NotificationsScreen from "./screens/NotificationsScreen";
 
 // OPERATOR
 import OperatorDockingScreen from "./screens/OperatorDockingScreen";
@@ -31,13 +43,61 @@ import CashierPaymentScreen from "./screens/CashierPaymentScreen";
 import CashierVerificationScreen from "./screens/CashierVerificationScreen";
 import CashierQRScannerScreen from "./screens/CashierQRScannerScreen";
 
-
 // TRACKING
 import TrackingScreen from "./screens/TrackingScreen";
 
 const Stack = createNativeStackNavigator();
 
 export default function App() {
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    let timeout;
+
+    const prepareApp = async () => {
+      try {
+        // Replace the native splash with our custom loading screen
+        await SplashScreen.hideAsync();
+
+        // Show logo and loading circle for at least 2 seconds
+        timeout = setTimeout(() => {
+          setIsLoading(false);
+        }, 2000);
+
+      } catch (error) {
+        console.log("App loading error:", error);
+        setIsLoading(false);
+      }
+    };
+
+    prepareApp();
+
+    return () => {
+      if (timeout) {
+        clearTimeout(timeout);
+      }
+    };
+  }, []);
+
+  // CUSTOM LOADING SCREEN
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Image
+          source={require("./assets/routex-logo-blue.png")}
+          style={styles.logo}
+          resizeMode="contain"
+        />
+
+        <ActivityIndicator
+          size="large"
+          color="#06B6D4"
+          style={styles.loader}
+        />
+      </View>
+    );
+  }
+
   return (
     <SafeAreaProvider>
       <NavigationContainer>
@@ -54,10 +114,13 @@ export default function App() {
           <Stack.Screen name="MainTabs" component={BottomTabs} />
 
           {/* PASSENGER */}
-          <Stack.Screen name="BusList" component={BusListScreen} />
-          <Stack.Screen name="TerminalBooking" component={TerminalBookingScreen} />
           <Stack.Screen name="Payment" component={PaymentScreen} />
           <Stack.Screen name="Ticket" component={TicketScreen} />
+          <Stack.Screen
+            name="Notifications"
+            component={NotificationsScreen}
+            options={{ headerShown: false }}
+          />
 
           {/* CASHIER */}
           <Stack.Screen
@@ -90,7 +153,6 @@ export default function App() {
             name="OperatorGCash"
             component={OperatorGCashScreen}
           />
-
           <Stack.Screen
             name="OperatorTicketScanner"
             component={OperatorTicketScannerScreen}
@@ -103,3 +165,22 @@ export default function App() {
     </SafeAreaProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: "#F3F7FC",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  logo: {
+    width: 190,
+    height: 140,
+  },
+
+  loader: {
+    marginTop: 30,
+    transform: [{ scale: 1.3 }],
+  },
+});

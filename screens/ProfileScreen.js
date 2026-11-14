@@ -13,30 +13,48 @@ import {
   Modal,
   Pressable,
   ActivityIndicator,
+  Image,
 } from "react-native";
 
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
+import * as ImagePicker from "expo-image-picker";
+import * as Notifications from "expo-notifications";
+import * as Location from "expo-location";
 
-import AppHeader from "../components/AppHeader";
 import { supabase } from "../config/supabase";
+
+const BUCKET_NAME = "profile-photos";
+
+const COLORS = {
+  primary: "#1A8AE5",
+  primaryDark: "#126BB5",
+  primaryLight: "#DBEAFE",
+  background: "#F8FAFC",
+  white: "#FFFFFF",
+  text: "#0F172A",
+  secondaryText: "#64748B",
+  border: "#E2E8F0",
+  inactive: "#94A3B8",
+  danger: "#EF4444",
+};
 
 export default function ProfileScreen({ navigation }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   const [notificationsOn, setNotificationsOn] = useState(true);
   const [locationOn, setLocationOn] = useState(true);
 
   const [modalVisible, setModalVisible] = useState(false);
-
   const [modalContent, setModalContent] = useState({
     title: "",
     body: "",
   });
 
-  // LOAD LOGGED-IN USER FROM SUPABASE
+  // LOAD USER PROFILE
   const loadUser = useCallback(async () => {
     try {
       setLoading(true);
@@ -55,7 +73,15 @@ export default function ProfileScreen({ navigation }) {
 
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
-        .select("id, full_name, email, user_level")
+        .select(`
+          id,
+          full_name,
+          email,
+          user_level,
+          avatar_url,
+          notifications_enabled,
+          location_enabled
+        `)
         .eq("id", authUser.id)
         .maybeSingle();
 
@@ -68,16 +94,19 @@ export default function ProfileScreen({ navigation }) {
           authUser.user_metadata?.full_name ||
           authUser.user_metadata?.name ||
           "User",
-
         email: profile?.email || authUser.email || "—",
-
         userLevel: profile?.user_level || "user",
-
-        phone:
-          authUser.phone ||
-          authUser.user_metadata?.phone ||
-          "—",
+        phone: authUser.phone || authUser.user_metadata?.phone || "—",
+        avatarUrl: profile?.avatar_url || null,
       });
+
+      setNotificationsOn(
+        profile?.notifications_enabled ?? true
+      );
+
+      setLocationOn(
+        profile?.location_enabled ?? true
+      );
 
     } catch (error) {
       console.log("PROFILE LOAD ERROR:", error.message);
@@ -92,14 +121,27 @@ export default function ProfileScreen({ navigation }) {
     }
   }, []);
 
-  // REFRESH PROFILE WHEN SCREEN OPENS
   useFocusEffect(
     useCallback(() => {
       loadUser();
     }, [loadUser])
   );
 
-  // GET INITIALS
+  // SAVE USER PREFERENCE
+  const savePreference = async (column, value) => {
+    if (!user?.id) {
+      throw new Error("User account not found.");
+    }
+
+    const { error } = await supabase
+      .from("profiles")
+      .update({ [column]: value })
+      .eq("id", user.id);
+
+    if (error) throw error;
+  };
+
+  // PROFILE INITIALS
   const getInitials = (name) => {
     if (!name) return "?";
 
@@ -114,14 +156,250 @@ export default function ProfileScreen({ navigation }) {
 
   // ACCOUNT ROLE
   const getUserRole = () => {
-    if (user?.userLevel === "operator") {
-      return "Bus Operator";
-    }
-
-    return "Passenger";
+    return user?.userLevel === "operator"
+      ? "Bus Operator"
+      : "Passenger";
   };
 
-  // OPEN GCASH SETTINGS
+  // UPLOAD PROFILE PICTURE
+  const handleChangePhoto = async () => {
+    try {
+      const permission =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+      if (!permission.granted) {
+        Alert.alert(
+          "Permission Required",
+          "Please allow RouteX to access your photo library to choose a profile picture."
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (result.canceled || !result.assets?.length) {
+        return;
+      }
+
+      const selectedImage = result.assets[0];
+
+      if (
+        selectedImage.fileSize &&
+        selectedImage.fileSize > 5 * 1024 * 1024
+      ) {
+        Alert.alert(
+          "Image Too Large",
+          "Please select an image smaller than 5 MB."
+        );
+        return;
+      }
+
+      setUploadingPhoto(true);
+
+      const response = await fetch(selectedImage.uri);
+      const blob = await response.blob();
+
+      const extension =
+        selectedImage.uri.split(".").pop()?.split("?")[0]?.toLowerCase() ||
+        "jpg";
+
+      const allowedExtensions = ["jpg", "jpeg", "png", "webp"];
+
+      if (!allowedExtensions.includes(extension)) {
+        throw new Error("Please select a JPG, PNG, or WEBP image.");
+      }
+
+      const contentType =
+        selectedImage.mimeType ||
+        (extension === "png"
+          ? "image/png"
+          : extension === "webp"
+          ? "image/webp"
+          : "image/jpeg");
+
+      const fileName = `${user.id}/${Date.now()}.${extension}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from(BUCKET_NAME)
+        .upload(fileName, blob, {
+          contentType,
+          cacheControl: "3600",
+          upsert: false,
+        });
+
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage
+        .from(BUCKET_NAME)
+        .getPublicUrl(fileName);
+
+      const photoUrl = data.publicUrl;
+
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update({ avatar_url: photoUrl })
+        .eq("id", user.id);
+
+      if (updateError) throw updateError;
+
+      setUser((previous) => ({
+        ...previous,
+        avatarUrl: photoUrl,
+      }));
+
+      Alert.alert(
+        "Success",
+        "Your profile picture has been updated."
+      );
+
+    } catch (error) {
+      console.log("PROFILE PHOTO ERROR:", error.message);
+
+      Alert.alert(
+        "Upload Failed",
+        error.message || "Unable to upload your profile picture."
+      );
+
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
+
+  // REMOVE PROFILE PICTURE
+  const handleRemovePhoto = () => {
+    if (!user?.avatarUrl) return;
+
+    Alert.alert(
+      "Remove Profile Picture",
+      "Are you sure you want to remove your profile picture?",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setUploadingPhoto(true);
+
+              const { error } = await supabase
+                .from("profiles")
+                .update({ avatar_url: null })
+                .eq("id", user.id);
+
+              if (error) throw error;
+
+              setUser((previous) => ({
+                ...previous,
+                avatarUrl: null,
+              }));
+
+              Alert.alert(
+                "Success",
+                "Your profile picture has been removed."
+              );
+
+            } catch (error) {
+              console.log("REMOVE PHOTO ERROR:", error.message);
+
+              Alert.alert(
+                "Error",
+                "Unable to remove your profile picture."
+              );
+
+            } finally {
+              setUploadingPhoto(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  // NOTIFICATION TOGGLE
+  const handleNotificationToggle = async (value) => {
+    try {
+      if (value) {
+        const currentPermission =
+          await Notifications.getPermissionsAsync();
+
+        let finalStatus = currentPermission.status;
+
+        if (finalStatus !== "granted") {
+          const requested =
+            await Notifications.requestPermissionsAsync();
+
+          finalStatus = requested.status;
+        }
+
+        if (finalStatus !== "granted") {
+          Alert.alert(
+            "Notification Permission",
+            "Please enable notifications in your phone settings to receive RouteX notifications."
+          );
+          return;
+        }
+      }
+
+      await savePreference("notifications_enabled", value);
+      setNotificationsOn(value);
+
+    } catch (error) {
+      console.log("NOTIFICATION ERROR:", error.message);
+
+      Alert.alert(
+        "Error",
+        "Unable to update notification settings."
+      );
+    }
+  };
+
+  // LOCATION TOGGLE
+  const handleLocationToggle = async (value) => {
+    try {
+      if (value) {
+        const currentPermission =
+          await Location.getForegroundPermissionsAsync();
+
+        let finalStatus = currentPermission.status;
+
+        if (finalStatus !== "granted") {
+          const requested =
+            await Location.requestForegroundPermissionsAsync();
+
+          finalStatus = requested.status;
+        }
+
+        if (finalStatus !== "granted") {
+          Alert.alert(
+            "Location Permission",
+            "Please allow RouteX to access your location in your phone settings."
+          );
+          return;
+        }
+      }
+
+      await savePreference("location_enabled", value);
+      setLocationOn(value);
+
+    } catch (error) {
+      console.log("LOCATION ERROR:", error.message);
+
+      Alert.alert(
+        "Error",
+        "Unable to update location settings."
+      );
+    }
+  };
+
+  // GCASH SETTINGS
   const openGCashSettings = () => {
     if (user?.userLevel !== "operator") {
       Alert.alert(
@@ -156,7 +434,6 @@ export default function ProfileScreen({ navigation }) {
               if (error) throw error;
 
               setUser(null);
-
               navigation.replace("Login");
 
             } catch (error) {
@@ -183,64 +460,48 @@ export default function ProfileScreen({ navigation }) {
         title: "Terms & Conditions",
         body:
           "Welcome to RouteX.\n\n" +
-
           "By using this app, you agree to the following terms:\n\n" +
-
           "1. Ticket Booking\n" +
           "• All bookings are subject to seat availability.\n" +
           "• Confirmed tickets cannot be transferred without system approval.\n" +
           "• Users must present a valid QR code before boarding.\n\n" +
-
           "2. Payments\n" +
           "• All fares shown are final at the time of booking.\n" +
           "• Refunds are subject to system policies and trip cancellation rules.\n\n" +
-
           "3. User Responsibility\n" +
           "• Users must provide accurate personal information.\n" +
           "• Misuse of the system may result in account suspension.\n\n" +
-
           "4. Service Availability\n" +
           "• Schedules may change due to traffic or operational conditions.\n" +
           "• Live tracking depends on the availability of the operator's GPS and internet connection.\n\n" +
-
           "5. Limitation\n" +
           "• RouteX is not responsible for delays caused by weather, traffic, or road closures.\n\n" +
-
           "By continuing to use RouteX, you agree to these terms.",
       });
-
     } else {
       setModalContent({
         title: "Privacy Policy",
         body:
           "Your privacy is important to us.\n\n" +
-
           "1. Data Collection\n" +
           "• We collect account information such as your name and email address.\n" +
           "• Booking and trip information may also be stored in our database.\n\n" +
-
           "2. Data Usage\n" +
           "• Your information is used to provide booking, account, and tracking services.\n" +
           "• Account information is not sold to third parties.\n\n" +
-
           "3. Storage\n" +
           "• Authentication is handled by Supabase Auth.\n" +
           "• Profile and application data are stored in the RouteX Supabase database.\n\n" +
-
           "4. Security\n" +
           "• RouteX uses authenticated access and database security policies.\n" +
           "• Users are responsible for keeping their login credentials private.\n\n" +
-
           "5. Location Information\n" +
           "• Location information may be used for bus tracking when the operator enables tracking.\n" +
           "• Tracking depends on the app's location permissions.\n\n" +
-
           "6. Third-Party Services\n" +
           "• RouteX may use external services such as maps and QR code tools.\n\n" +
-
           "7. Updates\n" +
           "• This privacy policy may be updated when necessary.\n\n" +
-
           "By continuing to use RouteX, you agree to this policy.",
       });
     }
@@ -248,37 +509,57 @@ export default function ProfileScreen({ navigation }) {
     setModalVisible(true);
   };
 
+  // LOADING
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#06B6D4" />
-
-        <Text style={styles.loadingText}>
-          Loading profile...
-        </Text>
+        <StatusBar barStyle="light-content" backgroundColor={COLORS.primaryDark} />
+        <ActivityIndicator size="large" color={COLORS.primary} />
+        <Text style={styles.loadingText}>Loading profile...</Text>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar
+        barStyle="light-content"
+        backgroundColor={COLORS.primaryDark}
+      />
 
-      <AppHeader />
+      {/* HEADER IS PROVIDED BY BOTTOM TABS */}
 
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-
         {/* PROFILE CARD */}
         <View style={styles.profileCard}>
           <View style={styles.avatarWrapper}>
             <View style={styles.avatar}>
-              <Text style={styles.avatarText}>
-                {getInitials(user?.fullName)}
-              </Text>
+              {user?.avatarUrl ? (
+                <Image
+                  source={{ uri: user.avatarUrl }}
+                  style={styles.avatarImage}
+                />
+              ) : (
+                <Text style={styles.avatarText}>
+                  {getInitials(user?.fullName)}
+                </Text>
+              )}
             </View>
+
+            <TouchableOpacity
+              style={styles.cameraButton}
+              onPress={handleChangePhoto}
+              disabled={uploadingPhoto}
+            >
+              {uploadingPhoto ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Ionicons name="camera" size={18} color="#fff" />
+              )}
+            </TouchableOpacity>
           </View>
 
           <Text style={styles.name}>
@@ -295,10 +576,31 @@ export default function ProfileScreen({ navigation }) {
               size={15}
               color="#fff"
             />
-
             <Text style={styles.badgeText}>
               {getUserRole()}
             </Text>
+          </View>
+
+          <View style={styles.photoActions}>
+            <TouchableOpacity
+              onPress={handleChangePhoto}
+              disabled={uploadingPhoto}
+            >
+              <Text style={styles.photoActionText}>
+                Change Photo
+              </Text>
+            </TouchableOpacity>
+
+            {user?.avatarUrl && (
+              <TouchableOpacity
+                onPress={handleRemovePhoto}
+                disabled={uploadingPhoto}
+              >
+                <Text style={styles.removePhotoText}>
+                  Remove
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
 
@@ -359,7 +661,7 @@ export default function ProfileScreen({ navigation }) {
                     <Ionicons
                       name="wallet-outline"
                       size={20}
-                      color="#06B6D4"
+                      color={COLORS.primary}
                     />
                   </View>
 
@@ -367,7 +669,6 @@ export default function ProfileScreen({ navigation }) {
                     <Text style={styles.rowLabel}>
                       GCash Payment Settings
                     </Text>
-
                     <Text style={styles.rowValue}>
                       Manage your GCash number and QR code
                     </Text>
@@ -377,7 +678,7 @@ export default function ProfileScreen({ navigation }) {
                 <Ionicons
                   name="chevron-forward"
                   size={20}
-                  color="#94A3B8"
+                  color={COLORS.inactive}
                 />
               </TouchableOpacity>
             </View>
@@ -394,8 +695,9 @@ export default function ProfileScreen({ navigation }) {
             <ToggleRow
               icon="notifications-outline"
               label="Notifications"
+              description="Allow RouteX notifications"
               value={notificationsOn}
-              onToggle={setNotificationsOn}
+              onToggle={handleNotificationToggle}
             />
 
             <Divider />
@@ -403,17 +705,16 @@ export default function ProfileScreen({ navigation }) {
             <ToggleRow
               icon="location-outline"
               label="Location Access"
+              description="Allow RouteX to use your location"
               value={locationOn}
-              onToggle={setLocationOn}
+              onToggle={handleLocationToggle}
             />
           </View>
         </View>
 
         {/* MORE */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>
-            More
-          </Text>
+          <Text style={styles.sectionTitle}>More</Text>
 
           <View style={styles.card}>
             <LinkRow
@@ -460,21 +761,15 @@ export default function ProfileScreen({ navigation }) {
                 size={20}
                 color="#fff"
               />
-
-              <Text style={styles.logoutText}>
-                Log Out
-              </Text>
+              <Text style={styles.logoutText}>Log Out</Text>
             </>
           )}
         </TouchableOpacity>
 
-        <Text style={styles.version}>
-          RouteX v2.1.0
-        </Text>
-
+        <Text style={styles.version}>RouteX v2.1.0</Text>
       </ScrollView>
 
-      {/* MODAL */}
+      {/* TERMS / PRIVACY MODAL */}
       <Modal
         visible={modalVisible}
         transparent
@@ -500,9 +795,7 @@ export default function ProfileScreen({ navigation }) {
                 pressed && styles.modalButtonPressed,
               ]}
             >
-              <Text style={styles.modalButtonText}>
-                Close
-              </Text>
+              <Text style={styles.modalButtonText}>Close</Text>
             </Pressable>
           </View>
         </View>
@@ -511,7 +804,7 @@ export default function ProfileScreen({ navigation }) {
   );
 }
 
-/* INFORMATION ROW */
+// INFORMATION ROW
 function InfoRow({ icon, label, value }) {
   return (
     <View style={styles.row}>
@@ -520,26 +813,27 @@ function InfoRow({ icon, label, value }) {
           <Ionicons
             name={icon}
             size={18}
-            color="#06B6D4"
+            color={COLORS.primary}
           />
         </View>
 
         <View style={styles.infoText}>
-          <Text style={styles.rowLabel}>
-            {label}
-          </Text>
-
-          <Text style={styles.rowValue}>
-            {value}
-          </Text>
+          <Text style={styles.rowLabel}>{label}</Text>
+          <Text style={styles.rowValue}>{value}</Text>
         </View>
       </View>
     </View>
   );
 }
 
-/* TOGGLE ROW */
-function ToggleRow({ icon, label, value, onToggle }) {
+// TOGGLE ROW
+function ToggleRow({
+  icon,
+  label,
+  description,
+  value,
+  onToggle,
+}) {
   return (
     <View style={styles.row}>
       <View style={styles.rowLeft}>
@@ -547,13 +841,14 @@ function ToggleRow({ icon, label, value, onToggle }) {
           <Ionicons
             name={icon}
             size={18}
-            color="#06B6D4"
+            color={COLORS.primary}
           />
         </View>
 
-        <Text style={styles.rowLabel}>
-          {label}
-        </Text>
+        <View style={styles.infoText}>
+          <Text style={styles.rowLabel}>{label}</Text>
+          <Text style={styles.rowValue}>{description}</Text>
+        </View>
       </View>
 
       <Switch
@@ -561,15 +856,15 @@ function ToggleRow({ icon, label, value, onToggle }) {
         onValueChange={onToggle}
         trackColor={{
           false: "#CBD5E1",
-          true: "#67E8F9",
+          true: "#93C5FD",
         }}
-        thumbColor={value ? "#06B6D4" : "#F8FAFC"}
+        thumbColor={value ? COLORS.primary : "#F8FAFC"}
       />
     </View>
   );
 }
 
-/* LINK ROW */
+// LINK ROW
 function LinkRow({ icon, label, onPress }) {
   return (
     <TouchableOpacity
@@ -582,46 +877,44 @@ function LinkRow({ icon, label, onPress }) {
           <Ionicons
             name={icon}
             size={18}
-            color="#06B6D4"
+            color={COLORS.primary}
           />
         </View>
 
-        <Text style={styles.rowLabel}>
-          {label}
-        </Text>
+        <Text style={styles.rowLabel}>{label}</Text>
       </View>
 
       <Ionicons
         name="chevron-forward"
         size={18}
-        color="#94A3B8"
+        color={COLORS.inactive}
       />
     </TouchableOpacity>
   );
 }
 
-/* DIVIDER */
+// DIVIDER
 function Divider() {
   return <View style={styles.divider} />;
 }
 
-/* STYLES */
+// STYLES
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F1F5F9",
+    backgroundColor: COLORS.background,
   },
 
   loadingContainer: {
     flex: 1,
-    backgroundColor: "#F1F5F9",
+    backgroundColor: COLORS.background,
     justifyContent: "center",
     alignItems: "center",
   },
 
   loadingText: {
     marginTop: 12,
-    color: "#64748B",
+    color: COLORS.secondaryText,
   },
 
   content: {
@@ -629,7 +922,7 @@ const styles = StyleSheet.create({
   },
 
   profileCard: {
-    backgroundColor: "#06B6D4",
+    backgroundColor: COLORS.primary,
     marginHorizontal: 22,
     marginTop: 25,
     borderRadius: 30,
@@ -642,28 +935,67 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.3)",
     borderRadius: 60,
     padding: 4,
+    position: "relative",
   },
 
   avatar: {
     width: 95,
     height: 95,
     borderRadius: 50,
-    backgroundColor: "#fff",
+    backgroundColor: COLORS.white,
     justifyContent: "center",
     alignItems: "center",
+    overflow: "hidden",
+  },
+
+  avatarImage: {
+    width: "100%",
+    height: "100%",
   },
 
   avatarText: {
     fontSize: 34,
     fontWeight: "bold",
-    color: "#06B6D4",
+    color: COLORS.primary,
+  },
+
+  cameraButton: {
+    position: "absolute",
+    right: -3,
+    bottom: 0,
+    width: 34,
+    height: 34,
+    borderRadius: 18,
+    backgroundColor: COLORS.primaryDark,
+    borderWidth: 2,
+    borderColor: COLORS.white,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  photoActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 20,
+    marginTop: 16,
+  },
+
+  photoActionText: {
+    color: COLORS.white,
+    fontWeight: "700",
+    textDecorationLine: "underline",
+  },
+
+  removePhotoText: {
+    color: "#FEE2E2",
+    fontWeight: "700",
   },
 
   name: {
     marginTop: 18,
     fontSize: 26,
     fontWeight: "bold",
-    color: "#fff",
+    color: COLORS.white,
   },
 
   email: {
@@ -683,7 +1015,7 @@ const styles = StyleSheet.create({
 
   badgeText: {
     marginLeft: 6,
-    color: "#fff",
+    color: COLORS.white,
     fontWeight: "600",
   },
 
@@ -695,11 +1027,11 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     paddingHorizontal: 22,
     fontWeight: "700",
-    color: "#64748B",
+    color: COLORS.secondaryText,
   },
 
   card: {
-    backgroundColor: "#fff",
+    backgroundColor: COLORS.white,
     marginHorizontal: 22,
     borderRadius: 24,
     paddingHorizontal: 18,
@@ -726,7 +1058,7 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 14,
-    backgroundColor: "#ECFEFF",
+    backgroundColor: COLORS.primaryLight,
     justifyContent: "center",
     alignItems: "center",
     marginRight: 14,
@@ -734,11 +1066,11 @@ const styles = StyleSheet.create({
 
   rowLabel: {
     fontWeight: "700",
-    color: "#0F172A",
+    color: COLORS.text,
   },
 
   rowValue: {
-    color: "#64748B",
+    color: COLORS.secondaryText,
     marginTop: 3,
   },
 
@@ -748,7 +1080,7 @@ const styles = StyleSheet.create({
   },
 
   logoutButton: {
-    backgroundColor: "#EF4444",
+    backgroundColor: COLORS.danger,
     marginHorizontal: 22,
     marginTop: 35,
     borderRadius: 20,
@@ -759,7 +1091,7 @@ const styles = StyleSheet.create({
   },
 
   logoutText: {
-    color: "#fff",
+    color: COLORS.white,
     marginLeft: 10,
     fontWeight: "700",
   },
@@ -767,7 +1099,7 @@ const styles = StyleSheet.create({
   version: {
     textAlign: "center",
     marginTop: 20,
-    color: "#94A3B8",
+    color: COLORS.inactive,
   },
 
   modalOverlay: {
@@ -779,7 +1111,7 @@ const styles = StyleSheet.create({
   },
 
   modalBox: {
-    backgroundColor: "#fff",
+    backgroundColor: COLORS.white,
     width: "85%",
     maxHeight: "80%",
     padding: 22,
@@ -790,7 +1122,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "bold",
     marginBottom: 12,
-    color: "#0F172A",
+    color: COLORS.text,
   },
 
   modalScroll: {
@@ -803,19 +1135,19 @@ const styles = StyleSheet.create({
   },
 
   modalButton: {
-    backgroundColor: "#06B6D4",
+    backgroundColor: COLORS.primary,
     padding: 12,
     borderRadius: 12,
     alignItems: "center",
   },
 
   modalButtonText: {
-    color: "#fff",
+    color: COLORS.white,
     fontWeight: "bold",
   },
 
   modalButtonPressed: {
-    backgroundColor: "#0284C7",
+    backgroundColor: COLORS.primaryDark,
     transform: [{ scale: 0.98 }],
   },
 });

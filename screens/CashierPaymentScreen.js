@@ -11,7 +11,7 @@ import {
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
+  Modal,
   StyleSheet,
   ScrollView,
   StatusBar,
@@ -46,6 +46,105 @@ export default function CashierPaymentScreen({ route, navigation }) {
 
   const [loading, setLoading] = useState(false);
   const [processing, setProcessing] = useState(false);
+
+  // SWEET ALERT MODAL STATE
+  const [alertConfig, setAlertConfig] = useState({
+    visible: false,
+    title: "",
+    message: "",
+    type: "info",
+    confirmText: "OK",
+    cancelText: null,
+    onConfirm: null,
+  });
+
+  // ------------------------------------------
+  // SHOW CUSTOM ALERT
+  // ------------------------------------------
+  const showAlert = (
+    title,
+    message,
+    type = "info",
+    onConfirm = null,
+    confirmText = "OK",
+    cancelText = null
+  ) => {
+    setAlertConfig({
+      visible: true,
+      title,
+      message,
+      type,
+      confirmText,
+      cancelText,
+      onConfirm,
+    });
+  };
+
+  const closeAlert = () => {
+    setAlertConfig((previous) => ({
+      ...previous,
+      visible: false,
+      onConfirm: null,
+    }));
+  };
+
+  const confirmAlert = () => {
+    const callback = alertConfig.onConfirm;
+
+    closeAlert();
+
+    if (callback) {
+      callback();
+    }
+  };
+
+  const getAlertIcon = () => {
+    switch (alertConfig.type) {
+      case "success":
+        return "checkmark-circle";
+
+      case "error":
+        return "close-circle";
+
+      case "warning":
+        return "alert-circle";
+
+      default:
+        return "information-circle";
+    }
+  };
+
+  const getAlertColor = () => {
+    switch (alertConfig.type) {
+      case "success":
+        return COLORS.green;
+
+      case "error":
+        return COLORS.red;
+
+      case "warning":
+        return COLORS.orange;
+
+      default:
+        return COLORS.primary;
+    }
+  };
+
+  const getAlertBackground = () => {
+    switch (alertConfig.type) {
+      case "success":
+        return "#F0FDF4";
+
+      case "error":
+        return "#FEF2F2";
+
+      case "warning":
+        return "#FFFBEB";
+
+      default:
+        return "#EFF6FF";
+    }
+  };
 
   // ------------------------------------------
   // LOAD BOOKING
@@ -88,9 +187,10 @@ export default function CashierPaymentScreen({ route, navigation }) {
       } catch (error) {
         console.log("LOAD BOOKING ERROR:", error);
 
-        Alert.alert(
+        showAlert(
           "Booking Error",
-          error.message || "Unable to retrieve booking."
+          error.message || "Unable to retrieve booking.",
+          "error"
         );
       } finally {
         setLoading(false);
@@ -113,9 +213,10 @@ export default function CashierPaymentScreen({ route, navigation }) {
   // ------------------------------------------
   const findBooking = async () => {
     if (!reference.trim()) {
-      Alert.alert(
+      showAlert(
         "Required",
-        "Enter the booking reference."
+        "Enter the booking reference.",
+        "warning"
       );
       return;
     }
@@ -144,36 +245,32 @@ export default function CashierPaymentScreen({ route, navigation }) {
     if (!booking) return;
 
     if (!isPendingUnpaid) {
-      Alert.alert(
+      showAlert(
         "Cannot Process Payment",
-        "This booking is not awaiting payment."
+        "This booking is not awaiting payment.",
+        "warning"
       );
       return;
     }
 
     if (isExpired) {
-      Alert.alert(
+      showAlert(
         "Expired Booking",
-        "This reservation has expired. The passenger must book again."
+        "This reservation has expired. The passenger must book again.",
+        "error"
       );
       return;
     }
 
-    Alert.alert(
+    showAlert(
       "Confirm Fare Payment",
       `Have you received ₱${Number(
         booking.total_amount
       ).toFixed(2)} through ${paymentMethod.toUpperCase()}?`,
-      [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
-        {
-          text: "Yes, Payment Received",
-          onPress: processPayment,
-        },
-      ]
+      "warning",
+      processPayment,
+      "Yes, Payment Received",
+      "Cancel"
     );
   };
 
@@ -212,17 +309,19 @@ export default function CashierPaymentScreen({ route, navigation }) {
         payment_status: "paid",
       }));
 
-      Alert.alert(
+      showAlert(
         "Payment Successful",
-        `Fare received successfully!\n\nTicket Code:\n${data.ticket_code}`
+        `Fare received successfully!\n\nTicket Code:\n${data.ticket_code}`,
+        "success"
       );
 
     } catch (error) {
       console.log("PAYMENT ERROR:", error);
 
-      Alert.alert(
+      showAlert(
         "Payment Error",
-        error.message || "Unable to process payment."
+        error.message || "Unable to process payment.",
+        "error"
       );
 
     } finally {
@@ -680,6 +779,72 @@ export default function CashierPaymentScreen({ route, navigation }) {
           </TouchableOpacity>
         )}
       </ScrollView>
+
+      {/* SWEET ALERT STYLE MODAL */}
+      <Modal
+        visible={alertConfig.visible}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={closeAlert}
+      >
+        <View style={styles.alertOverlay}>
+          <View style={styles.alertCard}>
+            <View
+              style={[
+                styles.alertIconContainer,
+                {
+                  backgroundColor: getAlertBackground(),
+                },
+              ]}
+            >
+              <Ionicons
+                name={getAlertIcon()}
+                size={43}
+                color={getAlertColor()}
+              />
+            </View>
+
+            <Text style={styles.alertTitle}>
+              {alertConfig.title}
+            </Text>
+
+            <Text style={styles.alertMessage}>
+              {alertConfig.message}
+            </Text>
+
+            <View style={styles.alertButtonRow}>
+              {alertConfig.cancelText && (
+                <TouchableOpacity
+                  style={styles.alertCancelButton}
+                  onPress={closeAlert}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.alertCancelText}>
+                    {alertConfig.cancelText}
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              <TouchableOpacity
+                style={[
+                  styles.alertConfirmButton,
+                  {
+                    backgroundColor: getAlertColor(),
+                    flex: alertConfig.cancelText ? 1 : undefined,
+                  },
+                ]}
+                onPress={confirmAlert}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.alertConfirmText}>
+                  {alertConfig.confirmText}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1038,5 +1203,85 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     fontSize: 14,
     fontWeight: "800",
+  },
+
+  // SWEET ALERT MODAL STYLES
+  alertOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.55)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 25,
+  },
+
+  alertCard: {
+    width: "100%",
+    maxWidth: 380,
+    backgroundColor: COLORS.white,
+    borderRadius: 20,
+    padding: 25,
+    alignItems: "center",
+    elevation: 10,
+  },
+
+  alertIconContainer: {
+    width: 75,
+    height: 75,
+    borderRadius: 38,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 17,
+  },
+
+  alertTitle: {
+    fontSize: 21,
+    fontWeight: "800",
+    color: COLORS.dark,
+    textAlign: "center",
+  },
+
+  alertMessage: {
+    fontSize: 14,
+    color: COLORS.muted,
+    lineHeight: 21,
+    textAlign: "center",
+    marginTop: 10,
+    marginBottom: 24,
+  },
+
+  alertButtonRow: {
+    width: "100%",
+    flexDirection: "row",
+    gap: 10,
+  },
+
+  alertConfirmButton: {
+    minHeight: 47,
+    paddingHorizontal: 18,
+    borderRadius: 11,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  alertConfirmText: {
+    color: COLORS.white,
+    fontSize: 13,
+    fontWeight: "800",
+    textAlign: "center",
+  },
+
+  alertCancelButton: {
+    flex: 1,
+    minHeight: 47,
+    backgroundColor: "#F1F5F9",
+    borderRadius: 11,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  alertCancelText: {
+    color: COLORS.dark,
+    fontSize: 13,
+    fontWeight: "700",
   },
 });

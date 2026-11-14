@@ -11,22 +11,21 @@ import {
   ActivityIndicator,
   ScrollView,
   KeyboardAvoidingView,
-  Platform
+  Platform,
+  StatusBar,
+  Image,
 } from "react-native";
 
+import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "../config/supabase";
 
 export default function SignupScreen({ navigation }) {
-
   // FORM FIELDS
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-
-  // ACCOUNT TYPE
-  const [userLevel, setUserLevel] = useState("user");
 
   // PASSWORD VISIBILITY
   const [showPassword, setShowPassword] = useState(false);
@@ -35,10 +34,8 @@ export default function SignupScreen({ navigation }) {
   // LOADING
   const [loading, setLoading] = useState(false);
 
-
   // SIGNUP FUNCTION
   const handleSignup = async () => {
-
     // CHECK EMPTY FIELDS
     if (
       !fullName.trim() ||
@@ -47,7 +44,10 @@ export default function SignupScreen({ navigation }) {
       !password ||
       !confirmPassword
     ) {
-      Alert.alert("Missing Information", "Please fill in all fields.");
+      Alert.alert(
+        "Missing Information",
+        "Please fill in all fields."
+      );
       return;
     }
 
@@ -55,7 +55,10 @@ export default function SignupScreen({ navigation }) {
     const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
     if (!emailPattern.test(email.trim())) {
-      Alert.alert("Invalid Email", "Please enter a valid email address.");
+      Alert.alert(
+        "Invalid Email",
+        "Please enter a valid email address."
+      );
       return;
     }
 
@@ -81,14 +84,17 @@ export default function SignupScreen({ navigation }) {
 
     // CONFIRM PASSWORD
     if (password !== confirmPassword) {
-      Alert.alert("Password Mismatch", "Your passwords do not match.");
+      Alert.alert(
+        "Password Mismatch",
+        "Your passwords do not match."
+      );
       return;
     }
 
     try {
       setLoading(true);
 
-      // CREATE ACCOUNT IN SUPABASE AUTH
+      // CREATE PASSENGER ACCOUNT
       const { data, error } = await supabase.auth.signUp({
         email: email.trim().toLowerCase(),
         password: password,
@@ -97,9 +103,9 @@ export default function SignupScreen({ navigation }) {
           data: {
             full_name: fullName.trim(),
             phone: phone.trim(),
-            user_level: userLevel
-          }
-        }
+            user_level: "user",
+          },
+        },
       });
 
       if (error) {
@@ -111,13 +117,13 @@ export default function SignupScreen({ navigation }) {
       Alert.alert(
         "Registration Successful",
         data.session
-          ? `Your ${userLevel === "operator" ? "Bus Operator" : "User"} account has been created successfully.`
-          : `Your ${userLevel === "operator" ? "Bus Operator" : "User"} account has been created. Please check your email to verify your account.`,
+          ? "Your RouteX passenger account has been created successfully."
+          : "Your passenger account has been created. Please check your email to verify your account.",
         [
           {
             text: "OK",
-            onPress: () => navigation.navigate("Login")
-          }
+            onPress: () => navigation.navigate("Login"),
+          },
         ]
       );
 
@@ -132,145 +138,126 @@ export default function SignupScreen({ navigation }) {
     }
   };
 
-
   return (
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
+      <StatusBar
+        backgroundColor="#102A43"
+        barStyle="light-content"
+      />
 
       <ScrollView
         contentContainerStyle={styles.scrollContainer}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
-
         {/* HEADER */}
         <View style={styles.header}>
-          <Text style={styles.logo}>🚌</Text>
+          <Image
+            source={require("../assets/routex-logo-blue.png")}
+            style={styles.logo}
+            resizeMode="contain"
+          />
+
+          <Text style={styles.brand}>RouteX</Text>
 
           <Text style={styles.title}>Create Account</Text>
 
           <Text style={styles.subtitle}>
-            Register to start using RouteX.
+            Join RouteX and make your bus travel easier.
           </Text>
         </View>
 
-
-        {/* SIGNUP FORM */}
+        {/* FORM CARD */}
         <View style={styles.form}>
+          <View style={styles.formHeading}>
+            <Text style={styles.formTitle}>
+              Registration Details
+            </Text>
+
+            <Text style={styles.formSubtitle}>
+              Enter your information to get started.
+            </Text>
+          </View>
 
           {/* FULL NAME */}
           <Text style={styles.label}>Full Name</Text>
 
-          <TextInput
-            style={styles.input}
-            placeholder="Enter your full name"
-            placeholderTextColor="#999"
-            value={fullName}
-            onChangeText={setFullName}
-            autoCapitalize="words"
-          />
+          <View style={styles.inputContainer}>
+            <Ionicons
+              name="person-outline"
+              size={19}
+              color="#7890A8"
+            />
 
+            <TextInput
+              style={styles.input}
+              placeholder="Enter your full name"
+              placeholderTextColor="#94A3B8"
+              value={fullName}
+              onChangeText={setFullName}
+              autoCapitalize="words"
+            />
+          </View>
 
           {/* EMAIL */}
           <Text style={styles.label}>Email Address</Text>
 
-          <TextInput
-            style={styles.input}
-            placeholder="Enter your email"
-            placeholderTextColor="#999"
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
+          <View style={styles.inputContainer}>
+            <Ionicons
+              name="mail-outline"
+              size={19}
+              color="#7890A8"
+            />
 
+            <TextInput
+              style={styles.input}
+              placeholder="Enter your email"
+              placeholderTextColor="#94A3B8"
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </View>
 
           {/* PHONE NUMBER */}
           <Text style={styles.label}>Phone Number</Text>
 
-          <TextInput
-            style={styles.input}
-            placeholder="Enter your phone number"
-            placeholderTextColor="#999"
-            value={phone}
-            onChangeText={setPhone}
-            keyboardType="phone-pad"
-          />
+          <View style={styles.inputContainer}>
+            <Ionicons
+              name="call-outline"
+              size={19}
+              color="#7890A8"
+            />
 
-
-          {/* ACCOUNT TYPE */}
-          <Text style={styles.label}>Account Type</Text>
-
-          <View style={styles.roleContainer}>
-
-            {/* USER */}
-            <TouchableOpacity
-              style={[
-                styles.roleButton,
-                userLevel === "user" && styles.selectedRole
-              ]}
-              onPress={() => setUserLevel("user")}
-            >
-              <Text style={[
-                styles.roleIcon,
-                userLevel === "user" && styles.selectedRoleText
-              ]}>
-                👤
-              </Text>
-
-              <Text style={[
-                styles.roleText,
-                userLevel === "user" && styles.selectedRoleText
-              ]}>
-                User
-              </Text>
-
-              <Text style={styles.roleDescription}>
-                Book bus trips
-              </Text>
-            </TouchableOpacity>
-
-
-            {/* BUS OPERATOR */}
-            <TouchableOpacity
-              style={[
-                styles.roleButton,
-                userLevel === "operator" && styles.selectedRole
-              ]}
-              onPress={() => setUserLevel("operator")}
-            >
-              <Text style={[
-                styles.roleIcon,
-                userLevel === "operator" && styles.selectedRoleText
-              ]}>
-                🚌
-              </Text>
-
-              <Text style={[
-                styles.roleText,
-                userLevel === "operator" && styles.selectedRoleText
-              ]}>
-                Bus Operator
-              </Text>
-
-              <Text style={styles.roleDescription}>
-                Manage bus operations
-              </Text>
-            </TouchableOpacity>
-
+            <TextInput
+              style={styles.input}
+              placeholder="Enter your phone number"
+              placeholderTextColor="#94A3B8"
+              value={phone}
+              onChangeText={setPhone}
+              keyboardType="phone-pad"
+            />
           </View>
-
 
           {/* PASSWORD */}
           <Text style={styles.label}>Password</Text>
 
-          <View style={styles.passwordContainer}>
+          <View style={styles.inputContainer}>
+            <Ionicons
+              name="lock-closed-outline"
+              size={19}
+              color="#7890A8"
+            />
+
             <TextInput
-              style={styles.passwordInput}
+              style={styles.input}
               placeholder="Enter your password"
-              placeholderTextColor="#999"
+              placeholderTextColor="#94A3B8"
               value={password}
               onChangeText={setPassword}
               secureTextEntry={!showPassword}
@@ -279,22 +266,34 @@ export default function SignupScreen({ navigation }) {
 
             <TouchableOpacity
               onPress={() => setShowPassword(!showPassword)}
+              style={styles.eyeButton}
             >
-              <Text style={styles.showText}>
-                {showPassword ? "Hide" : "Show"}
-              </Text>
+              <Ionicons
+                name={
+                  showPassword
+                    ? "eye-off-outline"
+                    : "eye-outline"
+                }
+                size={21}
+                color="#64748B"
+              />
             </TouchableOpacity>
           </View>
-
 
           {/* CONFIRM PASSWORD */}
           <Text style={styles.label}>Confirm Password</Text>
 
-          <View style={styles.passwordContainer}>
+          <View style={styles.inputContainer}>
+            <Ionicons
+              name="shield-checkmark-outline"
+              size={19}
+              color="#7890A8"
+            />
+
             <TextInput
-              style={styles.passwordInput}
+              style={styles.input}
               placeholder="Confirm your password"
-              placeholderTextColor="#999"
+              placeholderTextColor="#94A3B8"
               value={confirmPassword}
               onChangeText={setConfirmPassword}
               secureTextEntry={!showConfirmPassword}
@@ -305,19 +304,26 @@ export default function SignupScreen({ navigation }) {
               onPress={() =>
                 setShowConfirmPassword(!showConfirmPassword)
               }
+              style={styles.eyeButton}
             >
-              <Text style={styles.showText}>
-                {showConfirmPassword ? "Hide" : "Show"}
-              </Text>
+              <Ionicons
+                name={
+                  showConfirmPassword
+                    ? "eye-off-outline"
+                    : "eye-outline"
+                }
+                size={21}
+                color="#64748B"
+              />
             </TouchableOpacity>
           </View>
 
-
           {/* SIGNUP BUTTON */}
           <TouchableOpacity
+            activeOpacity={0.85}
             style={[
               styles.signupButton,
-              loading && styles.disabledButton
+              loading && styles.disabledButton,
             ]}
             onPress={handleSignup}
             disabled={loading}
@@ -325,12 +331,19 @@ export default function SignupScreen({ navigation }) {
             {loading ? (
               <ActivityIndicator color="#FFFFFF" />
             ) : (
-              <Text style={styles.signupButtonText}>
-                Create Account
-              </Text>
+              <>
+                <Text style={styles.signupButtonText}>
+                  Create Account
+                </Text>
+
+                <Ionicons
+                  name="arrow-forward"
+                  size={20}
+                  color="#FFFFFF"
+                />
+              </>
             )}
           </TouchableOpacity>
-
 
           {/* LOGIN LINK */}
           <View style={styles.loginContainer}>
@@ -341,193 +354,208 @@ export default function SignupScreen({ navigation }) {
             <TouchableOpacity
               onPress={() => navigation.navigate("Login")}
             >
-              <Text style={styles.loginLink}> Log In</Text>
+              <Text style={styles.loginLink}>
+                {" "}Log In
+              </Text>
             </TouchableOpacity>
           </View>
-
         </View>
 
+        {/* FOOTER */}
+        <Text style={styles.footer}>
+          © RouteX. All rights reserved.
+        </Text>
       </ScrollView>
-
     </KeyboardAvoidingView>
   );
 }
 
-
 // STYLES
 const styles = StyleSheet.create({
-
   container: {
     flex: 1,
-    backgroundColor: "#F8FAFC"
+    backgroundColor: "#F1F5F9",
   },
 
   scrollContainer: {
     flexGrow: 1,
-    justifyContent: "center",
-    padding: 24,
-    paddingVertical: 40
+    paddingHorizontal: 22,
+    paddingTop: 35,
+    paddingBottom: 25,
   },
 
+  // HEADER
   header: {
     alignItems: "center",
-    marginBottom: 30
+    marginBottom: 27,
   },
 
   logo: {
-    fontSize: 55,
-    marginBottom: 10
+  width: 140,
+  height: 85,
+  marginBottom: 10,
+  },
+
+  brand: {
+    fontSize: 25,
+    fontWeight: "800",
+    color: "#0878D1",
+    letterSpacing: 2,
+    marginBottom: 13,
   },
 
   title: {
-    fontSize: 28,
-    fontWeight: "bold",
-    color: "#172B4D"
+    fontSize: 29,
+    fontWeight: "800",
+    color: "#102A43",
+    letterSpacing: -0.5,
   },
 
   subtitle: {
-    fontSize: 14,
+    fontSize: 13,
     color: "#64748B",
-    marginTop: 8,
-    textAlign: "center"
+    marginTop: 7,
+    textAlign: "center",
   },
 
+  // FORM
   form: {
     width: "100%",
-    maxWidth: 450,
+    maxWidth: 460,
     alignSelf: "center",
     backgroundColor: "#FFFFFF",
-    padding: 24,
-    borderRadius: 16,
+    padding: 23,
+    borderRadius: 22,
     borderWidth: 1,
-    borderColor: "#E2E8F0"
+    borderColor: "#E5EDF5",
+    elevation: 4,
+    shadowColor: "#102A43",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.07,
+    shadowRadius: 12,
+  },
+
+  formHeading: {
+    marginBottom: 12,
+  },
+
+  formTitle: {
+    fontSize: 19,
+    fontWeight: "800",
+    color: "#102A43",
+  },
+
+  formSubtitle: {
+    fontSize: 12,
+    color: "#94A3B8",
+    marginTop: 5,
   },
 
   label: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#334155",
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#334E68",
     marginBottom: 8,
-    marginTop: 14
+    marginTop: 17,
+  },
+
+  // INPUTS
+  inputContainer: {
+    height: 52,
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#DCE5EF",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    backgroundColor: "#F8FAFC",
   },
 
   input: {
-    height: 50,
-    borderWidth: 1,
-    borderColor: "#CBD5E1",
-    borderRadius: 9,
-    paddingHorizontal: 14,
-    fontSize: 14,
-    color: "#172B4D",
-    backgroundColor: "#FFFFFF"
-  },
-
-  // ACCOUNT TYPE STYLES
-  roleContainer: {
-    flexDirection: "row",
-    gap: 10
-  },
-
-  roleButton: {
     flex: 1,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: "#CBD5E1",
-    borderRadius: 9,
-    backgroundColor: "#FFFFFF",
-    alignItems: "center",
-    justifyContent: "center"
-  },
-
-  selectedRole: {
-    borderColor: "#06B6D4",
-    backgroundColor: "#ECFEFF",
-    borderWidth: 2
-  },
-
-  roleIcon: {
-    fontSize: 23,
-    marginBottom: 5
-  },
-
-  roleText: {
+    height: "100%",
+    marginLeft: 11,
     fontSize: 14,
-    fontWeight: "bold",
-    color: "#334155",
-    textAlign: "center"
+    color: "#102A43",
   },
 
-  selectedRoleText: {
-    color: "#0891B2"
+  eyeButton: {
+    padding: 5,
+    marginLeft: 5,
   },
 
-  roleDescription: {
+  // INFORMATION
+  infoContainer: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    backgroundColor: "#EFF8FF",
+    borderWidth: 1,
+    borderColor: "#D5EAFE",
+    borderRadius: 11,
+    padding: 12,
+    marginTop: 20,
+    gap: 9,
+  },
+
+  infoText: {
+    flex: 1,
     fontSize: 11,
-    color: "#64748B",
-    textAlign: "center",
-    marginTop: 5
+    lineHeight: 17,
+    color: "#35617F",
   },
 
-  // PASSWORD STYLES
-  passwordContainer: {
-    height: 50,
-    flexDirection: "row",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#CBD5E1",
-    borderRadius: 9,
-    paddingHorizontal: 14
-  },
-
-  passwordInput: {
-    flex: 1,
-    fontSize: 14,
-    color: "#172B4D"
-  },
-
-  showText: {
-    color: "#06B6D4",
-    fontWeight: "600",
-    fontSize: 13
-  },
-
-  // BUTTON STYLES
+  // SIGNUP BUTTON
   signupButton: {
-    height: 52,
-    backgroundColor: "#06B6D4",
-    borderRadius: 9,
+    height: 54,
+    backgroundColor: "#0878D1",
+    borderRadius: 13,
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 28
+    marginTop: 25,
+    gap: 10,
+    elevation: 3,
+    shadowColor: "#0878D1",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
   },
 
   disabledButton: {
-    opacity: 0.6
+    opacity: 0.6,
   },
 
   signupButtonText: {
     color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "bold"
+    fontSize: 15,
+    fontWeight: "800",
   },
 
-  // LOGIN LINK
+  // LOGIN
   loginContainer: {
     flexDirection: "row",
     justifyContent: "center",
-    marginTop: 22,
-    flexWrap: "wrap"
+    alignItems: "center",
+    marginTop: 23,
+    flexWrap: "wrap",
   },
 
   loginText: {
     color: "#64748B",
-    fontSize: 14
+    fontSize: 13,
   },
 
   loginLink: {
-    color: "#06B6D4",
-    fontSize: 14,
-    fontWeight: "bold"
-  }
+    color: "#0878D1",
+    fontSize: 13,
+    fontWeight: "800",
+  },
 
+  // FOOTER
+  footer: {
+    textAlign: "center",
+    color: "#94A3B8",
+    fontSize: 11,
+    marginTop: 22,
+  },
 });

@@ -12,7 +12,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
+  Modal,
   StatusBar,
   useWindowDimensions,
 } from "react-native";
@@ -42,6 +42,129 @@ const COLORS = {
   success: "#22C55E",
 };
 
+// ------------------------------------------
+// SWEET ALERT COMPONENT
+// ------------------------------------------
+
+const SweetAlert = ({
+  visible,
+  title,
+  message,
+  type = "info",
+  confirmText = "OK",
+  cancelText = null,
+  onConfirm,
+  onCancel,
+}) => {
+  const getColor = () => {
+    switch (type) {
+      case "success":
+        return "#16A34A";
+      case "error":
+        return "#DC2626";
+      case "warning":
+        return "#D97706";
+      default:
+        return "#2563EB";
+    }
+  };
+
+  const getBackground = () => {
+    switch (type) {
+      case "success":
+        return "#F0FDF4";
+      case "error":
+        return "#FEF2F2";
+      case "warning":
+        return "#FFFBEB";
+      default:
+        return "#EFF6FF";
+    }
+  };
+
+  const getIcon = () => {
+    switch (type) {
+      case "success":
+        return "checkmark-circle";
+      case "error":
+        return "close-circle";
+      case "warning":
+        return "alert-circle";
+      default:
+        return "information-circle";
+    }
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      statusBarTranslucent
+      onRequestClose={onCancel}
+    >
+      <View style={styles.alertOverlay}>
+        <View style={styles.alertCard}>
+          <View
+            style={[
+              styles.alertIconContainer,
+              { backgroundColor: getBackground() },
+            ]}
+          >
+            <Ionicons
+              name={getIcon()}
+              size={43}
+              color={getColor()}
+            />
+          </View>
+
+          <Text style={styles.alertTitle}>
+            {title}
+          </Text>
+
+          <Text style={styles.alertMessage}>
+            {message}
+          </Text>
+
+          <View style={styles.alertButtonRow}>
+            {cancelText && (
+              <TouchableOpacity
+                style={styles.alertCancelButton}
+                onPress={onCancel}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.alertCancelText}>
+                  {cancelText}
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity
+              style={[
+                styles.alertConfirmButton,
+                {
+                  backgroundColor: getColor(),
+                  flex: cancelText ? 1 : undefined,
+                },
+              ]}
+              onPress={onConfirm}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.alertConfirmText}>
+                {confirmText}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
+// ------------------------------------------
+// MAIN SCREEN
+// ------------------------------------------
+
 const CashierQRScannerScreen = ({ navigation }) => {
   const isFocused = useIsFocused();
 
@@ -59,6 +182,17 @@ const CashierQRScannerScreen = ({ navigation }) => {
   const [processing, setProcessing] = useState(false);
   const [scannerEnabled, setScannerEnabled] = useState(true);
 
+  // SWEET ALERT STATE
+  const [alertConfig, setAlertConfig] = useState({
+    visible: false,
+    title: "",
+    message: "",
+    type: "info",
+    confirmText: "OK",
+    cancelText: null,
+    onConfirm: null,
+  });
+
   const scanLock = useRef(false);
   const mounted = useRef(true);
   const processingRef = useRef(false);
@@ -69,6 +203,60 @@ const CashierQRScannerScreen = ({ navigation }) => {
   const cameraHeight = Math.min(
     420,
     Math.max(280, height * 0.52)
+  );
+
+  // ------------------------------------------
+  // SWEET ALERT FUNCTIONS
+  // ------------------------------------------
+
+  const showAlert = (
+    title,
+    message,
+    type = "info",
+    onConfirm = null,
+    confirmText = "OK",
+    cancelText = null
+  ) => {
+    setAlertConfig({
+      visible: true,
+      title,
+      message,
+      type,
+      confirmText,
+      cancelText,
+      onConfirm,
+    });
+  };
+
+  const closeAlert = () => {
+    setAlertConfig((previous) => ({
+      ...previous,
+      visible: false,
+      onConfirm: null,
+    }));
+  };
+
+  const confirmAlert = () => {
+    const callback = alertConfig.onConfirm;
+
+    closeAlert();
+
+    if (callback) {
+      callback();
+    }
+  };
+
+  const alertModal = (
+    <SweetAlert
+      visible={alertConfig.visible}
+      title={alertConfig.title}
+      message={alertConfig.message}
+      type={alertConfig.type}
+      confirmText={alertConfig.confirmText}
+      cancelText={alertConfig.cancelText}
+      onConfirm={confirmAlert}
+      onCancel={closeAlert}
+    />
   );
 
   // ------------------------------------------
@@ -132,19 +320,15 @@ const CashierQRScannerScreen = ({ navigation }) => {
         if (!cancelled && mounted.current) {
           setAuthorized(false);
 
-          Alert.alert(
+          showAlert(
             "Access Denied",
             error.message || "Unable to verify your account.",
-            [
-              {
-                text: "OK",
-                onPress: () => {
-                  if (mounted.current) {
-                    navigation.goBack();
-                  }
-                },
-              },
-            ]
+            "error",
+            () => {
+              if (mounted.current) {
+                navigation.goBack();
+              }
+            }
           );
         }
       } finally {
@@ -271,24 +455,21 @@ const CashierQRScannerScreen = ({ navigation }) => {
 
         if (!mounted.current) return;
 
-        Alert.alert(
+        showAlert(
           "Scan Failed",
           error.message || "Unable to retrieve booking.",
-          [
-            {
-              text: "Try Again",
-              onPress: () => {
-                if (!mounted.current) return;
+          "error",
+          () => {
+            if (!mounted.current) return;
 
-                scanLock.current = false;
-                processingRef.current = false;
-                navigationLock.current = false;
+            scanLock.current = false;
+            processingRef.current = false;
+            navigationLock.current = false;
 
-                setProcessing(false);
-                setScannerEnabled(true);
-              },
-            },
-          ]
+            setProcessing(false);
+            setScannerEnabled(true);
+          },
+          "Try Again"
         );
       }
     },
@@ -304,17 +485,19 @@ const CashierQRScannerScreen = ({ navigation }) => {
       const result = await requestPermission();
 
       if (!result.granted) {
-        Alert.alert(
+        showAlert(
           "Permission Required",
-          "Please allow RouteX to use your camera in Android settings."
+          "Please allow RouteX to use your camera in Android settings.",
+          "warning"
         );
       }
     } catch (error) {
       console.log("CAMERA PERMISSION ERROR:", error);
 
-      Alert.alert(
+      showAlert(
         "Camera Error",
-        error.message || "Unable to request camera permission."
+        error.message || "Unable to request camera permission.",
+        "error"
       );
     }
   };
@@ -364,6 +547,8 @@ const CashierQRScannerScreen = ({ navigation }) => {
             ? "Checking cashier account..."
             : "Checking camera permission..."}
         </Text>
+
+        {alertModal}
       </View>
     );
   }
@@ -397,6 +582,8 @@ const CashierQRScannerScreen = ({ navigation }) => {
             Go Back
           </Text>
         </TouchableOpacity>
+
+        {alertModal}
       </View>
     );
   }
@@ -430,6 +617,8 @@ const CashierQRScannerScreen = ({ navigation }) => {
             Allow Camera
           </Text>
         </TouchableOpacity>
+
+        {alertModal}
       </View>
     );
   }
@@ -493,10 +682,7 @@ const CashierQRScannerScreen = ({ navigation }) => {
             { height: cameraHeight },
           ]}
         >
-          {/* 
-            Keep CameraView mounted while the screen is focused.
-            Disable barcode detection instead of unmounting it.
-          */}
+          {/* Keep CameraView mounted while focused. */}
 
           {isFocused && !cameraError && (
             <CameraView
@@ -695,6 +881,8 @@ const CashierQRScannerScreen = ({ navigation }) => {
             </TouchableOpacity>
           )}
       </View>
+
+      {alertModal}
     </View>
   );
 };
@@ -981,5 +1169,86 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontWeight: "bold",
     fontSize: 14,
+  },
+
+  // SWEET ALERT
+
+  alertOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.65)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 25,
+  },
+
+  alertCard: {
+    width: "100%",
+    maxWidth: 380,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    padding: 25,
+    alignItems: "center",
+    elevation: 10,
+  },
+
+  alertIconContainer: {
+    width: 75,
+    height: 75,
+    borderRadius: 38,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 17,
+  },
+
+  alertTitle: {
+    fontSize: 21,
+    fontWeight: "800",
+    color: "#172B4D",
+    textAlign: "center",
+  },
+
+  alertMessage: {
+    fontSize: 14,
+    color: "#64748B",
+    lineHeight: 21,
+    textAlign: "center",
+    marginTop: 10,
+    marginBottom: 24,
+  },
+
+  alertButtonRow: {
+    width: "100%",
+    flexDirection: "row",
+    gap: 10,
+  },
+
+  alertConfirmButton: {
+    minHeight: 47,
+    paddingHorizontal: 18,
+    borderRadius: 11,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  alertConfirmText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "800",
+    textAlign: "center",
+  },
+
+  alertCancelButton: {
+    flex: 1,
+    minHeight: 47,
+    backgroundColor: "#F1F5F9",
+    borderRadius: 11,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  alertCancelText: {
+    color: "#172B4D",
+    fontSize: 13,
+    fontWeight: "700",
   },
 });

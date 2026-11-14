@@ -1,9 +1,5 @@
 
-import React, {
-  useCallback,
-  useEffect,
-  useState,
-} from "react";
+import React, { useCallback, useEffect, useState } from "react";
 
 import {
   View,
@@ -11,33 +7,77 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
+  TextInput,
+  Image,
   ActivityIndicator,
-  Alert,
   RefreshControl,
   StatusBar,
 } from "react-native";
 
-import {
-  Ionicons,
-  MaterialCommunityIcons,
-} from "@expo/vector-icons";
-
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { supabase } from "../config/supabase";
+import CustomAlert from "../components/CustomAlert";
 
-// Prevent duplicate Realtime channel names.
+const COLORS = {
+  primary: "#1677D2",
+  primaryDark: "#105BA8",
+  primaryLight: "#E8F3FF",
+  background: "#F4F7FB",
+  white: "#FFFFFF",
+  text: "#142238",
+  secondary: "#718096",
+  border: "#E5EAF1",
+  green: "#16A34A",
+  greenLight: "#DCFCE7",
+  orange: "#D97706",
+  orangeLight: "#FEF3C7",
+  red: "#DC2626",
+  redLight: "#FEE2E2",
+};
+
 let busListChannelCounter = 0;
 
 export default function BusListScreen({ navigation, route }) {
-  const company = route?.params?.company;
+  const company = route?.params?.company || "";
+  const companyLogo = route?.params?.logoUrl || null;
 
   const [buses, setBuses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectingBus, setSelectingBus] = useState(null);
+  const [search, setSearch] = useState("");
 
-  // Load the active trip of a bus.
-  const getActiveTrip = useCallback(async (busIds) => {
-    if (!busIds.length) return new Map();
+  // CUSTOM ALERT STATE
+  const [alertData, setAlertData] = useState({
+    visible: false,
+    title: "",
+    message: "",
+    type: "error",
+  });
+
+  // SHOW CUSTOM ALERT
+  const showAlert = (title, message, type = "error") => {
+    setAlertData({
+      visible: true,
+      title,
+      message,
+      type,
+    });
+  };
+
+  // CLOSE CUSTOM ALERT
+  const closeAlert = () => {
+    setAlertData((previous) => ({
+      ...previous,
+      visible: false,
+    }));
+  };
+
+  // GET ACTIVE TRIPS
+  const getActiveTrip = async (busIds) => {
+    if (!busIds || busIds.length === 0) {
+      return new Map();
+    }
 
     const { data, error } = await supabase
       .from("bus_trips")
@@ -46,20 +86,25 @@ export default function BusListScreen({ navigation, route }) {
       .eq("status", "active")
       .order("started_at", { ascending: false });
 
-    if (error) throw error;
+    if (error) {
+      console.log("Active trip error:", error.message);
+      return new Map();
+    }
 
     const tripMap = new Map();
 
     (data || []).forEach((trip) => {
-      if (!tripMap.has(String(trip.bus_id))) {
-        tripMap.set(String(trip.bus_id), trip);
+      const key = String(trip.bus_id);
+
+      if (!tripMap.has(key)) {
+        tripMap.set(key, trip);
       }
     });
 
     return tripMap;
-  }, []);
+  };
 
-  // Load buses for the selected company.
+  // LOAD BUSES
   const loadBuses = useCallback(async () => {
     try {
       if (!company) {
@@ -85,62 +130,40 @@ export default function BusListScreen({ navigation, route }) {
 
       if (error) throw error;
 
-      const busRows = data || [];
-      const busIds = busRows.map((bus) => bus.bus_id);
+      const busData = data || [];
+      const busIds = busData.map((bus) => bus.bus_id);
 
       const tripMap = await getActiveTrip(busIds);
 
-      const combined = busRows.map((bus) => ({
+      const updatedBuses = busData.map((bus) => ({
         ...bus,
         active_trip: tripMap.get(String(bus.bus_id)) || null,
       }));
 
-      setBuses(combined);
+      setBuses(updatedBuses);
     } catch (error) {
-      console.log("LOAD BUSES ERROR:", error);
+      console.log("Load buses error:", error.message);
 
-      Alert.alert(
-        "Loading Error",
-        error.message || "Unable to load company buses."
+      showAlert(
+        "Error",
+        "Unable to load buses. Please try again.",
+        "error"
       );
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [company, getActiveTrip]);
+  }, [company]);
 
-  // Initial load and Realtime updates.
+  // REALTIME UPDATES
   useEffect(() => {
-    let isMounted = true;
-    let refreshTimeout = null;
+    let mounted = true;
+    let refreshTimeout;
 
-    const channelId =
-      `${Date.now()}-${++busListChannelCounter}`;
+    const channelId = ++busListChannelCounter;
 
-    const companyName = String(company || "all")
-      .replace(/[^a-zA-Z0-9_-]/g, "-");
-
-    setLoading(true);
-
-    const refreshBuses = () => {
-      if (!isMounted) return;
-
-      if (refreshTimeout) {
-        clearTimeout(refreshTimeout);
-      }
-
-      refreshTimeout = setTimeout(() => {
-        if (isMounted) {
-          loadBuses();
-        }
-      }, 300);
-    };
-
-    loadBuses();
-
-    // Register callbacks before subscribing.
     const busesChannel = supabase
-      .channel(`bus-list-buses-${companyName}-${channelId}`)
+      .channel(`bus-list-${channelId}`)
       .on(
         "postgres_changes",
         {
@@ -148,11 +171,20 @@ export default function BusListScreen({ navigation, route }) {
           schema: "public",
           table: "buses",
         },
-        refreshBuses
-      );
+        () => {
+          if (mounted) {
+            clearTimeout(refreshTimeout);
+
+            refreshTimeout = setTimeout(() => {
+              if (mounted) loadBuses();
+            }, 300);
+          }
+        }
+      )
+      .subscribe();
 
     const tripsChannel = supabase
-      .channel(`bus-list-trips-${companyName}-${channelId}`)
+      .channel(`bus-trips-list-${channelId}`)
       .on(
         "postgres_changes",
         {
@@ -160,51 +192,44 @@ export default function BusListScreen({ navigation, route }) {
           schema: "public",
           table: "bus_trips",
         },
-        refreshBuses
-      );
+        () => {
+          if (mounted) {
+            clearTimeout(refreshTimeout);
 
-    busesChannel.subscribe((status, error) => {
-      console.log("BUS LIST BUSES REALTIME:", status);
+            refreshTimeout = setTimeout(() => {
+              if (mounted) loadBuses();
+            }, 300);
+          }
+        }
+      )
+      .subscribe();
 
-      if (error) {
-        console.log("BUS LIST BUSES REALTIME ERROR:", error);
-      }
-    });
-
-    tripsChannel.subscribe((status, error) => {
-      console.log("BUS LIST TRIPS REALTIME:", status);
-
-      if (error) {
-        console.log("BUS LIST TRIPS REALTIME ERROR:", error);
-      }
-    });
+    loadBuses();
 
     return () => {
-      isMounted = false;
-
-      if (refreshTimeout) {
-        clearTimeout(refreshTimeout);
-      }
+      mounted = false;
+      clearTimeout(refreshTimeout);
 
       supabase.removeChannel(busesChannel);
       supabase.removeChannel(tripsChannel);
     };
-  }, [company, loadBuses]);
+  }, [loadBuses]);
 
-  // Manual refresh.
+  // REFRESH
   const handleRefresh = () => {
     setRefreshing(true);
     loadBuses();
   };
 
-  // Verify bus and docking information before opening booking.
+  // SELECT BUS
   const selectBus = async (bus) => {
     if (bus.availability_status !== "available") {
-      Alert.alert(
-        "Booking Unavailable",
+      showAlert(
+        "Bus Unavailable",
         bus.availability_status === "standing"
-          ? "This bus is currently standing. You cannot reserve a seat on it."
-          : "This bus is currently not available."
+          ? "This bus is currently standing by and cannot be booked."
+          : "This bus is currently unavailable.",
+        "warning"
       );
 
       return;
@@ -213,136 +238,177 @@ export default function BusListScreen({ navigation, route }) {
     try {
       setSelectingBus(bus.bus_id);
 
-      const { data: currentBus, error: busError } = await supabase
-        .from("buses")
-        .select(`
-          bus_id,
-          bus_name,
-          plate_number,
-          bus_type,
-          capacity,
-          company,
-          bus_status,
-          availability_status
-        `)
-        .eq("bus_id", bus.bus_id)
-        .maybeSingle();
+      // VERIFY CURRENT BUS INFORMATION
+      const { data: currentBus, error: busError } =
+        await supabase
+          .from("buses")
+          .select(`
+            bus_id,
+            bus_name,
+            plate_number,
+            bus_type,
+            capacity,
+            company,
+            bus_status,
+            availability_status
+          `)
+          .eq("bus_id", bus.bus_id)
+          .maybeSingle();
 
       if (busError) throw busError;
 
-      if (!currentBus || currentBus.bus_status !== "docked") {
-        Alert.alert(
-          "Bus No Longer Docked",
-          "This bus is no longer at the terminal. Please refresh the list."
+      if (!currentBus) {
+        showAlert(
+          "Bus Not Found",
+          "This bus is no longer available.",
+          "warning"
         );
 
-        await loadBuses();
+        loadBuses();
+        return;
+      }
+
+      if (currentBus.bus_status !== "docked") {
+        showAlert(
+          "Bus Not Available",
+          "This bus is no longer docked at the terminal.",
+          "warning"
+        );
+
+        loadBuses();
         return;
       }
 
       if (currentBus.availability_status !== "available") {
-        Alert.alert(
-          "Booking Unavailable",
-          "The bus availability has changed. Please select another bus."
+        showAlert(
+          "Bus Unavailable",
+          "This bus has already been reserved or is unavailable.",
+          "warning"
         );
 
-        await loadBuses();
+        loadBuses();
         return;
       }
 
-      const { data: docking, error: dockingError } = await supabase
-        .from("bus_docking")
-        .select(`
-          docking_id,
-          bus_id,
-          terminal_id,
-          terminal_name,
-          trip_id,
-          docking_status,
-          docked_at
-        `)
-        .eq("bus_id", currentBus.bus_id)
-        .eq("docking_status", "docked")
-        .order("docked_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      // GET LATEST DOCKING INFORMATION
+      const { data: docking, error: dockingError } =
+        await supabase
+          .from("bus_docking")
+          .select(`
+            docking_id,
+            bus_id,
+            terminal_id,
+            terminal_name,
+            trip_id,
+            docking_status,
+            docked_at
+          `)
+          .eq("bus_id", currentBus.bus_id)
+          .eq("docking_status", "docked")
+          .order("docked_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
 
       if (dockingError) throw dockingError;
 
       if (!docking) {
-        Alert.alert(
-          "Docking Information Missing",
-          "No active docking record was found for this bus."
+        showAlert(
+          "No Docking Information",
+          "This bus does not have an active docking record.",
+          "warning"
         );
 
-        await loadBuses();
+        loadBuses();
         return;
       }
 
+      // NAVIGATE TO TERMINAL BOOKING
       navigation.navigate("TerminalBooking", {
         busId: currentBus.bus_id,
         dockingId: docking.docking_id,
         terminalId: docking.terminal_id,
       });
-
     } catch (error) {
-      console.log("SELECT BUS ERROR:", error);
+      console.log("Select bus error:", error.message);
 
-      Alert.alert(
-        "Booking Error",
-        error.message || "Unable to proceed with booking."
+      showAlert(
+        "Error",
+        "Unable to select this bus. Please try again.",
+        "error"
       );
     } finally {
       setSelectingBus(null);
     }
   };
 
-  // Bus availability badge.
+  // BUS STATUS
   const getStatus = (status) => {
     if (status === "available") {
       return {
         label: "AVAILABLE",
-        color: "#15803D",
-        background: "#DCFCE7",
-        dot: "#16A34A",
+        color: COLORS.green,
+        background: COLORS.greenLight,
+        icon: "checkmark-circle",
       };
     }
 
     if (status === "standing") {
       return {
         label: "STANDING",
-        color: "#B45309",
-        background: "#FEF3C7",
-        dot: "#F59E0B",
+        color: COLORS.orange,
+        background: COLORS.orangeLight,
+        icon: "time",
       };
     }
 
     return {
       label: "NOT AVAILABLE",
-      color: "#B91C1C",
-      background: "#FEE2E2",
-      dot: "#EF4444",
+      color: COLORS.red,
+      background: COLORS.redLight,
+      icon: "close-circle",
     };
   };
 
-  // Render each bus.
+  // SEARCH FILTER
+  const filteredBuses = buses.filter((bus) => {
+    const keyword = search.trim().toLowerCase();
+
+    if (!keyword) return true;
+
+    return (
+      bus.bus_name?.toLowerCase().includes(keyword) ||
+      bus.plate_number?.toLowerCase().includes(keyword) ||
+      bus.bus_type?.toLowerCase().includes(keyword) ||
+      bus.active_trip?.destination?.toLowerCase().includes(keyword)
+    );
+  });
+
+  // BUS COUNTS
+  const availableCount = buses.filter(
+    (bus) => bus.availability_status === "available"
+  ).length;
+
+  const standingCount = buses.filter(
+    (bus) => bus.availability_status === "standing"
+  ).length;
+
+  // BUS CARD
   const renderBus = ({ item }) => {
     const status = getStatus(item.availability_status);
 
     const isAvailable =
       item.availability_status === "available";
 
-    const isSelecting =
-      selectingBus === item.bus_id;
+    const isSelecting = selectingBus === item.bus_id;
 
     return (
       <View style={styles.busCard}>
-        <View style={styles.busHeader}>
-          <View style={styles.busIcon}>
+        <View style={styles.busTopRow}>
+          <View style={styles.busIconContainer}>
             <MaterialCommunityIcons
               name="bus"
-              size={29}
-              color="#0891B2"
+              size={27}
+              color={COLORS.primary}
             />
           </View>
 
@@ -352,7 +418,7 @@ export default function BusListScreen({ navigation, route }) {
             </Text>
 
             <Text style={styles.plateNumber}>
-              {item.plate_number || "No plate number"}
+              {item.plate_number || "Plate number unavailable"}
             </Text>
           </View>
 
@@ -362,11 +428,10 @@ export default function BusListScreen({ navigation, route }) {
               { backgroundColor: status.background },
             ]}
           >
-            <View
-              style={[
-                styles.statusDot,
-                { backgroundColor: status.dot },
-              ]}
+            <Ionicons
+              name={status.icon}
+              size={12}
+              color={status.color}
             />
 
             <Text
@@ -380,86 +445,99 @@ export default function BusListScreen({ navigation, route }) {
           </View>
         </View>
 
+        <View style={styles.busDivider} />
+
+        {/* BUS DETAILS */}
         <View style={styles.detailsRow}>
           <View style={styles.detailItem}>
             <Ionicons
               name="bus-outline"
-              size={16}
-              color="#64748B"
+              size={17}
+              color={COLORS.secondary}
             />
 
-            <Text style={styles.detailText}>
-              {item.bus_type || "Regular"}
-            </Text>
+            <View>
+              <Text style={styles.detailLabel}>Bus Type</Text>
+              <Text style={styles.detailValue}>
+                {item.bus_type || "Not specified"}
+              </Text>
+            </View>
           </View>
 
           <View style={styles.detailItem}>
             <Ionicons
               name="people-outline"
-              size={16}
-              color="#64748B"
+              size={17}
+              color={COLORS.secondary}
             />
 
-            <Text style={styles.detailText}>
-              {item.capacity || 0} seats
+            <View>
+              <Text style={styles.detailLabel}>Capacity</Text>
+              <Text style={styles.detailValue}>
+                {item.capacity || "N/A"} seats
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* CURRENT TRIP */}
+        <View style={styles.tripContainer}>
+          <View style={styles.tripIcon}>
+            <Ionicons
+              name="navigate"
+              size={15}
+              color={COLORS.primary}
+            />
+          </View>
+
+          <View style={styles.tripTextContainer}>
+            <Text style={styles.tripLabel}>
+              CURRENT DESTINATION
+            </Text>
+
+            <Text style={styles.tripDestination}>
+              {item.active_trip?.destination || "No active trip"}
             </Text>
           </View>
         </View>
 
-        {item.active_trip?.destination ? (
-          <View style={styles.destinationRow}>
-            <Ionicons
-              name="navigate-circle-outline"
-              size={18}
-              color="#0891B2"
-            />
-
-            <Text style={styles.destinationText}>
-              Destination: {item.active_trip.destination}
-            </Text>
-          </View>
-        ) : (
-          <View style={styles.destinationRow}>
-            <Ionicons
-              name="information-circle-outline"
-              size={18}
-              color="#94A3B8"
-            />
-
-            <Text style={styles.noTripText}>
-              No active trip information
-            </Text>
-          </View>
-        )}
-
-        <View style={styles.cardDivider} />
-
+        {/* BOOK BUTTON */}
         <TouchableOpacity
           style={[
             styles.bookButton,
-            !isAvailable && styles.disabledButton,
+            !isAvailable && styles.disabledBookButton,
           ]}
+          disabled={!isAvailable || isSelecting}
           onPress={() => selectBus(item)}
-          disabled={!isAvailable || selectingBus !== null}
           activeOpacity={0.85}
         >
           {isSelecting ? (
-            <ActivityIndicator color="#FFFFFF" />
+            <ActivityIndicator
+              size="small"
+              color={COLORS.white}
+            />
           ) : (
             <>
-              <Ionicons
-                name="ticket-outline"
-                size={19}
-                color="#FFFFFF"
-              />
-
-              <Text style={styles.bookButtonText}>
+              <Text
+                style={[
+                  styles.bookButtonText,
+                  !isAvailable && styles.disabledBookButtonText,
+                ]}
+              >
                 {isAvailable
                   ? "Book This Bus"
-                  : item.availability_status === "standing"
-                    ? "Standing"
-                    : "Not Available"}
+                  : "Currently Unavailable"}
               </Text>
+
+              <Ionicons
+                name="arrow-forward"
+                size={18}
+                color={
+                  isAvailable
+                    ? COLORS.white
+                    : COLORS.secondary
+                }
+              />
             </>
           )}
         </TouchableOpacity>
@@ -467,28 +545,36 @@ export default function BusListScreen({ navigation, route }) {
     );
   };
 
-  // Loading screen.
+  // LOADING SCREEN
   if (loading) {
     return (
-      <View style={styles.center}>
+      <View style={styles.loadingContainer}>
+        <StatusBar
+          backgroundColor={COLORS.white}
+          barStyle="dark-content"
+        />
+
         <ActivityIndicator
           size="large"
-          color="#06B6D4"
+          color={COLORS.primary}
         />
 
         <Text style={styles.loadingText}>
-          Loading {company || "company"} buses...
+          Loading company buses...
         </Text>
       </View>
     );
   }
 
-  // Main screen.
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" />
+      <StatusBar
+        backgroundColor={COLORS.white}
+        barStyle="dark-content"
+      />
 
-      <View style={styles.header}>
+      {/* COMPANY HEADER WITH LOGO */}
+      <View style={styles.companyHeader}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => navigation.goBack()}
@@ -496,17 +582,36 @@ export default function BusListScreen({ navigation, route }) {
           <Ionicons
             name="arrow-back"
             size={22}
-            color="#0F172A"
+            color={COLORS.text}
           />
         </TouchableOpacity>
 
-        <View style={styles.headerInfo}>
-          <Text style={styles.headerTitle}>
-            {company || "Company Buses"}
+        {companyLogo ? (
+          <Image
+            source={{ uri: companyLogo }}
+            style={styles.companyHeaderLogo}
+            resizeMode="contain"
+          />
+        ) : (
+          <View style={styles.companyHeaderLogoPlaceholder}>
+            <MaterialCommunityIcons
+              name="bus"
+              size={25}
+              color={COLORS.primary}
+            />
+          </View>
+        )}
+
+        <View style={styles.headerTextContainer}>
+          <Text
+            style={styles.companyTitle}
+            numberOfLines={1}
+          >
+            {company}
           </Text>
 
-          <Text style={styles.headerSubtitle}>
-            Docked buses at the terminal
+          <Text style={styles.companySubtitle}>
+            Available buses at the terminal
           </Text>
         </View>
 
@@ -516,71 +621,199 @@ export default function BusListScreen({ navigation, route }) {
         >
           <Ionicons
             name="refresh"
-            size={21}
-            color="#0891B2"
+            size={20}
+            color={COLORS.primary}
           />
         </TouchableOpacity>
       </View>
 
-      <View style={styles.summaryCard}>
-        <View>
-          <Text style={styles.summaryLabel}>
-            Registered docked buses
-          </Text>
-
-          <Text style={styles.summaryNumber}>
-            {buses.length}
-          </Text>
-        </View>
-
-        <MaterialCommunityIcons
-          name="bus-multiple"
-          size={42}
-          color="#0891B2"
-        />
-      </View>
-
       <FlatList
-        data={buses}
+        data={filteredBuses}
         keyExtractor={(item) => String(item.bus_id)}
         renderItem={renderBus}
-        contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.listContent}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            colors={["#06B6D4"]}
+            colors={[COLORS.primary]}
+            tintColor={COLORS.primary}
           />
         }
+        ListHeaderComponent={
+          <View>
+            {/* BUS STATISTICS */}
+            <View style={styles.statsCard}>
+              <View style={styles.statsHeader}>
+                <View>
+                  <Text style={styles.statsTitle}>
+                    Bus Overview
+                  </Text>
+
+                  <Text style={styles.statsSubtitle}>
+                    {buses.length} docked buses
+                  </Text>
+                </View>
+
+                <View style={styles.statsIcon}>
+                  <MaterialCommunityIcons
+                    name="bus-multiple"
+                    size={23}
+                    color={COLORS.primary}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.statsDivider} />
+
+              <View style={styles.statsRow}>
+                <View style={styles.statItem}>
+                  <Text style={styles.statNumber}>
+                    {buses.length}
+                  </Text>
+                  <Text style={styles.statLabel}>
+                    Total Buses
+                  </Text>
+                </View>
+
+                <View style={styles.statVerticalDivider} />
+
+                <View style={styles.statItem}>
+                  <Text
+                    style={[
+                      styles.statNumber,
+                      { color: COLORS.green },
+                    ]}
+                  >
+                    {availableCount}
+                  </Text>
+                  <Text style={styles.statLabel}>
+                    Available
+                  </Text>
+                </View>
+
+                <View style={styles.statVerticalDivider} />
+
+                <View style={styles.statItem}>
+                  <Text
+                    style={[
+                      styles.statNumber,
+                      { color: COLORS.orange },
+                    ]}
+                  >
+                    {standingCount}
+                  </Text>
+                  <Text style={styles.statLabel}>
+                    Standing
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            {/* SEARCH */}
+            <View style={styles.searchContainer}>
+              <Ionicons
+                name="search"
+                size={20}
+                color={COLORS.secondary}
+              />
+
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search bus name, plate number..."
+                placeholderTextColor="#9AA6B5"
+                value={search}
+                onChangeText={setSearch}
+              />
+
+              {search.length > 0 && (
+                <TouchableOpacity
+                  onPress={() => setSearch("")}
+                >
+                  <Ionicons
+                    name="close-circle"
+                    size={19}
+                    color={COLORS.secondary}
+                  />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* SECTION TITLE */}
+            <View style={styles.sectionHeader}>
+              <View>
+                <Text style={styles.sectionTitle}>
+                  Docked Buses
+                </Text>
+
+                <Text style={styles.sectionSubtitle}>
+                  Select an available bus to continue
+                </Text>
+              </View>
+
+              <View style={styles.countBadge}>
+                <Text style={styles.countText}>
+                  {filteredBuses.length}
+                </Text>
+              </View>
+            </View>
+          </View>
+        }
         ListEmptyComponent={
-          <View style={styles.emptyCard}>
-            <MaterialCommunityIcons
-              name="bus-alert"
-              size={48}
-              color="#94A3B8"
-            />
+          <View style={styles.emptyContainer}>
+            <View style={styles.emptyIcon}>
+              <MaterialCommunityIcons
+                name="bus-alert"
+                size={38}
+                color={COLORS.secondary}
+              />
+            </View>
 
             <Text style={styles.emptyTitle}>
-              No Docked Buses
+              {search ? "No Matching Buses" : "No Docked Buses"}
             </Text>
 
-            <Text style={styles.emptyText}>
-              There are currently no docked buses for{" "}
-              {company || "this company"}.
-              Pull down to refresh.
+            <Text style={styles.emptySubtitle}>
+              {search
+                ? "Try searching with a different bus name or plate number."
+                : "There are currently no docked buses for this company."}
             </Text>
 
             <TouchableOpacity
-              style={styles.retryButton}
-              onPress={handleRefresh}
+              style={styles.emptyButton}
+              onPress={search ? () => setSearch("") : handleRefresh}
             >
-              <Text style={styles.retryText}>
-                Refresh Buses
+              <Text style={styles.emptyButtonText}>
+                {search ? "Clear Search" : "Refresh List"}
               </Text>
             </TouchableOpacity>
           </View>
         }
+        ListFooterComponent={
+          buses.length > 0 ? (
+            <View style={styles.footer}>
+              <Ionicons
+                name="sync-circle-outline"
+                size={17}
+                color={COLORS.secondary}
+              />
+
+              <Text style={styles.footerText}>
+                Bus availability is updated in real time.
+              </Text>
+            </View>
+          ) : null
+        }
+      />
+
+      {/* CUSTOM SWEETALERT-STYLE MODAL */}
+      <CustomAlert
+        visible={alertData.visible}
+        title={alertData.title}
+        message={alertData.message}
+        type={alertData.type}
+        onClose={closeAlert}
       />
     </View>
   );
@@ -589,147 +822,273 @@ export default function BusListScreen({ navigation, route }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F1F5F9",
+    backgroundColor: COLORS.background,
   },
 
-  center: {
+  loadingContainer: {
     flex: 1,
-    justifyContent: "center",
+    backgroundColor: COLORS.background,
     alignItems: "center",
-    backgroundColor: "#F1F5F9",
+    justifyContent: "center",
   },
 
   loadingText: {
-    color: "#64748B",
-    marginTop: 12,
+    marginTop: 14,
+    fontSize: 14,
+    color: COLORS.secondary,
+    fontWeight: "500",
   },
 
-  header: {
+  // COMPANY HEADER
+  companyHeader: {
+    backgroundColor: COLORS.white,
+    paddingHorizontal: 18,
+    paddingTop: 15,
+    paddingBottom: 17,
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 17,
-    paddingTop: 15,
-    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
   },
 
   backButton: {
-    width: 43,
-    height: 43,
+    width: 42,
+    height: 42,
     borderRadius: 13,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: COLORS.primaryLight,
     alignItems: "center",
     justifyContent: "center",
   },
 
-  headerInfo: {
+  companyHeaderLogo: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: COLORS.white,
+    marginLeft: 12,
+  },
+
+  companyHeaderLogoPlaceholder: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: COLORS.primaryLight,
+    marginLeft: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  headerTextContainer: {
     flex: 1,
     marginLeft: 12,
   },
 
-  headerTitle: {
-    fontSize: 19,
+  companyTitle: {
+    fontSize: 17,
     fontWeight: "800",
-    color: "#0F172A",
+    color: COLORS.text,
   },
 
-  headerSubtitle: {
-    fontSize: 12,
-    color: "#64748B",
+  companySubtitle: {
+    fontSize: 11,
+    color: COLORS.secondary,
     marginTop: 3,
   },
 
   refreshButton: {
-    width: 43,
-    height: 43,
-    borderRadius: 13,
-    backgroundColor: "#FFFFFF",
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: COLORS.primaryLight,
+    alignItems: "center",
     justifyContent: "center",
-    alignItems: "center",
-  },
-
-  summaryCard: {
-    marginHorizontal: 17,
-    marginBottom: 15,
-    padding: 18,
-    borderRadius: 18,
-    backgroundColor: "#CFFAFE",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-
-  summaryLabel: {
-    fontSize: 12,
-    color: "#155E75",
-  },
-
-  summaryNumber: {
-    fontSize: 27,
-    fontWeight: "900",
-    color: "#0E7490",
-    marginTop: 3,
+    marginLeft: 8,
   },
 
   listContent: {
     paddingHorizontal: 17,
+    paddingTop: 17,
     paddingBottom: 30,
     flexGrow: 1,
   },
 
-  busCard: {
-    backgroundColor: "#FFFFFF",
+  // STATISTICS
+  statsCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 18,
     padding: 17,
-    borderRadius: 19,
-    marginBottom: 14,
+    marginBottom: 17,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
-    elevation: 2,
+    borderColor: COLORS.border,
   },
 
-  busHeader: {
+  statsHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+
+  statsTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: COLORS.text,
+  },
+
+  statsSubtitle: {
+    fontSize: 12,
+    color: COLORS.secondary,
+    marginTop: 4,
+  },
+
+  statsIcon: {
+    width: 43,
+    height: 43,
+    borderRadius: 13,
+    backgroundColor: COLORS.primaryLight,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  statsDivider: {
+    height: 1,
+    backgroundColor: COLORS.border,
+    marginVertical: 15,
+  },
+
+  statsRow: {
     flexDirection: "row",
     alignItems: "center",
   },
 
-  busIcon: {
+  statItem: {
+    flex: 1,
+    alignItems: "center",
+  },
+
+  statNumber: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: COLORS.text,
+  },
+
+  statLabel: {
+    fontSize: 11,
+    color: COLORS.secondary,
+    marginTop: 4,
+    fontWeight: "500",
+  },
+
+  statVerticalDivider: {
+    width: 1,
+    height: 35,
+    backgroundColor: COLORS.border,
+  },
+
+  // SEARCH
+  searchContainer: {
+    height: 51,
+    backgroundColor: COLORS.white,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    marginBottom: 22,
+  },
+
+  searchInput: {
+    flex: 1,
+    marginLeft: 10,
+    fontSize: 13,
+    color: COLORS.text,
+    paddingVertical: 0,
+  },
+
+  // SECTION HEADER
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 13,
+  },
+
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: COLORS.text,
+  },
+
+  sectionSubtitle: {
+    fontSize: 12,
+    color: COLORS.secondary,
+    marginTop: 4,
+  },
+
+  countBadge: {
+    minWidth: 32,
+    height: 32,
+    paddingHorizontal: 9,
+    borderRadius: 10,
+    backgroundColor: COLORS.primaryLight,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  countText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: COLORS.primary,
+  },
+
+  // BUS CARD
+  busCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 17,
+    padding: 15,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+
+  busTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  busIconContainer: {
     width: 49,
     height: 49,
     borderRadius: 14,
-    backgroundColor: "#CFFAFE",
-    justifyContent: "center",
+    backgroundColor: COLORS.primaryLight,
     alignItems: "center",
+    justifyContent: "center",
   },
 
   busTitleContainer: {
     flex: 1,
-    marginLeft: 12,
+    marginLeft: 11,
   },
 
   busName: {
-    color: "#0F172A",
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "800",
+    color: COLORS.text,
   },
 
   plateNumber: {
-    color: "#64748B",
     fontSize: 12,
+    color: COLORS.secondary,
     marginTop: 4,
   },
 
   statusBadge: {
     flexDirection: "row",
     alignItems: "center",
-    borderRadius: 20,
     paddingHorizontal: 8,
     paddingVertical: 6,
-  },
-
-  statusDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    marginRight: 5,
+    borderRadius: 8,
+    gap: 4,
   },
 
   statusText: {
@@ -737,100 +1096,155 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
 
+  busDivider: {
+    height: 1,
+    backgroundColor: COLORS.border,
+    marginVertical: 14,
+  },
+
   detailsRow: {
     flexDirection: "row",
-    gap: 20,
-    marginTop: 17,
+    marginBottom: 14,
   },
 
   detailItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-
-  detailText: {
-    fontSize: 12,
-    color: "#64748B",
-  },
-
-  destinationRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 13,
-    gap: 7,
-  },
-
-  destinationText: {
-    fontSize: 12,
-    color: "#334155",
     flex: 1,
-  },
-
-  noTripText: {
-    fontSize: 12,
-    color: "#94A3B8",
-  },
-
-  cardDivider: {
-    height: 1,
-    backgroundColor: "#E2E8F0",
-    marginVertical: 15,
-  },
-
-  bookButton: {
-    backgroundColor: "#06B6D4",
-    borderRadius: 12,
-    padding: 14,
     flexDirection: "row",
-    justifyContent: "center",
     alignItems: "center",
     gap: 8,
   },
 
-  disabledButton: {
-    backgroundColor: "#94A3B8",
+  detailLabel: {
+    fontSize: 10,
+    color: COLORS.secondary,
+  },
+
+  detailValue: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: COLORS.text,
+    marginTop: 3,
+  },
+
+  tripContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F5F8FC",
+    borderRadius: 11,
+    padding: 11,
+    marginBottom: 13,
+  },
+
+  tripIcon: {
+    width: 31,
+    height: 31,
+    borderRadius: 9,
+    backgroundColor: COLORS.primaryLight,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  tripTextContainer: {
+    marginLeft: 10,
+    flex: 1,
+  },
+
+  tripLabel: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: COLORS.secondary,
+    letterSpacing: 0.5,
+  },
+
+  tripDestination: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: COLORS.text,
+    marginTop: 3,
+  },
+
+  bookButton: {
+    height: 45,
+    backgroundColor: COLORS.primary,
+    borderRadius: 11,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 9,
   },
 
   bookButtonText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "800",
+    fontSize: 13,
+    fontWeight: "700",
+    color: COLORS.white,
   },
 
-  emptyCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 18,
-    padding: 30,
+  disabledBookButton: {
+    backgroundColor: "#EDF0F4",
+  },
+
+  disabledBookButtonText: {
+    color: COLORS.secondary,
+  },
+
+  // EMPTY STATE
+  emptyContainer: {
     alignItems: "center",
-    marginTop: 10,
+    justifyContent: "center",
+    paddingHorizontal: 25,
+    paddingVertical: 40,
+  },
+
+  emptyIcon: {
+    width: 75,
+    height: 75,
+    borderRadius: 23,
+    backgroundColor: "#E9EEF5",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
   },
 
   emptyTitle: {
     fontSize: 17,
     fontWeight: "800",
-    color: "#0F172A",
-    marginTop: 12,
+    color: COLORS.text,
   },
 
-  emptyText: {
-    fontSize: 13,
-    color: "#64748B",
+  emptySubtitle: {
+    fontSize: 12,
+    color: COLORS.secondary,
     textAlign: "center",
-    lineHeight: 20,
+    lineHeight: 19,
     marginTop: 7,
   },
 
-  retryButton: {
-    backgroundColor: "#06B6D4",
-    paddingHorizontal: 20,
+  emptyButton: {
+    backgroundColor: COLORS.primaryLight,
+    paddingHorizontal: 19,
     paddingVertical: 11,
-    borderRadius: 11,
-    marginTop: 16,
+    borderRadius: 10,
+    marginTop: 17,
   },
 
-  retryText: {
-    color: "#FFFFFF",
+  emptyButtonText: {
+    color: COLORS.primary,
+    fontSize: 12,
     fontWeight: "700",
+  },
+
+  // FOOTER
+  footer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    marginTop: 7,
+    paddingVertical: 13,
+  },
+
+  footerText: {
+    fontSize: 11,
+    color: COLORS.secondary,
   },
 });

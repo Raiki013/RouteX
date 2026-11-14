@@ -13,23 +13,76 @@ import {
   TouchableOpacity,
 } from "react-native";
 
-import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import {
+  createBottomTabNavigator,
+} from "@react-navigation/bottom-tabs";
+
+import {
+  createNativeStackNavigator,
+} from "@react-navigation/native-stack";
+
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { supabase } from "../config/supabase";
+import AppHeader from "../components/AppHeader";
 
 // EXISTING SCREENS
 import HomeScreen from "../screens/HomeScreen";
 import TrackingScreen from "../screens/TrackingScreen";
 import BookingScreen from "../screens/BookingScreen";
+import BusListScreen from "../screens/BusListScreen";
+import TerminalBookingScreen from "../screens/TerminalBookingScreen";
 import ProfileScreen from "../screens/ProfileScreen";
 import TripManagementScreen from "../screens/TripManagementScreen";
+import NotificationsScreen from "../screens/NotificationsScreen";
 
 // CASHIER SCREEN
 import CashierDashboardScreen from "../screens/CashierDashboardScreen";
 
 const Tab = createBottomTabNavigator();
+const BookingStackNavigator = createNativeStackNavigator();
+
+// BOOKING STACK
+function BookingStack() {
+  return (
+    <BookingStackNavigator.Navigator
+      screenOptions={{
+        headerShown: false,
+        animation: "slide_from_right",
+      }}
+    >
+      <BookingStackNavigator.Screen
+        name="BookingHome"
+        component={BookingScreen}
+      />
+
+      <BookingStackNavigator.Screen
+        name="BusList"
+        component={BusListScreen}
+      />
+
+      <BookingStackNavigator.Screen
+        name="TerminalBooking"
+        component={TerminalBookingScreen}
+      />
+    </BookingStackNavigator.Navigator>
+  );
+}
+
+// ROUTEX THEME COLORS
+const COLORS = {
+  primary: "#1A8AE5",
+  primaryDark: "#126BB5",
+  primaryLight: "#DBEAFE",
+  background: "#F8FAFC",
+  white: "#FFFFFF",
+  text: "#0F172A",
+  secondaryText: "#64748B",
+  border: "#E2E8F0",
+  inactive: "#94A3B8",
+  danger: "#DC2626",
+};
 
 const withTimeout = (promise, timeout = 15000) => {
   let timer;
@@ -107,11 +160,39 @@ export default function BottomTabs({ navigation }) {
     loadUserRole();
   }, [loadUserRole, retryCount]);
 
+  // SHARED NAVIGATION OPTIONS
+  const sharedScreenOptions = {
+    headerShown: true,
+
+    // SAME HEADER FOR ALL TABS
+    header: () => <AppHeader />,
+
+    tabBarActiveTintColor: COLORS.primary,
+    tabBarInactiveTintColor: COLORS.inactive,
+
+    tabBarStyle: {
+      height: 60 + insets.bottom,
+      paddingBottom: Math.max(insets.bottom, 8),
+      paddingTop: 7,
+      backgroundColor: COLORS.white,
+      borderTopColor: COLORS.border,
+      elevation: 10,
+    },
+
+    tabBarLabelStyle: {
+      fontSize: 11,
+      fontWeight: "700",
+    },
+  };
+
   // LOADING
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#06B6D4" />
+        <ActivityIndicator
+          size="large"
+          color={COLORS.primary}
+        />
 
         <Text style={styles.loadingText}>
           Checking your RouteX account...
@@ -127,7 +208,7 @@ export default function BottomTabs({ navigation }) {
         <Ionicons
           name="alert-circle-outline"
           size={48}
-          color="#DC2626"
+          color={COLORS.danger}
         />
 
         <Text style={styles.errorTitle}>
@@ -145,7 +226,7 @@ export default function BottomTabs({ navigation }) {
           <Ionicons
             name="refresh-outline"
             size={18}
-            color="#FFFFFF"
+            color={COLORS.white}
           />
 
           <Text style={styles.retryText}>
@@ -166,24 +247,7 @@ export default function BottomTabs({ navigation }) {
     return (
       <Tab.Navigator
         screenOptions={({ route }) => ({
-          headerShown: false,
-
-          tabBarActiveTintColor: "#06B6D4",
-          tabBarInactiveTintColor: "#94A3B8",
-
-          tabBarStyle: {
-            height: 60 + insets.bottom,
-            paddingBottom: Math.max(insets.bottom, 8),
-            paddingTop: 7,
-            backgroundColor: "#FFFFFF",
-            borderTopColor: "#E2E8F0",
-            elevation: 10,
-          },
-
-          tabBarLabelStyle: {
-            fontSize: 11,
-            fontWeight: "700",
-          },
+          ...sharedScreenOptions,
 
           tabBarIcon: ({ color, size, focused }) => {
             let iconName = "ellipse-outline";
@@ -228,7 +292,7 @@ export default function BottomTabs({ navigation }) {
         <Ionicons
           name="alert-circle-outline"
           size={45}
-          color="#DC2626"
+          color={COLORS.danger}
         />
 
         <Text style={styles.errorText}>
@@ -242,19 +306,7 @@ export default function BottomTabs({ navigation }) {
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
-        headerShown: false,
-
-        tabBarActiveTintColor: "#06B6D4",
-        tabBarInactiveTintColor: "#94A3B8",
-
-        tabBarStyle: {
-          height: 60 + insets.bottom,
-          paddingBottom: Math.max(insets.bottom, 8),
-          paddingTop: 7,
-          backgroundColor: "#FFFFFF",
-          borderTopColor: "#E2E8F0",
-          elevation: 10,
-        },
+        ...sharedScreenOptions,
 
         tabBarLabelStyle: {
           fontSize: 11,
@@ -265,15 +317,25 @@ export default function BottomTabs({ navigation }) {
           let iconName = "ellipse-outline";
 
           if (route.name === "Home") {
-            iconName = focused ? "home" : "home-outline";
+            iconName = focused
+              ? "home"
+              : "home-outline";
+          } else if (route.name === "Notifications") {
+            iconName = focused
+              ? "notifications"
+              : "notifications-outline";
           } else if (route.name === "Live Tracking") {
             iconName = focused
               ? "location"
               : "location-outline";
           } else if (route.name === "Trip Management") {
-            iconName = focused ? "bus" : "bus-outline";
+            iconName = focused
+              ? "bus"
+              : "bus-outline";
           } else if (route.name === "Booking") {
-            iconName = focused ? "ticket" : "ticket-outline";
+            iconName = focused
+              ? "ticket"
+              : "ticket-outline";
           } else if (route.name === "Profile") {
             iconName = focused
               ? "person"
@@ -296,6 +358,14 @@ export default function BottomTabs({ navigation }) {
       />
 
       <Tab.Screen
+        name="Notifications"
+        component={NotificationsScreen}
+        options={{
+          title: "Notifications",
+        }}
+      />
+
+      <Tab.Screen
         name="Live Tracking"
         component={TrackingScreen}
       />
@@ -310,7 +380,7 @@ export default function BottomTabs({ navigation }) {
       {isPassenger && (
         <Tab.Screen
           name="Booking"
-          component={BookingScreen}
+          component={BookingStack}
         />
       )}
 
@@ -325,7 +395,7 @@ export default function BottomTabs({ navigation }) {
 const styles = StyleSheet.create({
   center: {
     flex: 1,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: COLORS.background,
     justifyContent: "center",
     alignItems: "center",
     padding: 25,
@@ -333,19 +403,19 @@ const styles = StyleSheet.create({
 
   loadingText: {
     marginTop: 12,
-    color: "#64748B",
+    color: COLORS.secondaryText,
     fontSize: 14,
   },
 
   errorTitle: {
-    color: "#0F172A",
+    color: COLORS.text,
     fontSize: 18,
     fontWeight: "800",
     marginTop: 12,
   },
 
   errorText: {
-    color: "#DC2626",
+    color: COLORS.danger,
     textAlign: "center",
     fontSize: 14,
     marginTop: 12,
@@ -355,7 +425,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#0891B2",
+    backgroundColor: COLORS.primary,
     paddingHorizontal: 25,
     paddingVertical: 13,
     borderRadius: 12,
@@ -364,7 +434,7 @@ const styles = StyleSheet.create({
   },
 
   retryText: {
-    color: "#FFFFFF",
+    color: COLORS.white,
     fontWeight: "800",
     fontSize: 14,
   },

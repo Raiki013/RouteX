@@ -12,8 +12,8 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
-  Alert,
   RefreshControl,
+  Modal,
 } from "react-native";
 
 import { Ionicons } from "@expo/vector-icons";
@@ -21,13 +21,15 @@ import { useFocusEffect } from "@react-navigation/native";
 import * as Location from "expo-location";
 
 import { supabase } from "../config/supabase";
+import CustomAlert from "../components/CustomAlert";
+
 import {
   startOperatorBackgroundGPS,
   stopOperatorBackgroundGPS,
 } from "../tasks/backgroundLocation";
 
 // ==========================================
-// DESTINATION OPTIONS
+// DESTINATIONS
 // ==========================================
 
 const DESTINATIONS = [
@@ -64,6 +66,62 @@ export default function TripManagementScreen({
   selectedBusRef.current = selectedBus;
 
   // ==========================================
+  // CUSTOM ALERT
+  // ==========================================
+
+  const [alertData, setAlertData] = useState({
+    visible: false,
+    title: "",
+    message: "",
+    type: "info",
+    buttonText: "OK",
+  });
+
+  const [alertAction, setAlertAction] = useState(null);
+
+  const showAlert = (
+    title,
+    message,
+    type = "info",
+    buttonText = "OK",
+    onCloseAction = null
+  ) => {
+    setAlertData({
+      visible: true,
+      title,
+      message,
+      type,
+      buttonText,
+    });
+
+    setAlertAction(() => onCloseAction);
+  };
+
+  const closeAlert = () => {
+    const action = alertAction;
+
+    setAlertData((previous) => ({
+      ...previous,
+      visible: false,
+    }));
+
+    setAlertAction(null);
+
+    if (action) {
+      action();
+    }
+  };
+
+  // ==========================================
+  // END TRIP MODAL
+  // ==========================================
+
+  const [endTripModalVisible, setEndTripModalVisible] =
+    useState(false);
+
+  const [pendingEndTrip, setPendingEndTrip] = useState(null);
+
+  // ==========================================
   // GET CURRENT USER
   // ==========================================
 
@@ -83,7 +141,7 @@ export default function TripManagementScreen({
   };
 
   // ==========================================
-  // LOAD OPERATOR BUSES
+  // LOAD BUSES
   // ==========================================
 
   const loadBuses = async (operatorId) => {
@@ -109,7 +167,7 @@ export default function TripManagementScreen({
   };
 
   // ==========================================
-  // LOAD OPERATOR TRIPS
+  // LOAD TRIPS
   // ==========================================
 
   const loadTrips = async (operatorId) => {
@@ -137,8 +195,7 @@ export default function TripManagementScreen({
   };
 
   // ==========================================
-  // GET TRIP FOR A BUS
-  // Active trip takes priority over planned.
+  // GET TRIP FOR BUS
   // ==========================================
 
   const getBusTrip = (busId, tripList = trips) => {
@@ -154,7 +211,7 @@ export default function TripManagementScreen({
   };
 
   // ==========================================
-  // LOAD ALL SCREEN DATA
+  // LOAD SCREEN DATA
   // ==========================================
 
   const loadData = async ({
@@ -206,9 +263,10 @@ export default function TripManagementScreen({
       console.log("TRIP MANAGEMENT LOAD ERROR:", error);
 
       if (!silent) {
-        Alert.alert(
-          "Error",
-          error.message || "Unable to load trip information."
+        showAlert(
+          "Loading Error",
+          error.message || "Unable to load trip information.",
+          "error"
         );
       }
     } finally {
@@ -333,6 +391,24 @@ export default function TripManagementScreen({
   const updateAvailability = async (status) => {
     if (!selectedBus || !user || saving) return;
 
+    const alertConfig = {
+      available: {
+        title: "Bus Available",
+        message: "This bus has seats available and can accept passengers.",
+        type: "success",
+      },
+      standing: {
+        title: "Standing Passengers",
+        message: "This bus is full but is still accepting standing passengers.",
+        type: "warning",
+      },
+      not_available: {
+        title: "Bus Unavailable",
+        message: "This bus is currently unavailable for passenger hailing.",
+        type: "error",
+      },
+    };
+
     try {
       setSaving(true);
 
@@ -350,7 +426,7 @@ export default function TripManagementScreen({
 
       if (!data) {
         throw new Error(
-          "Bus availability was not updated. Check your buses RLS policies."
+          "Unable to update bus availability."
         );
       }
 
@@ -364,16 +440,20 @@ export default function TripManagementScreen({
         )
       );
 
-      Alert.alert(
-        "Availability Updated",
-        `Bus status changed to ${status.replace("_", " ")}.`
+      const config = alertConfig[status];
+
+      showAlert(
+        config.title,
+        config.message,
+        config.type
       );
     } catch (error) {
       console.log("AVAILABILITY UPDATE ERROR:", error);
 
-      Alert.alert(
-        "Error",
-        error.message || "Unable to update bus availability."
+      showAlert(
+        "Update Failed",
+        error.message || "Unable to update bus availability.",
+        "error"
       );
     } finally {
       setSaving(false);
@@ -389,7 +469,6 @@ export default function TripManagementScreen({
     let gpsStarted = false;
 
     try {
-      // Check foreground permission.
       const foreground =
         await Location.requestForegroundPermissionsAsync();
 
@@ -399,7 +478,6 @@ export default function TripManagementScreen({
         );
       }
 
-      // Check background permission.
       const background =
         await Location.requestBackgroundPermissionsAsync();
 
@@ -409,7 +487,6 @@ export default function TripManagementScreen({
         );
       }
 
-      // Check phone GPS.
       const gpsEnabled =
         await Location.hasServicesEnabledAsync();
 
@@ -419,7 +496,6 @@ export default function TripManagementScreen({
         );
       }
 
-      // Get an initial location before activating the trip.
       const currentPosition =
         await Location.getCurrentPositionAsync({
           accuracy: Location.Accuracy.BestForNavigation,
@@ -438,19 +514,20 @@ export default function TripManagementScreen({
         recorded_at: new Date().toISOString(),
       };
 
-      // Activate the planned trip.
-      const { data: updatedTrip, error: tripError } =
-        await supabase
-          .from("bus_trips")
-          .update({
-            status: "active",
-            started_at: new Date().toISOString(),
-          })
-          .eq("trip_id", trip.trip_id)
-          .eq("operator_id", user.id)
-          .eq("status", "planned")
-          .select()
-          .maybeSingle();
+      const {
+        data: updatedTrip,
+        error: tripError,
+      } = await supabase
+        .from("bus_trips")
+        .update({
+          status: "active",
+          started_at: new Date().toISOString(),
+        })
+        .eq("trip_id", trip.trip_id)
+        .eq("operator_id", user.id)
+        .eq("status", "planned")
+        .select()
+        .maybeSingle();
 
       if (tripError) throw tripError;
 
@@ -462,7 +539,6 @@ export default function TripManagementScreen({
 
       tripActivated = true;
 
-      // Save the initial GPS location.
       const { error: locationError } = await supabase
         .from("bus_locations")
         .upsert(locationData, {
@@ -471,21 +547,21 @@ export default function TripManagementScreen({
 
       if (locationError) throw locationError;
 
-      // Start background GPS tracking.
       await startOperatorBackgroundGPS();
       gpsStarted = true;
 
-      // Update bus operating status.
-      const { data: updatedBus, error: busError } =
-        await supabase
-          .from("buses")
-          .update({
-            bus_status: "in_transit",
-          })
-          .eq("bus_id", bus.bus_id)
-          .eq("operator_id", user.id)
-          .select()
-          .maybeSingle();
+      const {
+        data: updatedBus,
+        error: busError,
+      } = await supabase
+        .from("buses")
+        .update({
+          bus_status: "in_transit",
+        })
+        .eq("bus_id", bus.bus_id)
+        .eq("operator_id", user.id)
+        .select()
+        .maybeSingle();
 
       if (busError) throw busError;
 
@@ -495,17 +571,18 @@ export default function TripManagementScreen({
         );
       }
 
-      // Mark the latest docking record as undocked.
-      const { data: dockingRecord, error: dockingFindError } =
-        await supabase
-          .from("bus_docking")
-          .select("docking_id")
-          .eq("bus_id", bus.bus_id)
-          .eq("operator_id", user.id)
-          .eq("docking_status", "docked")
-          .order("docked_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
+      const {
+        data: dockingRecord,
+        error: dockingFindError,
+      } = await supabase
+        .from("bus_docking")
+        .select("docking_id")
+        .eq("bus_id", bus.bus_id)
+        .eq("operator_id", user.id)
+        .eq("docking_status", "docked")
+        .order("docked_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
       if (dockingFindError) throw dockingFindError;
 
@@ -533,15 +610,14 @@ export default function TripManagementScreen({
 
       await loadData({ silent: true });
 
-      Alert.alert(
+      showAlert(
         "Trip Started",
-        "Your bus is now in transit. GPS tracking is active."
+        "Your bus is now in transit. GPS tracking is active.",
+        "success"
       );
-
     } catch (error) {
       console.log("START TRANSIT ERROR:", error);
 
-      // Roll back the trip if starting GPS or updating the bus failed.
       if (tripActivated) {
         await supabase
           .from("bus_trips")
@@ -569,9 +645,10 @@ export default function TripManagementScreen({
         }
       }
 
-      Alert.alert(
+      showAlert(
         "Unable to Start Trip",
-        error.message || "Something went wrong while starting the trip."
+        error.message || "Something went wrong while starting the trip.",
+        "error"
       );
 
       await loadData({ silent: true });
@@ -586,19 +663,28 @@ export default function TripManagementScreen({
     if (saving) return;
 
     if (!user) {
-      Alert.alert("Error", "User information is not available.");
+      showAlert(
+        "Error",
+        "User information is not available.",
+        "error"
+      );
       return;
     }
 
     if (!selectedBus) {
-      Alert.alert("No Bus Selected", "Please select a bus first.");
+      showAlert(
+        "No Bus Selected",
+        "Please select a bus first.",
+        "warning"
+      );
       return;
     }
 
     if (!destination) {
-      Alert.alert(
+      showAlert(
         "Missing Destination",
-        "Please select a destination."
+        "Please select a destination.",
+        "warning"
       );
       return;
     }
@@ -606,9 +692,10 @@ export default function TripManagementScreen({
     const existingTrip = getBusTrip(selectedBus.bus_id);
 
     if (existingTrip) {
-      Alert.alert(
+      showAlert(
         "Trip Already Exists",
-        "This bus already has a planned or active trip."
+        "This bus already has a planned or active trip.",
+        "warning"
       );
       return;
     }
@@ -637,22 +724,26 @@ export default function TripManagementScreen({
       } else {
         await loadData({ silent: true });
 
-        Alert.alert(
+        showAlert(
           "Trip Created",
-          "Your planned trip has been created. Continue to Operator Docking to dock your bus."
+          "Your planned trip has been created. Continue to Operator Docking to dock your bus.",
+          "success",
+          "Continue",
+          () => {
+            navigation.navigate("OperatorDocking", {
+              tripId: data.trip_id,
+              busId: selectedBus.bus_id,
+            });
+          }
         );
-
-        navigation.navigate("OperatorDocking", {
-          tripId: data.trip_id,
-          busId: selectedBus.bus_id,
-        });
       }
     } catch (error) {
       console.log("CREATE TRIP ERROR:", error);
 
-      Alert.alert(
-        "Error",
-        error.message || "Unable to create trip."
+      showAlert(
+        "Creation Failed",
+        error.message || "Unable to create trip.",
+        "error"
       );
     } finally {
       setSaving(false);
@@ -660,14 +751,15 @@ export default function TripManagementScreen({
   };
 
   // ==========================================
-  // OPEN OPERATOR DOCKING
+  // OPEN DOCKING
   // ==========================================
 
   const openDocking = (bus, trip) => {
     if (!trip) {
-      Alert.alert(
+      showAlert(
         "No Trip",
-        "Create a trip for this bus first."
+        "Create a trip for this bus first.",
+        "warning"
       );
       return;
     }
@@ -679,102 +771,115 @@ export default function TripManagementScreen({
   };
 
   // ==========================================
-  // END TRIP
+  // END TRIP DATABASE ACTION
   // ==========================================
 
-  const endTrip = async (bus, trip) => {
+  const confirmEndTrip = async (bus, trip) => {
     if (!trip || trip.status !== "active" || saving) return;
 
-    Alert.alert(
-      "End Trip",
-      `Are you sure you want to end the trip for ${
-        bus.bus_name || bus.plate_number
-      }?`,
-      [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
-        {
-          text: "End Trip",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              setSaving(true);
+    try {
+      setSaving(true);
 
-              const {
-                data: updatedTrip,
-                error: tripError,
-              } = await supabase
-                .from("bus_trips")
-                .update({
-                  status: "completed",
-                  ended_at: new Date().toISOString(),
-                })
-                .eq("trip_id", trip.trip_id)
-                .eq("operator_id", user.id)
-                .select()
-                .maybeSingle();
+      const {
+        data: updatedTrip,
+        error: tripError,
+      } = await supabase
+        .from("bus_trips")
+        .update({
+          status: "completed",
+          ended_at: new Date().toISOString(),
+        })
+        .eq("trip_id", trip.trip_id)
+        .eq("operator_id", user.id)
+        .select()
+        .maybeSingle();
 
-              if (tripError) throw tripError;
+      if (tripError) throw tripError;
 
-              if (!updatedTrip) {
-                throw new Error(
-                  "Trip could not be completed. Check your bus_trips RLS policies."
-                );
-              }
+      if (!updatedTrip) {
+        throw new Error(
+          "Trip could not be completed. Check your bus_trips RLS policies."
+        );
+      }
 
-              const { error: busError } = await supabase
-                .from("buses")
-                .update({
-                  bus_status: "offline",
-                })
-                .eq("bus_id", bus.bus_id)
-                .eq("operator_id", user.id);
+      const { error: busError } = await supabase
+        .from("buses")
+        .update({
+          bus_status: "offline",
+        })
+        .eq("bus_id", bus.bus_id)
+        .eq("operator_id", user.id);
 
-              if (busError) throw busError;
+      if (busError) throw busError;
 
-              const {
-                data: remainingTrips,
-                error: remainingError,
-              } = await supabase
-                .from("bus_trips")
-                .select("trip_id")
-                .eq("operator_id", user.id)
-                .eq("status", "active");
+      const {
+        data: remainingTrips,
+        error: remainingError,
+      } = await supabase
+        .from("bus_trips")
+        .select("trip_id")
+        .eq("operator_id", user.id)
+        .eq("status", "active");
 
-              if (remainingError) {
-                console.log(
-                  "ACTIVE TRIPS CHECK ERROR:",
-                  remainingError
-                );
-              } else if (
-                !remainingTrips ||
-                remainingTrips.length === 0
-              ) {
-                await stopOperatorBackgroundGPS();
-              }
+      if (remainingError) {
+        console.log(
+          "ACTIVE TRIPS CHECK ERROR:",
+          remainingError
+        );
+      } else if (
+        !remainingTrips ||
+        remainingTrips.length === 0
+      ) {
+        await stopOperatorBackgroundGPS();
+      }
 
-              Alert.alert(
-                "Trip Ended",
-                "The trip has been completed."
-              );
+      showAlert(
+        "Trip Ended",
+        "The trip has been completed successfully.",
+        "success"
+      );
 
-              await loadData({ silent: true });
-            } catch (error) {
-              console.log("END TRIP ERROR:", error);
+      await loadData({ silent: true });
+    } catch (error) {
+      console.log("END TRIP ERROR:", error);
 
-              Alert.alert(
-                "Error",
-                error.message || "Unable to end trip."
-              );
-            } finally {
-              setSaving(false);
-            }
-          },
-        },
-      ]
-    );
+      showAlert(
+        "Unable to End Trip",
+        error.message || "Unable to end trip.",
+        "error"
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ==========================================
+  // END TRIP MODAL CONTROLS
+  // ==========================================
+
+  const endTrip = (bus, trip) => {
+    if (!trip || trip.status !== "active" || saving) return;
+
+    setPendingEndTrip({ bus, trip });
+    setEndTripModalVisible(true);
+  };
+
+  const cancelEndTrip = () => {
+    if (saving) return;
+
+    setEndTripModalVisible(false);
+    setPendingEndTrip(null);
+  };
+
+  const handleConfirmEndTrip = () => {
+    if (!pendingEndTrip || saving) return;
+
+    const { bus, trip } = pendingEndTrip;
+
+    setEndTripModalVisible(false);
+    setPendingEndTrip(null);
+
+    confirmEndTrip(bus, trip);
   };
 
   // ==========================================
@@ -793,595 +898,901 @@ export default function TripManagementScreen({
     switch (status) {
       case "available":
         return "Available";
+
       case "standing":
         return "Standing";
+
       case "not_available":
         return "Not Available";
+
       default:
         return "Not Set";
     }
   };
 
   // ==========================================
-  // LOADING
+  // LOADING SCREEN
   // ==========================================
 
   if (loading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color="#06B6D4" />
+      <>
+        <View style={styles.center}>
+          <ActivityIndicator
+            size="large"
+            color="#1677D2"
+          />
 
-        <Text style={styles.loadingText}>
-          Loading your buses...
-        </Text>
-      </View>
+          <Text style={styles.loadingText}>
+            Loading your buses...
+          </Text>
+        </View>
+
+        <CustomAlert
+          visible={alertData.visible}
+          title={alertData.title}
+          message={alertData.message}
+          type={alertData.type}
+          buttonText={alertData.buttonText}
+          onClose={closeAlert}
+        />
+      </>
     );
   }
 
   // ==========================================
-  // MAIN UI
+  // MAIN SCREEN
   // ==========================================
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-        />
-      }
-    >
-      {/* HEADER */}
-
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.headerTitle}>
-            Trip Management
-          </Text>
-
-          <Text style={styles.headerSubtitle}>
-            Manage your buses and trips
-          </Text>
-        </View>
-
-        <TouchableOpacity
-          style={styles.refreshButton}
-          onPress={onRefresh}
-        >
-          <Ionicons
-            name="refresh"
-            size={21}
-            color="#06B6D4"
+    <>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#1677D2"
+            colors={["#1677D2"]}
           />
-        </TouchableOpacity>
-      </View>
+        }
+      >
+        {/* HEADER */}
 
-      {/* BUS COUNT */}
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.headerEyebrow}>
+              ROUTEX OPERATOR
+            </Text>
 
-      <View style={styles.summaryCard}>
-        <View style={styles.summaryIcon}>
-          <Ionicons
-            name="bus"
-            size={25}
-            color="#06B6D4"
-          />
+            <Text style={styles.headerTitle}>
+              Trip Management
+            </Text>
+
+            <Text style={styles.headerSubtitle}>
+              Manage your buses and daily operations
+            </Text>
+          </View>
+
+          <TouchableOpacity
+            style={styles.refreshButton}
+            onPress={onRefresh}
+            activeOpacity={0.8}
+          >
+            <Ionicons
+              name="refresh"
+              size={21}
+              color="#1677D2"
+            />
+          </TouchableOpacity>
         </View>
 
-        <View>
-          <Text style={styles.summaryNumber}>
-            {buses.length}
-          </Text>
+        {/* SUMMARY CARD */}
 
-          <Text style={styles.summaryLabel}>
-            Buses assigned to you
-          </Text>
+        <View style={styles.summaryCard}>
+          <View style={styles.summaryContent}>
+            <View style={styles.summaryIcon}>
+              <Ionicons
+                name="bus"
+                size={27}
+                color="#FFFFFF"
+              />
+            </View>
+
+            <View>
+              <Text style={styles.summaryNumber}>
+                {buses.length}
+              </Text>
+
+              <Text style={styles.summaryLabel}>
+                Buses assigned to you
+              </Text>
+            </View>
+          </View>
+
+         
         </View>
-      </View>
 
-      {/* BUS LIST */}
+        {/* BUS SECTION */}
 
-      <Text style={styles.sectionTitle}>
-        My Buses
-      </Text>
+        <View style={styles.sectionHeader}>
+          <View>
+            <Text style={styles.sectionTitle}>
+              My Buses
+            </Text>
 
-      {buses.length === 0 ? (
-        <View style={styles.emptyCard}>
-          <Ionicons
-            name="bus-outline"
-            size={45}
-            color="#94A3B8"
-          />
+            <Text style={styles.sectionSubtitle}>
+              Select a bus to manage its operations
+            </Text>
+          </View>
 
-          <Text style={styles.emptyTitle}>
-            No Buses Found
-          </Text>
-
-          <Text style={styles.emptyText}>
-            No buses are currently assigned to your account.
-            Check the operator_id column in your buses table.
-          </Text>
+          <View style={styles.countBadge}>
+            <Text style={styles.countBadgeText}>
+              {buses.length}
+            </Text>
+          </View>
         </View>
-      ) : (
-        buses.map((bus) => {
-          const trip = getBusTrip(bus.bus_id);
 
-          const isSelected =
-            String(selectedBus?.bus_id) ===
-            String(bus.bus_id);
+        {buses.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <View style={styles.emptyIcon}>
+              <Ionicons
+                name="bus-outline"
+                size={36}
+                color="#1677D2"
+              />
+            </View>
 
-          const busStatus = (
-            bus.bus_status || "offline"
-          ).replace("_", " ");
+            <Text style={styles.emptyTitle}>
+              No Buses Found
+            </Text>
 
-          return (
-            <TouchableOpacity
-              key={String(bus.bus_id)}
-              activeOpacity={0.9}
-              style={[
-                styles.busCard,
-                isSelected && styles.selectedBusCard,
-              ]}
-              onPress={() => handleSelectBus(bus)}
-            >
-              <View style={styles.busTopRow}>
-                <View style={styles.busIcon}>
-                  <Ionicons
-                    name="bus"
-                    size={25}
-                    color="#06B6D4"
-                  />
-                </View>
+            <Text style={styles.emptyText}>
+              No buses are currently assigned to your account.
+              Check the operator_id column in your buses table.
+            </Text>
+          </View>
+        ) : (
+          buses.map((bus) => {
+            const trip = getBusTrip(bus.bus_id);
 
-                <View style={styles.busInfo}>
-                  <Text style={styles.busName}>
-                    {bus.bus_name || "Unnamed Bus"}
-                  </Text>
+            const isSelected =
+              String(selectedBus?.bus_id) ===
+              String(bus.bus_id);
 
-                  <Text style={styles.plateNumber}>
-                    {bus.plate_number || "No plate number"}
-                  </Text>
-                </View>
+            const busStatus = (
+              bus.bus_status || "offline"
+            ).replace("_", " ");
 
-                <View
-                  style={[
-                    styles.statusBadge,
-                    bus.bus_status === "in_transit"
-                      ? styles.transitBadge
-                      : bus.bus_status === "docked"
-                      ? styles.dockedBadge
-                      : styles.offlineBadge,
-                  ]}
-                >
-                  <Text style={styles.statusText}>
-                    {busStatus}
-                  </Text>
-                </View>
-              </View>
+            return (
+              <TouchableOpacity
+                key={String(bus.bus_id)}
+                activeOpacity={0.92}
+                style={[
+                  styles.busCard,
+                  isSelected && styles.selectedBusCard,
+                ]}
+                onPress={() => handleSelectBus(bus)}
+              >
+                {/* BUS INFORMATION */}
 
-              <View style={styles.busDetails}>
-                <View style={styles.detailItem}>
-                  <Ionicons
-                    name="car-outline"
-                    size={15}
-                    color="#64748B"
-                  />
+                <View style={styles.busTopRow}>
+                  <View
+                    style={[
+                      styles.busIcon,
+                      isSelected && styles.selectedBusIcon,
+                    ]}
+                  >
+                    <Ionicons
+                      name="bus"
+                      size={27}
+                      color="#FFFFFF"
+                    />
+                  </View>
 
-                  <Text style={styles.detailText}>
-                    {bus.bus_type || "Bus"}
-                  </Text>
-                </View>
-
-                <View style={styles.detailItem}>
-                  <Ionicons
-                    name="people-outline"
-                    size={15}
-                    color="#64748B"
-                  />
-
-                  <Text style={styles.detailText}>
-                    {bus.capacity ?? "N/A"} seats
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.tripDivider} />
-
-              {trip ? (
-                <View style={styles.tripInfo}>
-                  <View style={styles.tripTextContainer}>
-                    <Text style={styles.tripLabel}>
-                      Current Trip
+                  <View style={styles.busInfo}>
+                    <Text style={styles.busName}>
+                      {bus.bus_name || "Unnamed Bus"}
                     </Text>
 
-                    <Text style={styles.destinationText}>
-                      {trip.destination || "No destination"}
-                    </Text>
-
-                    <Text
-                      style={[
-                        styles.tripStatus,
-                        trip.status === "active" && {
-                          color: "#16A34A",
-                        },
-                      ]}
-                    >
-                      Status: {trip.status}
+                    <Text style={styles.plateNumber}>
+                      {bus.plate_number || "No plate number"}
                     </Text>
                   </View>
 
-                  <TouchableOpacity
-                    style={styles.manageButton}
-                    onPress={() => openDocking(bus, trip)}
+                  <View
+                    style={[
+                      styles.statusBadge,
+                      bus.bus_status === "in_transit"
+                        ? styles.transitBadge
+                        : bus.bus_status === "docked"
+                        ? styles.dockedBadge
+                        : styles.offlineBadge,
+                    ]}
                   >
-                    <Text style={styles.manageButtonText}>
-                      {trip.status === "active"
-                        ? "Manage"
-                        : "Continue"}
-                    </Text>
-
-                    <Ionicons
-                      name="arrow-forward"
-                      size={15}
-                      color="#FFFFFF"
+                    <View
+                      style={[
+                        styles.statusDot,
+                        bus.bus_status === "in_transit"
+                          ? styles.transitDot
+                          : bus.bus_status === "docked"
+                          ? styles.dockedDot
+                          : styles.offlineDot,
+                      ]}
                     />
-                  </TouchableOpacity>
+
+                    <Text style={styles.statusText}>
+                      {busStatus}
+                    </Text>
+                  </View>
                 </View>
-              ) : (
-                <View style={styles.noTripRow}>
-                  <Text style={styles.noTripText}>
-                    No active or planned trip
-                  </Text>
 
-                  <Text style={styles.selectText}>
-                    Select this bus to create a trip
-                  </Text>
+                {/* BUS DETAILS */}
+
+                <View style={styles.busDetails}>
+                  <View style={styles.detailItem}>
+                    <Ionicons
+                      name="car-outline"
+                      size={16}
+                      color="#64748B"
+                    />
+
+                    <Text style={styles.detailText}>
+                      {bus.bus_type || "Bus"}
+                    </Text>
+                  </View>
+
+                  <View style={styles.detailItem}>
+                    <Ionicons
+                      name="people-outline"
+                      size={16}
+                      color="#64748B"
+                    />
+
+                    <Text style={styles.detailText}>
+                      {bus.capacity ?? "N/A"} seats
+                    </Text>
+                  </View>
                 </View>
-              )}
-            </TouchableOpacity>
-          );
-        })
-      )}
 
-      {/* SELECTED BUS AVAILABILITY */}
+                <View style={styles.tripDivider} />
 
-      {selectedBus && (
-        <View style={styles.availabilityCard}>
-          <Text style={styles.sectionTitle}>
-            Bus Availability
-          </Text>
+                {/* TRIP INFORMATION */}
 
-          <Text style={styles.selectedBusText}>
-            Selected bus:{" "}
-            <Text style={styles.selectedBusName}>
-              {selectedBus.bus_name ||
-                selectedBus.plate_number}
-            </Text>
-          </Text>
+                {trip ? (
+                  <View style={styles.tripInfo}>
+                    <View style={styles.tripTextContainer}>
+                      <Text style={styles.tripLabel}>
+                        {trip.status === "active"
+                          ? "CURRENT TRIP"
+                          : "PLANNED TRIP"}
+                      </Text>
 
-          <Text style={styles.availabilityDescription}>
-            Choose whether passengers can select this bus.
-          </Text>
+                      <Text style={styles.destinationText}>
+                        {trip.destination || "No destination"}
+                      </Text>
 
-          <View style={styles.availabilityButtons}>
-            <TouchableOpacity
-              style={[
-                styles.availabilityButton,
-                styles.availableButton,
-                selectedBus.availability_status === "available" &&
-                  styles.activeAvailableButton,
-                saving && styles.disabledButton,
-              ]}
-              disabled={saving}
-              onPress={() => updateAvailability("available")}
-            >
-              <Ionicons
-                name="checkmark-circle"
-                size={18}
-                color={
-                  selectedBus.availability_status === "available"
-                    ? "#FFFFFF"
-                    : "#16A34A"
-                }
-              />
-
-              <Text
-                style={[
-                  styles.availabilityButtonText,
-                  styles.availableButtonText,
-                  selectedBus.availability_status === "available" &&
-                    styles.activeAvailabilityText,
-                ]}
-              >
-                Available
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.availabilityButton,
-                styles.standingButton,
-                selectedBus.availability_status === "standing" &&
-                  styles.activeStandingButton,
-                saving && styles.disabledButton,
-              ]}
-              disabled={saving}
-              onPress={() => updateAvailability("standing")}
-            >
-              <Ionicons
-                name="pause-circle"
-                size={18}
-                color={
-                  selectedBus.availability_status === "standing"
-                    ? "#FFFFFF"
-                    : "#D97706"
-                }
-              />
-
-              <Text
-                style={[
-                  styles.availabilityButtonText,
-                  styles.standingButtonText,
-                  selectedBus.availability_status === "standing" &&
-                    styles.activeAvailabilityText,
-                ]}
-              >
-                Standing
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.availabilityButton,
-                styles.unavailableButton,
-                selectedBus.availability_status === "not_available" &&
-                  styles.activeUnavailableButton,
-                saving && styles.disabledButton,
-              ]}
-              disabled={saving}
-              onPress={() => updateAvailability("not_available")}
-            >
-              <Ionicons
-                name="close-circle"
-                size={18}
-                color={
-                  selectedBus.availability_status === "not_available"
-                    ? "#FFFFFF"
-                    : "#DC2626"
-                }
-              />
-
-              <Text
-                style={[
-                  styles.availabilityButtonText,
-                  styles.unavailableButtonText,
-                  selectedBus.availability_status === "not_available" &&
-                    styles.activeAvailabilityText,
-                ]}
-              >
-                Not Available
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.currentAvailability}>
-            <Text style={styles.currentAvailabilityLabel}>
-              Current availability:
-            </Text>
-
-            <Text style={styles.currentAvailabilityValue}>
-              {getAvailabilityLabel(
-                selectedBus.availability_status
-              )}
-            </Text>
-          </View>
-        </View>
-      )}
-
-      {/* CREATE TRIP */}
-
-      {selectedBus && (
-        <View style={styles.createCard}>
-          <Text style={styles.sectionTitle}>
-            Create a Trip
-          </Text>
-
-          <Text style={styles.selectedBusText}>
-            Selected bus:{" "}
-            <Text style={styles.selectedBusName}>
-              {selectedBus.bus_name ||
-                selectedBus.plate_number}
-            </Text>
-          </Text>
-
-          {getBusTrip(selectedBus.bus_id) ? (
-            <View style={styles.noticeBox}>
-              <Ionicons
-                name="information-circle-outline"
-                size={20}
-                color="#D97706"
-              />
-
-              <Text style={styles.noticeText}>
-                This bus already has a planned or active trip.
-                Manage that trip from its bus card above.
-              </Text>
-            </View>
-          ) : (
-            <>
-              <Text style={styles.inputLabel}>
-                Select Destination
-              </Text>
-
-              {/* DESTINATION DROPDOWN */}
-
-              <TouchableOpacity
-                style={styles.destinationDropdown}
-                activeOpacity={0.8}
-                onPress={() =>
-                  setDestinationOpen(!destinationOpen)
-                }
-                disabled={saving}
-              >
-                <Text
-                  style={[
-                    styles.destinationPlaceholder,
-                    destination && styles.destinationSelected,
-                  ]}
-                >
-                  {destination || "Choose a destination"}
-                </Text>
-
-                <Ionicons
-                  name={
-                    destinationOpen
-                      ? "chevron-up"
-                      : "chevron-down"
-                  }
-                  size={20}
-                  color="#64748B"
-                />
-              </TouchableOpacity>
-
-              {destinationOpen && (
-                <View style={styles.destinationOptions}>
-                  <ScrollView
-                    nestedScrollEnabled
-                    style={styles.destinationOptionsScroll}
-                    keyboardShouldPersistTaps="handled"
-                  >
-                    {DESTINATIONS.map((item) => (
-                      <TouchableOpacity
-                        key={item}
+                      <Text
                         style={[
-                          styles.destinationOption,
-                          destination === item &&
-                            styles.destinationOptionSelected,
+                          styles.tripStatus,
+                          trip.status === "active"
+                            ? styles.activeTripText
+                            : styles.plannedTripText,
                         ]}
-                        onPress={() => {
-                          setDestination(item);
-                          setDestinationOpen(false);
-                        }}
                       >
-                        <Text
-                          style={[
-                            styles.destinationOptionText,
-                            destination === item &&
-                              styles.destinationOptionTextSelected,
-                          ]}
-                        >
-                          {item}
-                        </Text>
+                        {trip.status === "active"
+                          ? "● In Transit"
+                          : "● Scheduled"}
+                      </Text>
+                    </View>
 
-                        {destination === item && (
-                          <Ionicons
-                            name="checkmark"
-                            size={19}
-                            color="#0891B2"
-                          />
-                        )}
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                </View>
-              )}
+                    <TouchableOpacity
+                      style={styles.manageButton}
+                      onPress={() => openDocking(bus, trip)}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={styles.manageButtonText}>
+                        Manage
+                      </Text>
 
-              {/* START TRANSIT NOW */}
-
-              <TouchableOpacity
-                style={[
-                  styles.startTransitButton,
-                  saving && styles.disabledButton,
-                ]}
-                onPress={() => createTrip("instant")}
-                disabled={saving || !destination}
-              >
-                {saving ? (
-                  <ActivityIndicator color="#FFFFFF" />
+                      <Ionicons
+                        name="arrow-forward"
+                        size={15}
+                        color="#FFFFFF"
+                      />
+                    </TouchableOpacity>
+                  </View>
                 ) : (
-                  <>
+                  <View style={styles.noTripRow}>
                     <Ionicons
-                      name="play-circle"
-                      size={21}
-                      color="#FFFFFF"
+                      name="information-circle-outline"
+                      size={18}
+                      color="#94A3B8"
                     />
 
-                    <Text style={styles.createButtonText}>
-                      Start Transit Now
+                    <Text style={styles.noTripText}>
+                      No active or planned trip
                     </Text>
-                  </>
+                  </View>
+                )}
+
+                {/* SELECTED INDICATOR */}
+
+                {isSelected && (
+                  <View style={styles.selectedIndicator}>
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={15}
+                      color="#1677D2"
+                    />
+
+                    <Text style={styles.selectedIndicatorText}>
+                      Selected for management
+                    </Text>
+                  </View>
                 )}
               </TouchableOpacity>
+            );
+          })
+        )}
 
-              {/* MANAGE DOCKING */}
+        {/* BUS AVAILABILITY */}
 
+        {selectedBus && (
+          <View style={styles.availabilityCard}>
+            <View style={styles.cardHeadingRow}>
+              <View style={styles.cardHeadingIcon}>
+                <Ionicons
+                  name="radio-button-on"
+                  size={20}
+                  color="#1677D2"
+                />
+              </View>
+
+              <View style={styles.cardHeadingText}>
+                <Text style={styles.sectionTitle}>
+                  Bus Availability
+                </Text>
+
+                <Text style={styles.sectionSubtitle}>
+                  Set your passenger availability
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.selectedBusNotice}>
+              <Ionicons
+                name="bus-outline"
+                size={17}
+                color="#1677D2"
+              />
+
+              <Text style={styles.selectedBusText}>
+                Selected bus:{" "}
+                <Text style={styles.selectedBusName}>
+                  {selectedBus.bus_name ||
+                    selectedBus.plate_number}
+                </Text>
+              </Text>
+            </View>
+
+            <Text style={styles.availabilityDescription}>
+              Choose the current passenger availability of this bus.
+            </Text>
+
+            {/* AVAILABILITY OPTIONS */}
+
+            <View style={styles.availabilityOptions}>
               <TouchableOpacity
                 style={[
-                  styles.dockingButton,
-                  saving && styles.disabledButton,
+                  styles.availabilityOption,
+                  styles.availableOption,
+                  selectedBus.availability_status === "available" &&
+                    styles.selectedAvailableOption,
                 ]}
-                onPress={() => createTrip("docking")}
-                disabled={saving || !destination}
+                disabled={saving}
+                onPress={() => updateAvailability("available")}
+                activeOpacity={0.8}
               >
                 <Ionicons
-                  name="business-outline"
-                  size={20}
-                  color="#0891B2"
+                  name="checkmark-circle"
+                  size={25}
+                  color={
+                    selectedBus.availability_status === "available"
+                      ? "#FFFFFF"
+                      : "#16A34A"
+                  }
                 />
 
-                <Text style={styles.dockingButtonText}>
-                  Manage Docking First
+                <Text
+                  style={[
+                    styles.optionTitle,
+                    selectedBus.availability_status === "available" &&
+                      styles.selectedOptionText,
+                  ]}
+                >
+                  Available
+                </Text>
+
+                <Text
+                  style={[
+                    styles.optionSubtitle,
+                    selectedBus.availability_status === "available" &&
+                      styles.selectedOptionText,
+                  ]}
+                >
+                  Seats available
                 </Text>
               </TouchableOpacity>
 
-              <Text style={styles.tripChoiceDescription}>
-                Start Transit Now activates GPS tracking immediately.
-                Manage Docking First lets you dock your bus before
-                starting the trip.
-              </Text>
-            </>
-          )}
-        </View>
-      )}
-
-      {/* END TRIP */}
-
-      {selectedBus &&
-        getBusTrip(selectedBus.bus_id)?.status === "active" && (
-          <TouchableOpacity
-            style={[
-              styles.endTripButton,
-              saving && styles.disabledButton,
-            ]}
-            disabled={saving}
-            onPress={() =>
-              endTrip(
-                selectedBus,
-                getBusTrip(selectedBus.bus_id)
-              )
-            }
-          >
-            {saving ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <>
+              <TouchableOpacity
+                style={[
+                  styles.availabilityOption,
+                  styles.standingOption,
+                  selectedBus.availability_status === "standing" &&
+                    styles.selectedStandingOption,
+                ]}
+                disabled={saving}
+                onPress={() => updateAvailability("standing")}
+                activeOpacity={0.8}
+              >
                 <Ionicons
-                  name="stop-circle-outline"
-                  size={20}
-                  color="#FFFFFF"
+                  name="people"
+                  size={25}
+                  color={
+                    selectedBus.availability_status === "standing"
+                      ? "#FFFFFF"
+                      : "#D97706"
+                  }
                 />
 
-                <Text style={styles.endTripButtonText}>
-                  End Trip
+                <Text
+                  style={[
+                    styles.optionTitle,
+                    selectedBus.availability_status === "standing" &&
+                      styles.selectedOptionText,
+                  ]}
+                >
+                  Standing
                 </Text>
-              </>
+
+                <Text
+                  style={[
+                    styles.optionSubtitle,
+                    selectedBus.availability_status === "standing" &&
+                      styles.selectedOptionText,
+                  ]}
+                >
+                  Full bus
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.availabilityOption,
+                  styles.unavailableOption,
+                  selectedBus.availability_status === "not_available" &&
+                    styles.selectedUnavailableOption,
+                ]}
+                disabled={saving}
+                onPress={() => updateAvailability("not_available")}
+                activeOpacity={0.8}
+              >
+                <Ionicons
+                  name="close-circle"
+                  size={25}
+                  color={
+                    selectedBus.availability_status === "not_available"
+                      ? "#FFFFFF"
+                      : "#DC2626"
+                  }
+                />
+
+                <Text
+                  style={[
+                    styles.optionTitle,
+                    selectedBus.availability_status === "not_available" &&
+                      styles.selectedOptionText,
+                  ]}
+                >
+                  Unavailable
+                </Text>
+
+                <Text
+                  style={[
+                    styles.optionSubtitle,
+                    selectedBus.availability_status === "not_available" &&
+                      styles.selectedOptionText,
+                  ]}
+                >
+                  Not accepting
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {saving && (
+              <View style={styles.updatingNotice}>
+                <ActivityIndicator
+                  size="small"
+                  color="#1677D2"
+                />
+
+                <Text style={styles.updatingText}>
+                  Updating bus availability...
+                </Text>
+              </View>
             )}
-          </TouchableOpacity>
+
+            {/* CURRENT AVAILABILITY */}
+
+            <View style={styles.currentAvailability}>
+              <Text style={styles.currentAvailabilityLabel}>
+                Current availability
+              </Text>
+
+              <Text style={styles.currentAvailabilityValue}>
+                {getAvailabilityLabel(
+                  selectedBus.availability_status
+                )}
+              </Text>
+            </View>
+          </View>
         )}
 
-      <View style={{ height: 30 }} />
-    </ScrollView>
+        {/* CREATE TRIP */}
+
+        {selectedBus && (
+          <View style={styles.createCard}>
+            <View style={styles.cardHeadingRow}>
+              <View style={styles.cardHeadingIcon}>
+                <Ionicons
+                  name="navigate"
+                  size={20}
+                  color="#1677D2"
+                />
+              </View>
+
+              <View style={styles.cardHeadingText}>
+                <Text style={styles.sectionTitle}>
+                  Create a Trip
+                </Text>
+
+                <Text style={styles.sectionSubtitle}>
+                  Plan your next bus destination
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.selectedBusNotice}>
+              <Ionicons
+                name="bus-outline"
+                size={17}
+                color="#1677D2"
+              />
+
+              <Text style={styles.selectedBusText}>
+                Selected bus:{" "}
+                <Text style={styles.selectedBusName}>
+                  {selectedBus.bus_name ||
+                    selectedBus.plate_number}
+                </Text>
+              </Text>
+            </View>
+
+            {getBusTrip(selectedBus.bus_id) ? (
+              <View style={styles.noticeBox}>
+                <Ionicons
+                  name="information-circle"
+                  size={22}
+                  color="#D97706"
+                />
+
+                <Text style={styles.noticeText}>
+                  This bus already has a planned or active trip.
+                  Manage that trip from its bus card above.
+                </Text>
+              </View>
+            ) : (
+              <>
+                <Text style={styles.inputLabel}>
+                  Select Destination
+                </Text>
+
+                {/* DESTINATION DROPDOWN */}
+
+                <TouchableOpacity
+                  style={[
+                    styles.destinationDropdown,
+                    destinationOpen && styles.destinationDropdownOpen,
+                  ]}
+                  activeOpacity={0.8}
+                  onPress={() =>
+                    setDestinationOpen(!destinationOpen)
+                  }
+                  disabled={saving}
+                >
+                  <View style={styles.destinationLeft}>
+                    <Ionicons
+                      name="location-outline"
+                      size={19}
+                      color="#1677D2"
+                    />
+
+                    <Text
+                      style={[
+                        styles.destinationPlaceholder,
+                        destination && styles.destinationSelected,
+                      ]}
+                    >
+                      {destination || "Choose a destination"}
+                    </Text>
+                  </View>
+
+                  <Ionicons
+                    name={
+                      destinationOpen
+                        ? "chevron-up"
+                        : "chevron-down"
+                    }
+                    size={20}
+                    color="#64748B"
+                  />
+                </TouchableOpacity>
+
+                {destinationOpen && (
+                  <View style={styles.destinationOptions}>
+                    <ScrollView
+                      nestedScrollEnabled
+                      style={styles.destinationOptionsScroll}
+                      keyboardShouldPersistTaps="handled"
+                      showsVerticalScrollIndicator={false}
+                    >
+                      {DESTINATIONS.map((item) => (
+                        <TouchableOpacity
+                          key={item}
+                          style={[
+                            styles.destinationOption,
+                            destination === item &&
+                              styles.destinationOptionSelected,
+                          ]}
+                          onPress={() => {
+                            setDestination(item);
+                            setDestinationOpen(false);
+                          }}
+                        >
+                          <View style={styles.destinationOptionLeft}>
+                            <Ionicons
+                              name="location-outline"
+                              size={17}
+                              color={
+                                destination === item
+                                  ? "#1677D2"
+                                  : "#94A3B8"
+                              }
+                            />
+
+                            <Text
+                              style={[
+                                styles.destinationOptionText,
+                                destination === item &&
+                                  styles.destinationOptionTextSelected,
+                              ]}
+                            >
+                              {item}
+                            </Text>
+                          </View>
+
+                          {destination === item && (
+                            <Ionicons
+                              name="checkmark-circle"
+                              size={19}
+                              color="#1677D2"
+                            />
+                          )}
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
+
+                {/* START TRANSIT */}
+
+                <TouchableOpacity
+                  style={[
+                    styles.startTransitButton,
+                    (saving || !destination) &&
+                      styles.disabledButton,
+                  ]}
+                  onPress={() => createTrip("instant")}
+                  disabled={saving || !destination}
+                  activeOpacity={0.85}
+                >
+                  {saving ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <>
+                      <Ionicons
+                        name="play-circle"
+                        size={22}
+                        color="#FFFFFF"
+                      />
+
+                      <Text style={styles.createButtonText}>
+                        Start Transit Now
+                      </Text>
+
+                      <Ionicons
+                        name="arrow-forward"
+                        size={17}
+                        color="#FFFFFF"
+                      />
+                    </>
+                  )}
+                </TouchableOpacity>
+
+                {/* MANAGE DOCKING */}
+
+                <TouchableOpacity
+                  style={[
+                    styles.dockingButton,
+                    (saving || !destination) &&
+                      styles.disabledButton,
+                  ]}
+                  onPress={() => createTrip("docking")}
+                  disabled={saving || !destination}
+                  activeOpacity={0.85}
+                >
+                  <Ionicons
+                    name="business-outline"
+                    size={20}
+                    color="#1677D2"
+                  />
+
+                  <Text style={styles.dockingButtonText}>
+                    Manage Docking First
+                  </Text>
+                </TouchableOpacity>
+
+                <View style={styles.tripChoiceInfo}>
+                  <Ionicons
+                    name="information-circle-outline"
+                    size={17}
+                    color="#64748B"
+                  />
+
+                  <Text style={styles.tripChoiceDescription}>
+                    Start Transit Now activates GPS tracking immediately.
+                    Manage Docking First lets you dock your bus before
+                    starting the trip.
+                  </Text>
+                </View>
+              </>
+            )}
+          </View>
+        )}
+
+        {/* END TRIP BUTTON */}
+
+        {selectedBus &&
+          getBusTrip(selectedBus.bus_id)?.status === "active" && (
+            <TouchableOpacity
+              style={[
+                styles.endTripButton,
+                saving && styles.disabledButton,
+              ]}
+              disabled={saving}
+              onPress={() =>
+                endTrip(
+                  selectedBus,
+                  getBusTrip(selectedBus.bus_id)
+                )
+              }
+              activeOpacity={0.85}
+            >
+              {saving ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <>
+                  <Ionicons
+                    name="stop-circle-outline"
+                    size={22}
+                    color="#FFFFFF"
+                  />
+
+                  <Text style={styles.endTripButtonText}>
+                    End Current Trip
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
+
+        <View style={{ height: 30 }} />
+      </ScrollView>
+
+      {/* ======================================
+          END TRIP CONFIRMATION MODAL
+      ====================================== */}
+
+      <Modal
+        visible={endTripModalVisible}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={cancelEndTrip}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.confirmModal}>
+            <View style={styles.modalIcon}>
+              <Ionicons
+                name="warning"
+                size={32}
+                color="#DC2626"
+              />
+            </View>
+
+            <Text style={styles.modalTitle}>
+              End This Trip?
+            </Text>
+
+            <Text style={styles.modalMessage}>
+              Are you sure you want to end the trip for{" "}
+              <Text style={styles.modalBusName}>
+                {pendingEndTrip?.bus?.bus_name ||
+                  pendingEndTrip?.bus?.plate_number ||
+                  "this bus"}
+              </Text>
+              ?
+            </Text>
+
+            <Text style={styles.modalDescription}>
+              This will mark the trip as completed and stop GPS
+              tracking if no other active trips remain.
+            </Text>
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={styles.cancelModalButton}
+                onPress={cancelEndTrip}
+                disabled={saving}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.cancelModalText}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.confirmEndButton,
+                  saving && styles.disabledButton,
+                ]}
+                onPress={handleConfirmEndTrip}
+                disabled={saving}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.confirmEndText}>
+                  End Trip
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* CUSTOM ALERT */}
+
+      <CustomAlert
+        visible={alertData.visible}
+        title={alertData.title}
+        message={alertData.message}
+        type={alertData.type}
+        buttonText={alertData.buttonText}
+        onClose={closeAlert}
+      />
+    </>
   );
 }
 
@@ -1390,149 +1801,241 @@ export default function TripManagementScreen({
 // ==========================================
 
 const styles = StyleSheet.create({
+  // MAIN
   container: {
     flex: 1,
-    backgroundColor: "#F1F5F9",
+    backgroundColor: "#F4F7FB",
   },
   content: {
-    padding: 18,
+    paddingHorizontal: 18,
+    paddingTop: 20,
+    paddingBottom: 35,
   },
   center: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#F1F5F9",
+    backgroundColor: "#F4F7FB",
   },
   loadingText: {
     marginTop: 12,
     color: "#64748B",
+    fontSize: 13,
+    fontWeight: "600",
   },
+
+  // HEADER
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 20,
+    marginBottom: 22,
+  },
+  headerEyebrow: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#1677D2",
+    letterSpacing: 1.5,
+    marginBottom: 5,
   },
   headerTitle: {
     fontSize: 25,
-    fontWeight: "800",
-    color: "#0F172A",
+    fontWeight: "900",
+    color: "#14243A",
+    letterSpacing: -0.6,
   },
   headerSubtitle: {
-    fontSize: 13,
-    color: "#64748B",
-    marginTop: 4,
+    fontSize: 12,
+    color: "#8492A6",
+    marginTop: 5,
   },
   refreshButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 13,
+    width: 44,
+    height: 44,
+    borderRadius: 15,
     backgroundColor: "#FFFFFF",
     justifyContent: "center",
     alignItems: "center",
+    elevation: 2,
   },
+
+  // SUMMARY
   summaryCard: {
     flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 17,
-    padding: 17,
-    marginBottom: 24,
+    backgroundColor: "#1677D2",
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 27,
+    elevation: 4,
+  },
+  summaryContent: {
+    flexDirection: "row",
+    alignItems: "center",
   },
   summaryIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    backgroundColor: "#CFFAFE",
+    width: 53,
+    height: 53,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.18)",
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 14,
+    marginRight: 15,
   },
   summaryNumber: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: "#0F172A",
+    fontSize: 27,
+    fontWeight: "900",
+    color: "#FFFFFF",
   },
   summaryLabel: {
     fontSize: 12,
-    color: "#64748B",
+    color: "#E1F1FF",
+    marginTop: 3,
+  },
+  summaryRight: {
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  // SECTION HEADERS
+  sectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 14,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#0F172A",
-    marginBottom: 12,
+    fontSize: 17,
+    fontWeight: "900",
+    color: "#172B45",
+    marginBottom: 4,
   },
+  sectionSubtitle: {
+    fontSize: 11,
+    color: "#8492A6",
+  },
+  countBadge: {
+    minWidth: 32,
+    height: 32,
+    borderRadius: 11,
+    backgroundColor: "#DBEAFE",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 9,
+  },
+  countBadgeText: {
+    color: "#1677D2",
+    fontSize: 12,
+    fontWeight: "900",
+  },
+
+  // EMPTY STATE
   emptyCard: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 25,
+    borderRadius: 19,
+    padding: 27,
     alignItems: "center",
     marginBottom: 20,
+    elevation: 2,
+  },
+  emptyIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 23,
+    backgroundColor: "#EFF6FF",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 13,
   },
   emptyTitle: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: "#0F172A",
-    marginTop: 12,
+    fontSize: 17,
+    fontWeight: "900",
+    color: "#172B45",
   },
   emptyText: {
-    color: "#64748B",
+    color: "#8492A6",
     fontSize: 12,
     textAlign: "center",
     lineHeight: 19,
-    marginTop: 7,
+    marginTop: 8,
   },
+
+  // BUS CARD
   busCard: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 17,
-    padding: 16,
-    marginBottom: 13,
+    borderRadius: 19,
+    padding: 17,
+    marginBottom: 14,
     borderWidth: 1.5,
     borderColor: "#FFFFFF",
+    elevation: 2,
   },
   selectedBusCard: {
-    borderColor: "#06B6D4",
+    borderColor: "#1686E5",
+    backgroundColor: "#FCFEFF",
   },
   busTopRow: {
     flexDirection: "row",
     alignItems: "center",
   },
   busIcon: {
-    width: 46,
-    height: 46,
-    borderRadius: 13,
-    backgroundColor: "#CFFAFE",
+    width: 49,
+    height: 49,
+    borderRadius: 15,
+    backgroundColor: "#1677D2",
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
+  },
+  selectedBusIcon: {
+    backgroundColor: "#075DB1",
   },
   busInfo: {
     flex: 1,
   },
   busName: {
     fontSize: 15,
-    fontWeight: "800",
-    color: "#0F172A",
+    fontWeight: "900",
+    color: "#172B45",
   },
   plateNumber: {
     fontSize: 12,
-    color: "#64748B",
+    color: "#8492A6",
     marginTop: 4,
   },
+
+  // BUS STATUS
   statusBadge: {
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 9,
-    paddingVertical: 6,
-    borderRadius: 8,
+    paddingVertical: 7,
+    borderRadius: 20,
+    gap: 5,
   },
   transitBadge: {
     backgroundColor: "#DCFCE7",
   },
   dockedBadge: {
-    backgroundColor: "#CFFAFE",
+    backgroundColor: "#DBEAFE",
   },
   offlineBadge: {
-    backgroundColor: "#E2E8F0",
+    backgroundColor: "#F1F5F9",
+  },
+  statusDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+  },
+  transitDot: {
+    backgroundColor: "#16A34A",
+  },
+  dockedDot: {
+    backgroundColor: "#2563EB",
+  },
+  offlineDot: {
+    backgroundColor: "#94A3B8",
   },
   statusText: {
     fontSize: 10,
@@ -1540,25 +2043,30 @@ const styles = StyleSheet.create({
     color: "#334155",
     textTransform: "capitalize",
   },
+
+  // BUS DETAILS
   busDetails: {
     flexDirection: "row",
-    marginTop: 14,
-    gap: 18,
+    marginTop: 17,
+    gap: 20,
   },
   detailItem: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
+    gap: 6,
   },
   detailText: {
     fontSize: 12,
     color: "#64748B",
+    fontWeight: "600",
   },
   tripDivider: {
     height: 1,
-    backgroundColor: "#E2E8F0",
-    marginVertical: 14,
+    backgroundColor: "#EDF1F6",
+    marginVertical: 15,
   },
+
+  // TRIP INFORMATION
   tripInfo: {
     flexDirection: "row",
     alignItems: "center",
@@ -1569,29 +2077,36 @@ const styles = StyleSheet.create({
     paddingRight: 10,
   },
   tripLabel: {
-    fontSize: 11,
-    color: "#64748B",
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#94A3B8",
+    letterSpacing: 0.8,
   },
   destinationText: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: "#0F172A",
-    marginTop: 3,
+    fontSize: 15,
+    fontWeight: "900",
+    color: "#172B45",
+    marginTop: 5,
   },
   tripStatus: {
     fontSize: 11,
-    color: "#0891B2",
-    marginTop: 4,
-    textTransform: "capitalize",
+    fontWeight: "700",
+    marginTop: 5,
+  },
+  activeTripText: {
+    color: "#16A34A",
+  },
+  plannedTripText: {
+    color: "#D97706",
   },
   manageButton: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    backgroundColor: "#06B6D4",
-    borderRadius: 10,
-    paddingHorizontal: 13,
-    paddingVertical: 10,
+    gap: 7,
+    backgroundColor: "#1677D2",
+    borderRadius: 11,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
   },
   manageButtonText: {
     color: "#FFFFFF",
@@ -1599,147 +2114,219 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   noTripRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
     paddingVertical: 3,
   },
   noTripText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#64748B",
-  },
-  selectText: {
-    fontSize: 11,
-    color: "#0891B2",
-    marginTop: 4,
-  },
-  availabilityCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 17,
-    padding: 17,
-    marginTop: 12,
-    marginBottom: 12,
-  },
-  availabilityDescription: {
-    color: "#64748B",
     fontSize: 12,
-    marginBottom: 13,
+    color: "#94A3B8",
+    fontWeight: "600",
   },
-  availabilityButtons: {
-    gap: 9,
-  },
-  availabilityButton: {
-    minHeight: 45,
-    borderRadius: 10,
+  selectedIndicator: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 5,
+    borderTopWidth: 1,
+    borderTopColor: "#EAF2FB",
+    paddingTop: 11,
+    marginTop: 13,
+  },
+  selectedIndicatorText: {
+    color: "#1677D2",
+    fontSize: 10,
+    fontWeight: "800",
+  },
+
+  // CARD HEADING
+  cardHeadingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 15,
+  },
+  cardHeadingIcon: {
+    width: 39,
+    height: 39,
+    borderRadius: 12,
+    backgroundColor: "#EFF6FF",
     justifyContent: "center",
+    alignItems: "center",
+    marginRight: 11,
+  },
+  cardHeadingText: {
+    flex: 1,
+  },
+
+  // SELECTED BUS NOTICE
+  selectedBusNotice: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#EFF6FF",
+    padding: 11,
+    borderRadius: 11,
     gap: 8,
+    marginBottom: 13,
+  },
+  selectedBusText: {
+    color: "#64748B",
+    fontSize: 11,
+    flex: 1,
+  },
+  selectedBusName: {
+    color: "#1677D2",
+    fontWeight: "900",
+  },
+
+  // AVAILABILITY CARD
+  availabilityCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 19,
+    padding: 17,
+    marginTop: 12,
+    marginBottom: 14,
+    elevation: 2,
+  },
+  availabilityDescription: {
+    fontSize: 11,
+    color: "#8492A6",
+    lineHeight: 17,
+    marginBottom: 14,
+  },
+  availabilityOptions: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  availabilityOption: {
+    flex: 1,
+    minHeight: 108,
+    borderRadius: 14,
+    paddingVertical: 13,
+    paddingHorizontal: 4,
+    alignItems: "center",
+    justifyContent: "center",
     borderWidth: 1,
   },
-  availableButton: {
+  availableOption: {
     backgroundColor: "#F0FDF4",
     borderColor: "#BBF7D0",
   },
-  activeAvailableButton: {
+  selectedAvailableOption: {
     backgroundColor: "#16A34A",
     borderColor: "#16A34A",
   },
-  standingButton: {
+  standingOption: {
     backgroundColor: "#FFFBEB",
     borderColor: "#FDE68A",
   },
-  activeStandingButton: {
+  selectedStandingOption: {
     backgroundColor: "#D97706",
     borderColor: "#D97706",
   },
-  unavailableButton: {
+  unavailableOption: {
     backgroundColor: "#FEF2F2",
     borderColor: "#FECACA",
   },
-  activeUnavailableButton: {
+  selectedUnavailableOption: {
     backgroundColor: "#DC2626",
     borderColor: "#DC2626",
   },
-  availabilityButtonText: {
-    fontSize: 13,
-    fontWeight: "800",
+  optionTitle: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#334155",
+    marginTop: 8,
+    textAlign: "center",
   },
-  availableButtonText: {
-    color: "#16A34A",
+  optionSubtitle: {
+    fontSize: 9,
+    color: "#64748B",
+    marginTop: 4,
+    textAlign: "center",
   },
-  standingButtonText: {
-    color: "#D97706",
-  },
-  unavailableButtonText: {
-    color: "#DC2626",
-  },
-  activeAvailabilityText: {
+  selectedOptionText: {
     color: "#FFFFFF",
+  },
+  updatingNotice: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 12,
+  },
+  updatingText: {
+    fontSize: 11,
+    color: "#1677D2",
+    fontWeight: "700",
   },
   currentAvailability: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginTop: 15,
-    paddingTop: 12,
+    marginTop: 16,
+    paddingTop: 13,
     borderTopWidth: 1,
-    borderTopColor: "#E2E8F0",
+    borderTopColor: "#EDF1F6",
   },
   currentAvailabilityLabel: {
-    fontSize: 12,
-    color: "#64748B",
+    fontSize: 11,
+    color: "#8492A6",
   },
   currentAvailabilityValue: {
     fontSize: 12,
-    fontWeight: "800",
-    color: "#0891B2",
+    fontWeight: "900",
+    color: "#1677D2",
     textTransform: "capitalize",
   },
+
+  // CREATE TRIP CARD
   createCard: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 17,
-    padding: 17,
+    borderRadius: 19,
+    padding: 18,
     marginTop: 12,
-    marginBottom: 23,
-  },
-  selectedBusText: {
-    color: "#64748B",
-    fontSize: 12,
-    marginBottom: 10,
-  },
-  selectedBusName: {
-    color: "#0891B2",
-    fontWeight: "800",
+    marginBottom: 20,
+    elevation: 2,
   },
   inputLabel: {
     color: "#334155",
     fontSize: 12,
-    fontWeight: "700",
-    marginBottom: 7,
+    fontWeight: "800",
+    marginBottom: 9,
   },
+
+  // DESTINATION DROPDOWN
   destinationDropdown: {
-    minHeight: 49,
-    borderRadius: 11,
+    minHeight: 51,
+    borderRadius: 12,
     backgroundColor: "#F8FAFC",
     borderWidth: 1,
     borderColor: "#E2E8F0",
-    paddingHorizontal: 13,
+    paddingHorizontal: 14,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 10,
+    marginBottom: 12,
+  },
+  destinationDropdownOpen: {
+    borderColor: "#1677D2",
+  },
+  destinationLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
   },
   destinationPlaceholder: {
-    fontSize: 13,
+    fontSize: 12,
     color: "#94A3B8",
   },
   destinationSelected: {
-    color: "#0F172A",
-    fontWeight: "700",
+    color: "#172B45",
+    fontWeight: "800",
   },
   destinationOptions: {
     borderWidth: 1,
     borderColor: "#E2E8F0",
-    borderRadius: 11,
+    borderRadius: 12,
     backgroundColor: "#FFFFFF",
     marginBottom: 13,
     overflow: "hidden",
@@ -1748,7 +2335,7 @@ const styles = StyleSheet.create({
     maxHeight: 210,
   },
   destinationOption: {
-    minHeight: 43,
+    minHeight: 45,
     paddingHorizontal: 13,
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1757,85 +2344,193 @@ const styles = StyleSheet.create({
     borderBottomColor: "#F1F5F9",
   },
   destinationOptionSelected: {
-    backgroundColor: "#ECFEFF",
+    backgroundColor: "#EFF6FF",
+  },
+  destinationOptionLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
   },
   destinationOptionText: {
-    fontSize: 13,
+    fontSize: 12,
     color: "#334155",
   },
   destinationOptionTextSelected: {
-    color: "#0891B2",
-    fontWeight: "800",
+    color: "#1677D2",
+    fontWeight: "900",
   },
+
+  // TRIP ACTION BUTTONS
   startTransitButton: {
-    height: 49,
-    borderRadius: 11,
-    backgroundColor: "#06B6D4",
+    height: 51,
+    borderRadius: 13,
+    backgroundColor: "#1677D2",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    marginTop: 5,
+    gap: 9,
+    marginTop: 8,
+    elevation: 2,
   },
   createButtonText: {
     color: "#FFFFFF",
-    fontWeight: "800",
+    fontWeight: "900",
     fontSize: 13,
   },
   dockingButton: {
-    height: 49,
-    borderRadius: 11,
-    backgroundColor: "#ECFEFF",
+    height: 51,
+    borderRadius: 13,
+    backgroundColor: "#EFF8FF",
     borderWidth: 1,
-    borderColor: "#A5F3FC",
+    borderColor: "#BFDBFE",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    marginTop: 10,
+    gap: 9,
+    marginTop: 11,
   },
   dockingButtonText: {
-    color: "#0891B2",
+    color: "#1677D2",
     fontWeight: "800",
     fontSize: 13,
   },
+  tripChoiceInfo: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 7,
+    marginTop: 14,
+    padding: 11,
+    backgroundColor: "#F8FAFC",
+    borderRadius: 10,
+  },
   tripChoiceDescription: {
+    flex: 1,
     color: "#64748B",
-    fontSize: 11,
-    lineHeight: 17,
-    marginTop: 12,
-    textAlign: "center",
+    fontSize: 10,
+    lineHeight: 16,
   },
-  disabledButton: {
-    opacity: 0.6,
-  },
+
+  // NOTICE
   noticeBox: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    padding: 12,
-    backgroundColor: "#FEF3C7",
-    borderRadius: 10,
+    gap: 9,
+    padding: 13,
+    backgroundColor: "#FFFBEB",
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: "#FDE68A",
   },
   noticeText: {
     flex: 1,
-    fontSize: 12,
+    fontSize: 11,
     lineHeight: 18,
     color: "#92400E",
   },
+
+  // DISABLED
+  disabledButton: {
+    opacity: 0.55,
+  },
+
+  // END TRIP
   endTripButton: {
-    height: 50,
-    borderRadius: 12,
+    height: 53,
+    borderRadius: 14,
     backgroundColor: "#DC2626",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    marginTop: 18,
+    gap: 9,
+    marginTop: 12,
+    elevation: 3,
   },
   endTripButtonText: {
     color: "#FFFFFF",
     fontSize: 14,
+    fontWeight: "900",
+  },
+
+  // END TRIP MODAL
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.60)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 25,
+  },
+  confirmModal: {
+    width: "100%",
+    maxWidth: 350,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 22,
+    padding: 24,
+    alignItems: "center",
+    elevation: 10,
+  },
+  modalIcon: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: "#FEE2E2",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 17,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "900",
+    color: "#0F172A",
+    textAlign: "center",
+  },
+  modalMessage: {
+    fontSize: 14,
+    color: "#64748B",
+    textAlign: "center",
+    lineHeight: 21,
+    marginTop: 12,
+  },
+  modalBusName: {
+    color: "#0F172A",
+    fontWeight: "800",
+  },
+  modalDescription: {
+    fontSize: 12,
+    color: "#94A3B8",
+    textAlign: "center",
+    lineHeight: 19,
+    marginTop: 9,
+  },
+  modalButtons: {
+    flexDirection: "row",
+    width: "100%",
+    gap: 10,
+    marginTop: 24,
+  },
+  cancelModalButton: {
+    flex: 1,
+    height: 47,
+    borderRadius: 11,
+    backgroundColor: "#F1F5F9",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  cancelModalText: {
+    color: "#475569",
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  confirmEndButton: {
+    flex: 1,
+    height: 47,
+    borderRadius: 11,
+    backgroundColor: "#DC2626",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  confirmEndText: {
+    color: "#FFFFFF",
+    fontSize: 13,
     fontWeight: "800",
   },
 });

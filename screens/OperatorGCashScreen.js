@@ -1,8 +1,10 @@
+
 import React, { useEffect, useState } from "react";
 
 import {
   View,
   Text,
+  TextInput,
   TouchableOpacity,
   Image,
   Alert,
@@ -21,18 +23,22 @@ import { supabase } from "../config/supabase";
 const IMAGE_BUCKET = "operator-gcash-qr";
 
 export default function OperatorGCashScreen() {
+  const [accountName, setAccountName] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
+
   const [imageUrl, setImageUrl] = useState(null);
   const [selectedImage, setSelectedImage] = useState(null);
 
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [savingDetails, setSavingDetails] = useState(false);
+  const [savingImage, setSavingImage] = useState(false);
 
   useEffect(() => {
-    loadOperatorImage();
+    loadOperatorData();
   }, []);
 
-  // LOAD OPERATOR IMAGE
-  const loadOperatorImage = async () => {
+  // LOAD ACCOUNT DETAILS AND QR IMAGE
+  const loadOperatorData = async () => {
     try {
       setLoading(true);
 
@@ -42,11 +48,23 @@ export default function OperatorGCashScreen() {
       } = await supabase.auth.getUser();
 
       if (authError) throw authError;
+      if (!user) throw new Error("Please log in first.");
 
-      if (!user) {
-        throw new Error("Please log in first.");
-      }
+      // Load GCash details
+      const { data: profiles, error: profileError } = await supabase
+        .from("profiles")
+        .select("gcash_account_name, gcash_account_number")
+        .eq("id", user.id)
+        .limit(1);
 
+      if (profileError) throw profileError;
+
+      const profile = profiles?.[0];
+
+      setAccountName(profile?.gcash_account_name || "");
+      setAccountNumber(profile?.gcash_account_number || "");
+
+      // Load QR image
       const filePath = `${user.id}/operator-image.jpg`;
 
       const { data, error } = await supabase.storage
@@ -54,25 +72,23 @@ export default function OperatorGCashScreen() {
         .createSignedUrl(filePath, 3600);
 
       if (error) {
-        // No image has been uploaded yet.
         setImageUrl(null);
-        return;
+      } else {
+        setImageUrl(data?.signedUrl || null);
       }
-
-      setImageUrl(data?.signedUrl || null);
     } catch (error) {
-      console.log("LOAD OPERATOR IMAGE ERROR:", error);
+      console.log("LOAD OPERATOR DATA ERROR:", error);
 
       Alert.alert(
         "Loading Error",
-        error.message || "Unable to load operator image."
+        error.message || "Unable to load GCash information."
       );
     } finally {
       setLoading(false);
     }
   };
 
-  // SELECT IMAGE
+  // SELECT QR IMAGE
   const chooseImage = async () => {
     try {
       const permission =
@@ -92,9 +108,7 @@ export default function OperatorGCashScreen() {
         quality: 1,
       });
 
-      if (result.canceled || !result.assets?.length) {
-        return;
-      }
+      if (result.canceled || !result.assets?.length) return;
 
       const converted = await ImageManipulator.manipulateAsync(
         result.assets[0].uri,
@@ -111,10 +125,7 @@ export default function OperatorGCashScreen() {
         throw new Error("Selected image could not be processed.");
       }
 
-      setSelectedImage({
-        uri: converted.uri,
-      });
-
+      setSelectedImage({ uri: converted.uri });
       setImageUrl(converted.uri);
     } catch (error) {
       console.log("IMAGE PICKER ERROR:", error);
@@ -138,18 +149,31 @@ export default function OperatorGCashScreen() {
     return bytes;
   };
 
-  // UPLOAD OPERATOR IMAGE
-  const saveImage = async () => {
-    if (!selectedImage) {
+  // SAVE GCASH ACCOUNT DETAILS
+  const saveAccountDetails = async () => {
+    const trimmedName = accountName.trim();
+    const trimmedNumber = accountNumber.trim();
+
+    if (!trimmedName || !trimmedNumber) {
       Alert.alert(
-        "No New Image",
-        "Please choose an image before saving."
+        "Missing Information",
+        "Please enter your GCash account name and number."
+      );
+      return;
+    }
+
+    const digitsOnly = trimmedNumber.replace(/\D/g, "");
+
+    if (digitsOnly.length !== 11) {
+      Alert.alert(
+        "Invalid GCash Number",
+        "Please enter a valid 11-digit mobile number."
       );
       return;
     }
 
     try {
-      setSaving(true);
+      setSavingDetails(true);
 
       const {
         data: { user },
@@ -157,10 +181,54 @@ export default function OperatorGCashScreen() {
       } = await supabase.auth.getUser();
 
       if (authError) throw authError;
+      if (!user) throw new Error("Please log in first.");
 
-      if (!user) {
-        throw new Error("Please log in first.");
-      }
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          gcash_account_name: trimmedName,
+          gcash_account_number: digitsOnly,
+        })
+        .eq("id", user.id);
+
+      if (error) throw error;
+
+      Alert.alert(
+        "Success",
+        "Your GCash account details have been saved."
+      );
+    } catch (error) {
+      console.log("SAVE GCASH DETAILS ERROR:", error);
+
+      Alert.alert(
+        "Save Failed",
+        error.message || "Unable to save GCash details."
+      );
+    } finally {
+      setSavingDetails(false);
+    }
+  };
+
+  // UPLOAD QR IMAGE
+  const saveImage = async () => {
+    if (!selectedImage) {
+      Alert.alert(
+        "No New Image",
+        "Please choose an image before uploading."
+      );
+      return;
+    }
+
+    try {
+      setSavingImage(true);
+
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
+
+      if (authError) throw authError;
+      if (!user) throw new Error("Please log in first.");
 
       const base64 = await FileSystem.readAsStringAsync(
         selectedImage.uri,
@@ -174,7 +242,6 @@ export default function OperatorGCashScreen() {
       }
 
       const bytes = base64ToBytes(base64);
-
       const filePath = `${user.id}/operator-image.jpg`;
 
       const { error: uploadError } = await supabase.storage
@@ -196,18 +263,18 @@ export default function OperatorGCashScreen() {
       setSelectedImage(null);
 
       Alert.alert(
-        "Success",
-        "Operator image uploaded successfully."
+        "Upload Successful",
+        "Your GCash QR code has been uploaded."
       );
     } catch (error) {
-      console.log("SAVE OPERATOR IMAGE ERROR:", error);
+      console.log("SAVE QR IMAGE ERROR:", error);
 
       Alert.alert(
         "Upload Failed",
-        error.message || "Unable to upload operator image."
+        error.message || "Unable to upload QR image."
       );
     } finally {
-      setSaving(false);
+      setSavingImage(false);
     }
   };
 
@@ -218,7 +285,7 @@ export default function OperatorGCashScreen() {
         <ActivityIndicator size="large" color="#087CFF" />
 
         <Text style={styles.loadingText}>
-          Loading operator image...
+          Loading GCash information...
         </Text>
       </View>
     );
@@ -230,26 +297,113 @@ export default function OperatorGCashScreen() {
       style={styles.container}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
     >
+      {/* HEADER */}
       <View style={styles.header}>
-        <Text style={styles.title}>Operator Image</Text>
+        <View style={styles.headerIcon}>
+          <Ionicons name="wallet-outline" size={27} color="#087CFF" />
+        </View>
+
+        <Text style={styles.title}>GCash Payment Settings</Text>
 
         <Text style={styles.subtitle}>
-          Upload and manage your operator image.
+          Manage your GCash account information and payment QR code.
         </Text>
       </View>
 
+      {/* ACCOUNT DETAILS */}
       <View style={styles.card}>
         <View style={styles.sectionHeader}>
-          <Ionicons
-            name="image-outline"
-            size={23}
-            color="#087CFF"
-          />
+          <View style={styles.sectionIcon}>
+            <Ionicons name="person-outline" size={20} color="#087CFF" />
+          </View>
 
-          <Text style={styles.sectionTitle}>
-            Image Preview
-          </Text>
+          <View style={styles.sectionHeadingText}>
+            <Text style={styles.sectionTitle}>
+              GCash Account Details
+            </Text>
+
+            <Text style={styles.sectionSubtitle}>
+              Enter your registered GCash account information.
+            </Text>
+          </View>
+        </View>
+
+        <Text style={styles.inputLabel}>Account Name</Text>
+
+        <View style={styles.inputContainer}>
+          <Ionicons name="person-outline" size={19} color="#94A3B8" />
+
+          <TextInput
+            style={styles.input}
+            placeholder="Enter GCash account name"
+            placeholderTextColor="#A0AAB8"
+            value={accountName}
+            onChangeText={setAccountName}
+            autoCapitalize="words"
+            editable={!savingDetails}
+          />
+        </View>
+
+        <Text style={styles.inputLabel}>GCash Mobile Number</Text>
+
+        <View style={styles.inputContainer}>
+          <Ionicons name="call-outline" size={19} color="#94A3B8" />
+
+          <TextInput
+            style={styles.input}
+            placeholder="09XXXXXXXXX"
+            placeholderTextColor="#A0AAB8"
+            value={accountNumber}
+            onChangeText={(value) =>
+              setAccountNumber(
+                value.replace(/[^0-9]/g, "").slice(0, 11)
+              )
+            }
+            keyboardType="phone-pad"
+            maxLength={11}
+            editable={!savingDetails}
+          />
+        </View>
+
+        <TouchableOpacity
+          style={[
+            styles.saveDetailsButton,
+            savingDetails && styles.disabledButton,
+          ]}
+          onPress={saveAccountDetails}
+          disabled={savingDetails}
+          activeOpacity={0.85}
+        >
+          {savingDetails ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <>
+              <Ionicons name="save-outline" size={19} color="#FFFFFF" />
+
+              <Text style={styles.buttonText}>
+                Save Account Details
+              </Text>
+            </>
+          )}
+        </TouchableOpacity>
+      </View>
+
+      {/* QR IMAGE */}
+      <View style={styles.card}>
+        <View style={styles.sectionHeader}>
+          <View style={styles.sectionIcon}>
+            <Ionicons name="qr-code-outline" size={21} color="#087CFF" />
+          </View>
+
+          <View style={styles.sectionHeadingText}>
+            <Text style={styles.sectionTitle}>GCash QR Code</Text>
+
+            <Text style={styles.sectionSubtitle}>
+              Upload your GCash QR code for payment.
+            </Text>
+          </View>
         </View>
 
         <View style={styles.imageContainer}>
@@ -261,64 +415,78 @@ export default function OperatorGCashScreen() {
             />
           ) : (
             <View style={styles.emptyImage}>
-              <Ionicons
-                name="image-outline"
-                size={65}
-                color="#A0AAB8"
-              />
+              <View style={styles.emptyIcon}>
+                <Ionicons
+                  name="qr-code-outline"
+                  size={55}
+                  color="#94A3B8"
+                />
+              </View>
+
+              <Text style={styles.emptyTitle}>No QR Code Yet</Text>
 
               <Text style={styles.emptyText}>
-                No image uploaded
+                Choose an image of your GCash QR code.
               </Text>
             </View>
           )}
         </View>
 
         <TouchableOpacity
-          style={styles.uploadButton}
+          style={styles.chooseButton}
           onPress={chooseImage}
-          disabled={saving}
+          disabled={savingImage}
+          activeOpacity={0.85}
         >
-          <Ionicons
-            name="images-outline"
-            size={20}
-            color="#FFFFFF"
-          />
+          <Ionicons name="images-outline" size={20} color="#087CFF" />
 
-          <Text style={styles.buttonText}>
-            {imageUrl ? "Change Image" : "Choose Image"}
+          <Text style={styles.chooseButtonText}>
+            {imageUrl ? "Change QR Image" : "Choose QR Image"}
           </Text>
         </TouchableOpacity>
 
         <Text style={styles.fileNote}>
-          Image format: JPG
+          Your image will be saved as JPG.
         </Text>
+
+        <TouchableOpacity
+          style={[
+            styles.uploadButton,
+            (!selectedImage || savingImage) && styles.disabledButton,
+          ]}
+          onPress={saveImage}
+          disabled={!selectedImage || savingImage}
+          activeOpacity={0.85}
+        >
+          {savingImage ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <>
+              <Ionicons
+                name="cloud-upload-outline"
+                size={20}
+                color="#FFFFFF"
+              />
+
+              <Text style={styles.buttonText}>Upload QR Code</Text>
+            </>
+          )}
+        </TouchableOpacity>
       </View>
 
-      <TouchableOpacity
-        style={[
-          styles.saveButton,
-          saving && styles.disabledButton,
-        ]}
-        onPress={saveImage}
-        disabled={saving || !selectedImage}
-      >
-        {saving ? (
-          <ActivityIndicator color="#FFFFFF" />
-        ) : (
-          <>
-            <Ionicons
-              name="cloud-upload-outline"
-              size={20}
-              color="#FFFFFF"
-            />
+      {/* INFORMATION */}
+      <View style={styles.infoBox}>
+        <Ionicons
+          name="information-circle-outline"
+          size={20}
+          color="#087CFF"
+        />
 
-            <Text style={styles.buttonText}>
-              Save Image
-            </Text>
-          </>
-        )}
-      </TouchableOpacity>
+        <Text style={styles.infoText}>
+          Double-check your GCash account name, mobile number, and QR
+          code before saving.
+        </Text>
+      </View>
     </ScrollView>
   );
 }
@@ -331,7 +499,7 @@ const styles = StyleSheet.create({
   },
 
   content: {
-    padding: 20,
+    padding: 18,
     paddingBottom: 40,
   },
 
@@ -345,86 +513,181 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 12,
     color: "#64748B",
+    fontSize: 13,
   },
 
   header: {
     marginBottom: 22,
   },
 
+  headerIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: "#E5F1FF",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 13,
+  },
+
   title: {
-    fontSize: 24,
-    fontWeight: "bold",
+    fontSize: 23,
+    fontWeight: "900",
     color: "#172B4D",
   },
 
   subtitle: {
-    fontSize: 14,
+    fontSize: 13,
     color: "#64748B",
-    marginTop: 6,
+    marginTop: 7,
+    lineHeight: 20,
   },
 
   card: {
     backgroundColor: "#FFFFFF",
-    padding: 18,
-    borderRadius: 16,
-    marginBottom: 18,
+    padding: 17,
+    borderRadius: 18,
+    marginBottom: 17,
     elevation: 2,
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
   },
 
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 18,
+    marginBottom: 20,
+  },
+
+  sectionIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 13,
+    backgroundColor: "#EAF3FF",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+
+  sectionHeadingText: {
+    flex: 1,
   },
 
   sectionTitle: {
-    fontSize: 17,
-    fontWeight: "bold",
+    fontSize: 15,
+    fontWeight: "800",
     color: "#172B4D",
+  },
+
+  sectionSubtitle: {
+    fontSize: 11,
+    color: "#64748B",
+    marginTop: 4,
+    lineHeight: 16,
+  },
+
+  inputLabel: {
+    color: "#334155",
+    fontSize: 12,
+    fontWeight: "700",
+    marginBottom: 8,
+    marginTop: 3,
+  },
+
+  inputContainer: {
+    height: 49,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    borderRadius: 11,
+    backgroundColor: "#F8FAFC",
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 13,
+    marginBottom: 16,
+  },
+
+  input: {
+    flex: 1,
     marginLeft: 10,
+    color: "#172B4D",
+    fontSize: 13,
+    paddingVertical: 0,
+  },
+
+  saveDetailsButton: {
+    height: 48,
+    backgroundColor: "#087CFF",
+    borderRadius: 11,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 3,
   },
 
   imageContainer: {
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 230,
+    minHeight: 240,
     backgroundColor: "#F8FAFC",
     borderWidth: 1,
     borderColor: "#E2E8F0",
-    borderRadius: 12,
-    padding: 12,
+    borderRadius: 14,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 14,
   },
 
   image: {
-    width: 210,
-    height: 210,
+    width: 230,
+    height: 230,
   },
 
   emptyImage: {
     alignItems: "center",
     justifyContent: "center",
+    paddingHorizontal: 15,
+  },
+
+  emptyIcon: {
+    width: 85,
+    height: 85,
+    borderRadius: 25,
+    backgroundColor: "#EAF0F7",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 13,
+  },
+
+  emptyTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#334155",
   },
 
   emptyText: {
-    marginTop: 12,
     color: "#94A3B8",
-    fontSize: 13,
+    fontSize: 11,
+    textAlign: "center",
+    marginTop: 6,
+    lineHeight: 17,
   },
 
-  uploadButton: {
-    backgroundColor: "#087CFF",
-    height: 48,
-    borderRadius: 10,
+  chooseButton: {
+    height: 47,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: "#BFDBFE",
+    backgroundColor: "#EFF6FF",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 16,
+    marginTop: 15,
   },
 
-  buttonText: {
-    color: "#FFFFFF",
-    fontWeight: "bold",
-    fontSize: 14,
+  chooseButtonText: {
+    color: "#087CFF",
+    fontSize: 13,
+    fontWeight: "800",
     marginLeft: 8,
   },
 
@@ -432,20 +695,44 @@ const styles = StyleSheet.create({
     color: "#94A3B8",
     fontSize: 11,
     textAlign: "center",
-    marginTop: 10,
+    marginTop: 9,
   },
 
-  saveButton: {
-    height: 52,
+  uploadButton: {
+    height: 49,
     backgroundColor: "#059669",
-    borderRadius: 12,
+    borderRadius: 11,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 2,
+    marginTop: 15,
+  },
+
+  buttonText: {
+    color: "#FFFFFF",
+    fontWeight: "800",
+    fontSize: 13,
+    marginLeft: 8,
   },
 
   disabledButton: {
-    opacity: 0.6,
+    opacity: 0.55,
+  },
+
+  infoBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    backgroundColor: "#EAF3FF",
+    borderRadius: 13,
+    padding: 13,
+    marginTop: 1,
+  },
+
+  infoText: {
+    flex: 1,
+    color: "#475569",
+    fontSize: 11,
+    lineHeight: 17,
+    marginLeft: 9,
   },
 });

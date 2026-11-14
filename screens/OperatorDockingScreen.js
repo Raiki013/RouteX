@@ -1,7 +1,5 @@
-import React, {
-  useCallback,
-  useState,
-} from "react";
+
+import React, { useCallback, useState } from "react";
 
 import {
   View,
@@ -10,7 +8,6 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
-  Alert,
   RefreshControl,
 } from "react-native";
 
@@ -18,6 +15,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 
 import { supabase } from "../config/supabase";
+import CustomAlert from "../components/CustomAlert";
 
 import {
   requestBackgroundLocationPermission,
@@ -41,10 +39,48 @@ export default function OperatorDockingScreen({ navigation, route }) {
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // -----------------------------------------
-  // GET CURRENT USER
-  // -----------------------------------------
+  // CUSTOM ALERT
+  const [alertData, setAlertData] = useState({
+    visible: false,
+    title: "",
+    message: "",
+    type: "error",
+    buttonText: "OK",
+  });
 
+  const [alertAction, setAlertAction] = useState(null);
+
+  const showAlert = (
+    title,
+    message,
+    type = "error",
+    buttonText = "OK",
+    onClose = null
+  ) => {
+    setAlertAction(() => onClose);
+
+    setAlertData({
+      visible: true,
+      title,
+      message,
+      type,
+      buttonText,
+    });
+  };
+
+  const closeAlert = () => {
+    setAlertData((previous) => ({
+      ...previous,
+      visible: false,
+    }));
+
+    const action = alertAction;
+    setAlertAction(null);
+
+    if (action) action();
+  };
+
+  // GET CURRENT USER
   const getCurrentUser = async () => {
     const {
       data: { user: authUser },
@@ -52,18 +88,12 @@ export default function OperatorDockingScreen({ navigation, route }) {
     } = await supabase.auth.getUser();
 
     if (error) throw error;
-
-    if (!authUser) {
-      throw new Error("You are not logged in.");
-    }
+    if (!authUser) throw new Error("You are not logged in.");
 
     return authUser;
   };
 
-  // -----------------------------------------
   // LOAD TRIP
-  // -----------------------------------------
-
   const loadTrip = async (operatorId) => {
     if (!tripId) {
       throw new Error(
@@ -92,20 +122,14 @@ export default function OperatorDockingScreen({ navigation, route }) {
       passedBusId &&
       String(data.bus_id) !== String(passedBusId)
     ) {
-      throw new Error(
-        "The selected bus does not match this trip."
-      );
+      throw new Error("The selected bus does not match this trip.");
     }
 
     setTrip(data);
-
     return data;
   };
 
-  // -----------------------------------------
   // LOAD BUS
-  // -----------------------------------------
-
   const loadBus = async (operatorId, busId) => {
     const { data, error } = await supabase
       .from("buses")
@@ -127,14 +151,10 @@ export default function OperatorDockingScreen({ navigation, route }) {
     if (error) throw error;
 
     setBus(data);
-
     return data;
   };
 
-  // -----------------------------------------
   // LOAD COMPANY TERMINALS
-  // -----------------------------------------
-
   const loadTerminals = async (companyName) => {
     if (!companyName) {
       setTerminals([]);
@@ -152,29 +172,21 @@ export default function OperatorDockingScreen({ navigation, route }) {
       `)
       .eq("operator_name", companyName)
       .eq("is_active", true)
-      .order("terminal_name", {
-        ascending: true,
-      });
+      .order("terminal_name", { ascending: true });
 
     if (error) throw error;
 
     setTerminals(data || []);
-
     return data || [];
   };
 
-  // -----------------------------------------
   // LOAD DOCKING RECORD
-  // -----------------------------------------
-
   const loadDocking = async (currentTripId) => {
     const { data, error } = await supabase
       .from("bus_docking")
       .select("*")
       .eq("trip_id", currentTripId)
-      .order("docked_at", {
-        ascending: false,
-      })
+      .order("docked_at", { ascending: false })
       .limit(1)
       .maybeSingle();
 
@@ -191,10 +203,7 @@ export default function OperatorDockingScreen({ navigation, route }) {
     return data;
   };
 
-  // -----------------------------------------
   // LOAD SCREEN DATA
-  // -----------------------------------------
-
   const loadData = async (isRefreshing = false) => {
     try {
       if (isRefreshing) {
@@ -204,7 +213,6 @@ export default function OperatorDockingScreen({ navigation, route }) {
       }
 
       const authUser = await getCurrentUser();
-
       setUser(authUser);
 
       const loadedTrip = await loadTrip(authUser.id);
@@ -215,14 +223,14 @@ export default function OperatorDockingScreen({ navigation, route }) {
       );
 
       await loadTerminals(loadedBus.company);
-
       await loadDocking(loadedTrip.trip_id);
     } catch (error) {
       console.log("DOCKING LOAD ERROR:", error);
 
-      Alert.alert(
+      showAlert(
         "Loading Error",
-        error.message || "Unable to load docking information."
+        error.message || "Unable to load docking information.",
+        "error"
       );
     } finally {
       setLoading(false);
@@ -230,40 +238,36 @@ export default function OperatorDockingScreen({ navigation, route }) {
     }
   };
 
-  // -----------------------------------------
   // RELOAD WHEN SCREEN OPENS
-  // -----------------------------------------
-
   useFocusEffect(
     useCallback(() => {
       loadData();
     }, [tripId, passedBusId])
   );
 
-  // -----------------------------------------
   // SAVE DOCKING
-  // -----------------------------------------
-
   const saveDocking = async () => {
     if (saving) return;
 
     if (!user || !trip || !bus) {
-      Alert.alert("Error", "Trip or bus information is missing.");
+      showAlert("Error", "Trip or bus information is missing.", "error");
       return;
     }
 
     if (!selectedTerminal) {
-      Alert.alert(
+      showAlert(
         "Select Terminal",
-        "Please select a terminal first."
+        "Please select a terminal first.",
+        "warning"
       );
       return;
     }
 
     if (trip.status !== "planned") {
-      Alert.alert(
+      showAlert(
         "Trip Already Started",
-        "You cannot change the terminal after the trip has started."
+        "You cannot change the terminal after the trip has started.",
+        "warning"
       );
       return;
     }
@@ -277,9 +281,7 @@ export default function OperatorDockingScreen({ navigation, route }) {
       );
 
       if (!terminal) {
-        throw new Error(
-          "The selected terminal could not be found."
-        );
+        throw new Error("The selected terminal could not be found.");
       }
 
       const dockingData = {
@@ -302,7 +304,6 @@ export default function OperatorDockingScreen({ navigation, route }) {
           .single();
 
         if (error) throw error;
-
         savedDocking = data;
       } else {
         const { data, error } = await supabase
@@ -317,15 +318,12 @@ export default function OperatorDockingScreen({ navigation, route }) {
           .single();
 
         if (error) throw error;
-
         savedDocking = data;
       }
 
       const { error: busError } = await supabase
         .from("buses")
-        .update({
-          bus_status: "docked",
-        })
+        .update({ bus_status: "docked" })
         .eq("bus_id", bus.bus_id)
         .eq("operator_id", user.id);
 
@@ -338,78 +336,61 @@ export default function OperatorDockingScreen({ navigation, route }) {
         bus_status: "docked",
       }));
 
-      Alert.alert(
+      showAlert(
         "Success",
-        "Bus successfully docked at the selected terminal."
+        "Bus successfully docked at the selected terminal.",
+        "success"
       );
 
       await loadData(true);
     } catch (error) {
       console.log("SAVE DOCKING ERROR:", error);
 
-      Alert.alert(
+      showAlert(
         "Docking Error",
-        error.message || "Unable to dock bus."
+        error.message || "Unable to dock bus.",
+        "error"
       );
     } finally {
       setSaving(false);
     }
   };
 
-  // -----------------------------------------
   // START TRIP CONFIRMATION
-  // -----------------------------------------
-
   const startTrip = () => {
     if (saving) return;
 
     if (!user || !trip || !bus) {
-      Alert.alert(
-        "Error",
-        "Trip or bus information is missing."
-      );
+      showAlert("Error", "Trip or bus information is missing.", "error");
       return;
     }
 
     if (trip.status !== "planned") {
-      Alert.alert(
-        "Invalid Trip",
-        "Only planned trips can be started."
-      );
+      showAlert("Invalid Trip", "Only planned trips can be started.", "warning");
       return;
     }
 
     if (!docking || docking.docking_status !== "docked") {
-      Alert.alert(
+      showAlert(
         "Bus Not Docked",
-        "Please dock the bus at a terminal before starting the trip."
+        "Please dock the bus at a terminal before starting the trip.",
+        "warning"
       );
       return;
     }
 
-    Alert.alert(
+    showAlert(
       "Start Trip",
       `Start the trip to ${trip.destination}?`,
-      [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
-        {
-          text: "Start Trip",
-          onPress: confirmStartTrip,
-        },
-      ]
+      "info",
+      "Start Trip",
+      confirmStartTrip
     );
   };
 
-  // -----------------------------------------
   // ROLLBACK IF GPS STARTUP FAILS
-  // -----------------------------------------
-
   const rollbackTripStart = async () => {
     try {
-      // Return the trip to planned status.
       await supabase
         .from("bus_trips")
         .update({
@@ -419,16 +400,12 @@ export default function OperatorDockingScreen({ navigation, route }) {
         .eq("trip_id", trip.trip_id)
         .eq("operator_id", user.id);
 
-      // Return the bus to docked status.
       await supabase
         .from("buses")
-        .update({
-          bus_status: "docked",
-        })
+        .update({ bus_status: "docked" })
         .eq("bus_id", bus.bus_id)
         .eq("operator_id", user.id);
 
-      // Restore the docking record.
       if (docking?.docking_id) {
         await supabase
           .from("bus_docking")
@@ -441,20 +418,13 @@ export default function OperatorDockingScreen({ navigation, route }) {
       }
 
       await stopOperatorBackgroundGPS();
-
       await loadData(true);
     } catch (rollbackError) {
-      console.log(
-        "TRIP ROLLBACK ERROR:",
-        rollbackError
-      );
+      console.log("TRIP ROLLBACK ERROR:", rollbackError);
     }
   };
 
-  // -----------------------------------------
-  // START TRIP
-  // -----------------------------------------
-
+  // CONFIRM START TRIP
   const confirmStartTrip = async () => {
     if (saving) return;
 
@@ -463,7 +433,6 @@ export default function OperatorDockingScreen({ navigation, route }) {
     try {
       setSaving(true);
 
-      // Check whether another trip is already active.
       const {
         data: activeTrips,
         error: activeTripsError,
@@ -476,8 +445,7 @@ export default function OperatorDockingScreen({ navigation, route }) {
       if (activeTripsError) throw activeTripsError;
 
       const anotherActiveTrip = (activeTrips || []).find(
-        (item) =>
-          String(item.trip_id) !== String(trip.trip_id)
+        (item) => String(item.trip_id) !== String(trip.trip_id)
       );
 
       if (anotherActiveTrip) {
@@ -486,7 +454,6 @@ export default function OperatorDockingScreen({ navigation, route }) {
         );
       }
 
-      // Verify location permissions.
       const permissionGranted =
         await requestBackgroundLocationPermission();
 
@@ -498,7 +465,6 @@ export default function OperatorDockingScreen({ navigation, route }) {
 
       const now = new Date().toISOString();
 
-      // Activate trip.
       const { data: updatedTrip, error: tripError } =
         await supabase
           .from("bus_trips")
@@ -517,18 +483,14 @@ export default function OperatorDockingScreen({ navigation, route }) {
 
       databaseTripActivated = true;
 
-      // Update bus status.
       const { error: busError } = await supabase
         .from("buses")
-        .update({
-          bus_status: "in_transit",
-        })
+        .update({ bus_status: "in_transit" })
         .eq("bus_id", bus.bus_id)
         .eq("operator_id", user.id);
 
       if (busError) throw busError;
 
-      // Mark docking record as undocked.
       const { error: dockingError } = await supabase
         .from("bus_docking")
         .update({
@@ -540,11 +502,8 @@ export default function OperatorDockingScreen({ navigation, route }) {
 
       if (dockingError) throw dockingError;
 
-      // Start GPS after trip becomes active.
-      // The background task looks for an active trip.
       await startOperatorBackgroundGPS();
 
-      // Update local data.
       setTrip(updatedTrip);
 
       setBus((previous) => ({
@@ -562,745 +521,1417 @@ export default function OperatorDockingScreen({ navigation, route }) {
           : previous
       );
 
-      Alert.alert(
+      showAlert(
         "Trip Started",
         "Your bus is now in transit. GPS tracking has started.",
-        [
-          {
-            text: "Continue",
-            onPress: () => {
-              // Both screens are registered in the root Stack Navigator.
-              navigation.replace("TripManagement", {
-                tripId: updatedTrip.trip_id,
-                busId: bus.bus_id,
-              });
-            },
-          },
-        ]
+        "success",
+        "Continue",
+        () => {
+          navigation.replace("TripManagement", {
+            tripId: updatedTrip.trip_id,
+            busId: bus.bus_id,
+          });
+        }
       );
     } catch (error) {
       console.log("START TRIP ERROR:", error);
 
-      // If the database was changed but GPS or another step failed,
-      // restore the trip and bus to their previous state.
       if (databaseTripActivated) {
         await rollbackTripStart();
       }
 
-      Alert.alert(
+      showAlert(
         "Unable to Start Trip",
-        error.message ||
-          "Something went wrong while starting the trip."
+        error.message || "Something went wrong while starting the trip.",
+        "error"
       );
     } finally {
       setSaving(false);
     }
   };
 
-  // -----------------------------------------
   // REFRESH
-  // -----------------------------------------
-
   const onRefresh = () => {
     loadData(true);
   };
 
-  // -----------------------------------------
   // LOADING SCREEN
-  // -----------------------------------------
-
   if (loading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator
-          size="large"
-          color="#06B6D4"
-        />
+      <View style={styles.loadingContainer}>
+        <View style={styles.loadingIcon}>
+          <ActivityIndicator size="large" color="#1677D2" />
+        </View>
+
+        <Text style={styles.loadingTitle}>Preparing Your Trip</Text>
 
         <Text style={styles.loadingText}>
-          Loading docking information...
+          Loading bus and terminal information...
         </Text>
+
+        <CustomAlert
+          visible={alertData.visible}
+          title={alertData.title}
+          message={alertData.message}
+          type={alertData.type}
+          buttonText={alertData.buttonText}
+          onClose={closeAlert}
+        />
       </View>
     );
   }
 
-  // -----------------------------------------
-  // MAIN UI
-  // -----------------------------------------
-
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-        />
-      }
-    >
-      {/* HEADER */}
+    <View style={styles.container}>
 
+      {/* FIXED HEADER - OUTSIDE SCROLLVIEW */}
       <View style={styles.header}>
         <TouchableOpacity
-          style={styles.backButton}
+          style={styles.headerButton}
           onPress={() => navigation.goBack()}
+          activeOpacity={0.8}
         >
-          <Ionicons
-            name="arrow-back"
-            size={22}
-            color="#0F172A"
-          />
+          <Ionicons name="arrow-back" size={21} color="#172B45" />
         </TouchableOpacity>
 
         <View style={styles.headerTextContainer}>
-          <Text style={styles.headerTitle}>
-            Operator Docking
-          </Text>
+          <Text style={styles.headerEyebrow}>ROUTEX OPERATOR</Text>
+
+          <Text style={styles.headerTitle}>Bus Docking</Text>
 
           <Text style={styles.headerSubtitle}>
-            Dock your bus before starting a trip
+            Prepare your bus before departure
           </Text>
         </View>
 
         <TouchableOpacity
-          style={styles.refreshButton}
+          style={styles.headerButton}
           onPress={onRefresh}
+          activeOpacity={0.8}
         >
-          <Ionicons
-            name="refresh"
-            size={20}
-            color="#06B6D4"
-          />
+          <Ionicons name="refresh" size={20} color="#1677D2" />
         </TouchableOpacity>
       </View>
 
-      {!trip || !bus ? (
-        <View style={styles.emptyCard}>
-          <Ionicons
-            name="alert-circle-outline"
-            size={42}
-            color="#DC2626"
+      {/* ONLY THIS PART SCROLLS */}
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#1677D2"
+            colors={["#1677D2"]}
           />
-
-          <Text style={styles.emptyTitle}>
-            Trip or Bus Not Found
-          </Text>
-
-          <Text style={styles.emptyText}>
-            Return to Trip Management and select a valid trip.
-          </Text>
-
-          <TouchableOpacity
-            style={styles.primaryButton}
-            onPress={() =>
-              navigation.navigate("TripManagement")
-            }
-          >
-            <Text style={styles.primaryButtonText}>
-              Back to Trip Management
-            </Text>
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <>
-          {/* BUS INFORMATION */}
-
-          <View style={styles.busCard}>
-            <View style={styles.busIcon}>
+        }
+      >
+        {!trip || !bus ? (
+          <View style={styles.emptyCard}>
+            <View style={styles.emptyIcon}>
               <Ionicons
-                name="bus"
-                size={30}
-                color="#06B6D4"
+                name="alert-circle-outline"
+                size={37}
+                color="#DC2626"
               />
             </View>
 
-            <View style={styles.busInfo}>
-              <Text style={styles.busName}>
-                {bus.bus_name || "Unnamed Bus"}
-              </Text>
-
-              <Text style={styles.plateNumber}>
-                {bus.plate_number || "No plate number"}
-              </Text>
-
-              <Text style={styles.companyText}>
-                {bus.company || "No company assigned"}
-              </Text>
-            </View>
-          </View>
-
-          {/* TRIP INFORMATION */}
-
-          <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>
-              Trip Information
+            <Text style={styles.emptyTitle}>
+              Trip or Bus Not Found
             </Text>
 
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>
-                Trip ID
-              </Text>
+            <Text style={styles.emptyText}>
+              Return to Trip Management and select a valid trip.
+            </Text>
 
-              <Text style={styles.infoValue}>
-                {trip.trip_id}
+            <TouchableOpacity
+              style={styles.backToManagementButton}
+              onPress={() => navigation.navigate("TripManagement")}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.primaryButtonText}>
+                Back to Trip Management
               </Text>
-            </View>
-
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>
-                Destination
-              </Text>
-
-              <Text style={styles.infoValue}>
-                {trip.destination}
-              </Text>
-            </View>
-
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>
-                Trip Status
-              </Text>
-
-              <Text
-                style={[
-                  styles.infoValue,
-                  trip.status === "active"
-                    ? styles.activeText
-                    : styles.plannedText,
-                ]}
-              >
-                {trip.status}
-              </Text>
-            </View>
-
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>
-                Bus Status
-              </Text>
-
-              <Text style={styles.infoValue}>
-                {(bus.bus_status || "offline").replace("_", " ")}
-              </Text>
-            </View>
+            </TouchableOpacity>
           </View>
+        ) : (
+          <>
+            {/* BUS HERO CARD */}
+            <View style={styles.busHeroCard}>
+              <View style={styles.busHeroTop}>
+                <View style={styles.busIcon}>
+                  <Ionicons name="bus" size={30} color="#FFFFFF" />
+                </View>
 
-          {/* TERMINAL SELECTION */}
+                <View style={styles.busHeroInfo}>
+                  <Text style={styles.busName}>
+                    {bus.bus_name || "Unnamed Bus"}
+                  </Text>
 
-          {trip.status === "planned" && (
-            <View style={styles.sectionCard}>
-              <Text style={styles.sectionTitle}>
-                Select Bus Terminal
-              </Text>
-
-              <Text style={styles.sectionDescription}>
-                Choose the terminal where this bus will be docked.
-              </Text>
-
-              {terminals.length === 0 ? (
-                <View style={styles.noTerminalBox}>
-                  <Ionicons
-                    name="location-outline"
-                    size={25}
-                    color="#94A3B8"
-                  />
-
-                  <Text style={styles.noTerminalText}>
-                    No active terminals found for{" "}
-                    {bus.company || "this bus company"}.
+                  <Text style={styles.plateNumber}>
+                    {bus.plate_number || "No plate number"}
                   </Text>
                 </View>
-              ) : (
-                terminals.map((terminal) => {
-                  const isSelected =
-                    String(selectedTerminal) ===
-                    String(terminal.terminal_id);
 
-                  return (
-                    <TouchableOpacity
-                      key={String(terminal.terminal_id)}
-                      style={[
-                        styles.terminalOption,
-                        isSelected && styles.selectedTerminal,
-                      ]}
-                      onPress={() =>
-                        setSelectedTerminal(
-                          String(terminal.terminal_id)
-                        )
-                      }
-                    >
-                      <View style={styles.terminalIcon}>
+                <View
+                  style={[
+                    styles.busStatusBadge,
+                    bus.bus_status === "in_transit"
+                      ? styles.inTransitBadge
+                      : bus.bus_status === "docked"
+                      ? styles.dockedBadge
+                      : styles.offlineBadge,
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.statusDot,
+                      bus.bus_status === "in_transit"
+                        ? styles.inTransitDot
+                        : bus.bus_status === "docked"
+                        ? styles.dockedDot
+                        : styles.offlineDot,
+                    ]}
+                  />
+
+                  <Text style={styles.busStatusText}>
+                    {(bus.bus_status || "offline").replace("_", " ")}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.busHeroDivider} />
+
+              <View style={styles.busMetaRow}>
+                <View style={styles.busMetaItem}>
+                  <Ionicons name="business-outline" size={15} color="#DCEBFA" />
+                  <Text style={styles.busMetaText}>
+                    {bus.company || "No company"}
+                  </Text>
+                </View>
+
+                <View style={styles.busMetaItem}>
+                  <Ionicons name="people-outline" size={15} color="#DCEBFA" />
+                  <Text style={styles.busMetaText}>
+                    {bus.capacity ?? "N/A"} seats
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            {/* TRIP INFORMATION */}
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionIcon}>
+                <Ionicons name="navigate" size={19} color="#1677D2" />
+              </View>
+
+              <View style={styles.sectionHeaderText}>
+                <Text style={styles.sectionTitle}>Trip Information</Text>
+                <Text style={styles.sectionSubtitle}>
+                  Details of your current trip
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.infoCard}>
+              <View style={styles.destinationHero}>
+                <View style={styles.destinationIcon}>
+                  <Ionicons name="location" size={22} color="#1677D2" />
+                </View>
+
+                <View style={styles.destinationInfo}>
+                  <Text style={styles.destinationLabel}>DESTINATION</Text>
+                  <Text style={styles.destinationValue}>
+                    {trip.destination || "Not specified"}
+                  </Text>
+                </View>
+
+                <View
+                  style={[
+                    styles.tripStatusBadge,
+                    trip.status === "active"
+                      ? styles.activeTripBadge
+                      : styles.plannedTripBadge,
+                  ]}
+                >
+                  <Text style={styles.tripStatusText}>
+                    {trip.status === "active" ? "Active" : "Planned"}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.infoDivider} />
+
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Trip ID</Text>
+                <Text style={styles.infoValue}>#{trip.trip_id}</Text>
+              </View>
+
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Bus Type</Text>
+                <Text style={styles.infoValue}>
+                  {bus.bus_type || "Not specified"}
+                </Text>
+              </View>
+
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Bus Capacity</Text>
+                <Text style={styles.infoValue}>
+                  {bus.capacity ?? "N/A"} passengers
+                </Text>
+              </View>
+            </View>
+
+            {/* TERMINAL SELECTION */}
+            {trip.status === "planned" && (
+              <>
+                <View style={styles.sectionHeader}>
+                  <View style={styles.sectionIcon}>
+                    <Ionicons name="business" size={19} color="#1677D2" />
+                  </View>
+
+                  <View style={styles.sectionHeaderText}>
+                    <Text style={styles.sectionTitle}>Select Terminal</Text>
+                    <Text style={styles.sectionSubtitle}>
+                      Choose where your bus will dock
+                    </Text>
+                  </View>
+
+                  <View style={styles.terminalCountBadge}>
+                    <Text style={styles.terminalCountText}>
+                      {terminals.length}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.terminalCard}>
+                  <View style={styles.terminalIntro}>
+                    <Ionicons
+                      name="information-circle-outline"
+                      size={17}
+                      color="#1677D2"
+                    />
+
+                    <Text style={styles.terminalIntroText}>
+                      Select an active terminal belonging to{" "}
+                      {bus.company || "your company"}.
+                    </Text>
+                  </View>
+
+                  {terminals.length === 0 ? (
+                    <View style={styles.noTerminalBox}>
+                      <View style={styles.noTerminalIcon}>
                         <Ionicons
-                          name="location"
-                          size={20}
-                          color={
-                            isSelected
-                              ? "#FFFFFF"
-                              : "#06B6D4"
-                          }
+                          name="location-outline"
+                          size={29}
+                          color="#94A3B8"
                         />
                       </View>
 
-                      <View style={styles.terminalInfo}>
-                        <Text style={styles.terminalName}>
-                          {terminal.terminal_name}
-                        </Text>
+                      <Text style={styles.noTerminalTitle}>
+                        No Terminals Available
+                      </Text>
 
-                        <Text style={styles.terminalAddress}>
-                          {terminal.terminal_address ||
-                            "No address available"}
-                        </Text>
-                      </View>
+                      <Text style={styles.noTerminalText}>
+                        No active terminals were found for{" "}
+                        {bus.company || "this bus company"}.
+                      </Text>
+                    </View>
+                  ) : (
+                    terminals.map((terminal) => {
+                      const isSelected =
+                        String(selectedTerminal) ===
+                        String(terminal.terminal_id);
 
-                      <Ionicons
-                        name={
-                          isSelected
-                            ? "radio-button-on"
-                            : "radio-button-off"
-                        }
-                        size={21}
-                        color={
-                          isSelected
-                            ? "#06B6D4"
-                            : "#94A3B8"
-                        }
-                      />
+                      return (
+                        <TouchableOpacity
+                          key={String(terminal.terminal_id)}
+                          style={[
+                            styles.terminalOption,
+                            isSelected && styles.selectedTerminal,
+                          ]}
+                          onPress={() =>
+                            setSelectedTerminal(String(terminal.terminal_id))
+                          }
+                          activeOpacity={0.85}
+                        >
+                          <View
+                            style={[
+                              styles.terminalIcon,
+                              isSelected && styles.selectedTerminalIcon,
+                            ]}
+                          >
+                            <Ionicons
+                              name="location"
+                              size={20}
+                              color={isSelected ? "#FFFFFF" : "#1677D2"}
+                            />
+                          </View>
+
+                          <View style={styles.terminalInfo}>
+                            <Text
+                              style={[
+                                styles.terminalName,
+                                isSelected && styles.selectedTerminalName,
+                              ]}
+                            >
+                              {terminal.terminal_name}
+                            </Text>
+
+                            <Text style={styles.terminalAddress}>
+                              {terminal.terminal_address ||
+                                "Address not available"}
+                            </Text>
+
+                            {isSelected && (
+                              <Text style={styles.selectedTerminalLabel}>
+                                SELECTED TERMINAL
+                              </Text>
+                            )}
+                          </View>
+
+                          <Ionicons
+                            name={
+                              isSelected
+                                ? "checkmark-circle"
+                                : "ellipse-outline"
+                            }
+                            size={22}
+                            color={isSelected ? "#1677D2" : "#CBD5E1"}
+                          />
+                        </TouchableOpacity>
+                      );
+                    })
+                  )}
+
+                  {terminals.length > 0 && (
+                    <TouchableOpacity
+                      style={[
+                        styles.dockButton,
+                        (saving || !selectedTerminal) &&
+                          styles.disabledButton,
+                      ]}
+                      onPress={saveDocking}
+                      disabled={saving || !selectedTerminal}
+                      activeOpacity={0.85}
+                    >
+                      {saving ? (
+                        <ActivityIndicator color="#FFFFFF" />
+                      ) : (
+                        <>
+                          <Ionicons name="location" size={20} color="#FFFFFF" />
+                          <Text style={styles.dockButtonText}>
+                            {docking?.docking_status === "docked"
+                              ? "Update Docking"
+                              : "Dock Bus at Terminal"}
+                          </Text>
+                          <Ionicons
+                            name="arrow-forward"
+                            size={17}
+                            color="#FFFFFF"
+                          />
+                        </>
+                      )}
                     </TouchableOpacity>
-                  );
-                })
-              )}
+                  )}
+                </View>
+              </>
+            )}
 
-              <TouchableOpacity
-                style={[
-                  styles.dockButton,
-                  (saving || terminals.length === 0) &&
-                    styles.disabledButton,
-                ]}
-                onPress={saveDocking}
-                disabled={
-                  saving || terminals.length === 0
-                }
-              >
-                {saving ? (
-                  <ActivityIndicator color="#FFFFFF" />
-                ) : (
-                  <>
+            {/* DOCKING STATUS */}
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionIcon}>
+                <Ionicons
+                  name="checkmark-done-circle"
+                  size={20}
+                  color="#1677D2"
+                />
+              </View>
+
+              <View style={styles.sectionHeaderText}>
+                <Text style={styles.sectionTitle}>Docking Status</Text>
+                <Text style={styles.sectionSubtitle}>
+                  Current terminal and docking information
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.dockingStatusCard}>
+              {docking?.docking_status === "docked" ? (
+                <>
+                  <View style={styles.dockingSuccessTop}>
+                    <View style={styles.dockingSuccessIcon}>
+                      <Ionicons name="checkmark" size={24} color="#FFFFFF" />
+                    </View>
+
+                    <View style={styles.dockingSuccessInfo}>
+                      <Text style={styles.dockingSuccessTitle}>
+                        Bus Successfully Docked
+                      </Text>
+
+                      <Text style={styles.dockingSuccessSubtitle}>
+                        Your bus is ready for departure
+                      </Text>
+                    </View>
+
+                    <View style={styles.dockedStatusPill}>
+                      <Text style={styles.dockedStatusText}>DOCKED</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.dockingTerminalInfo}>
                     <Ionicons
-                      name="location"
+                      name="location-outline"
                       size={19}
-                      color="#FFFFFF"
+                      color="#1677D2"
                     />
 
-                    <Text style={styles.primaryButtonText}>
-                      Dock Bus
+                    <View style={styles.dockingTerminalText}>
+                      <Text style={styles.dockingTerminalLabel}>DOCKED AT</Text>
+                      <Text style={styles.dockingTerminalName}>
+                        {docking.terminal_name || "Selected Terminal"}
+                      </Text>
+                    </View>
+                  </View>
+                </>
+              ) : (
+                <View style={styles.notDockedContent}>
+                  <View style={styles.notDockedIcon}>
+                    <Ionicons name="alert" size={23} color="#D97706" />
+                  </View>
+
+                  <View style={styles.notDockedInfo}>
+                    <Text style={styles.notDockedTitle}>Not Yet Docked</Text>
+                    <Text style={styles.notDockedText}>
+                      Select a terminal and dock your bus before starting the trip.
                     </Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {/* DOCKING STATUS */}
-
-          <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>
-              Docking Status
-            </Text>
-
-            {docking?.docking_status === "docked" ? (
-              <View style={styles.dockedBox}>
-                <Ionicons
-                  name="checkmark-circle"
-                  size={25}
-                  color="#16A34A"
-                />
-
-                <View style={styles.dockedInfo}>
-                  <Text style={styles.dockedTitle}>
-                    Bus Successfully Docked
-                  </Text>
-
-                  <Text style={styles.dockedTerminal}>
-                    {docking.terminal_name}
-                  </Text>
+                  </View>
                 </View>
-              </View>
-            ) : (
-              <View style={styles.notDockedBox}>
-                <Ionicons
-                  name="alert-circle-outline"
-                  size={23}
-                  color="#D97706"
-                />
+              )}
+            </View>
 
-                <Text style={styles.notDockedText}>
-                  This bus is not currently docked.
-                </Text>
+            {/* START TRIP */}
+            {trip.status === "planned" && (
+              <View style={styles.startTripCard}>
+                <View style={styles.startTripHeader}>
+                  <View style={styles.startTripIcon}>
+                    <Ionicons name="navigate" size={21} color="#1677D2" />
+                  </View>
+
+                  <View style={styles.startTripHeaderText}>
+                    <Text style={styles.startTripTitle}>Ready to Depart?</Text>
+                    <Text style={styles.startTripSubtitle}>
+                      Start your trip and activate GPS tracking
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.startTripRequirements}>
+                  <View style={styles.requirementRow}>
+                    <Ionicons
+                      name={
+                        docking?.docking_status === "docked"
+                          ? "checkmark-circle"
+                          : "ellipse-outline"
+                      }
+                      size={17}
+                      color={
+                        docking?.docking_status === "docked"
+                          ? "#16A34A"
+                          : "#94A3B8"
+                      }
+                    />
+
+                    <Text style={styles.requirementText}>
+                      Bus must be docked at a terminal
+                    </Text>
+                  </View>
+
+                  <View style={styles.requirementRow}>
+                    <Ionicons
+                      name="navigate-circle-outline"
+                      size={17}
+                      color="#64748B"
+                    />
+
+                    <Text style={styles.requirementText}>
+                      Location permission must be enabled
+                    </Text>
+                  </View>
+                </View>
+
+                <TouchableOpacity
+                  style={[
+                    styles.startButton,
+                    (
+                      !docking ||
+                      docking.docking_status !== "docked" ||
+                      saving
+                    ) && styles.disabledButton,
+                  ]}
+                  onPress={startTrip}
+                  disabled={
+                    !docking ||
+                    docking.docking_status !== "docked" ||
+                    saving
+                  }
+                  activeOpacity={0.85}
+                >
+                  {saving ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <>
+                      <Ionicons
+                        name="play-circle"
+                        size={23}
+                        color="#FFFFFF"
+                      />
+
+                      <Text style={styles.startButtonText}>Start Trip</Text>
+
+                      <Ionicons
+                        name="arrow-forward"
+                        size={18}
+                        color="#FFFFFF"
+                      />
+                    </>
+                  )}
+                </TouchableOpacity>
+
+                {(!docking || docking.docking_status !== "docked") && (
+                  <Text style={styles.startDisabledHint}>
+                    Dock your bus first to enable trip departure.
+                  </Text>
+                )}
               </View>
             )}
-          </View>
 
-          {/* START TRIP */}
+            {/* ACTIVE TRIP */}
+            {trip.status === "active" && (
+              <View style={styles.activeTripCard}>
+                <View style={styles.activeTripIcon}>
+                  <Ionicons name="navigate" size={25} color="#FFFFFF" />
+                </View>
 
-          {trip.status === "planned" && (
-            <TouchableOpacity
-              style={[
-                styles.startButton,
-                (
-                  !docking ||
-                  docking.docking_status !== "docked" ||
-                  saving
-                ) && styles.disabledButton,
-              ]}
-              onPress={startTrip}
-              disabled={
-                !docking ||
-                docking.docking_status !== "docked" ||
-                saving
-              }
-            >
-              {saving ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <>
-                  <Ionicons
-                    name="play-circle"
-                    size={22}
-                    color="#FFFFFF"
-                  />
-
-                  <Text style={styles.startButtonText}>
-                    Start Trip
+                <View style={styles.activeTripInfo}>
+                  <Text style={styles.activeTripTitle}>
+                    Trip In Progress
                   </Text>
-                </>
-              )}
-            </TouchableOpacity>
-          )}
 
-          {/* ACTIVE TRIP */}
+                  <Text style={styles.activeTripDescription}>
+                    Your bus is currently traveling to {trip.destination}.
+                  </Text>
 
-          {trip.status === "active" && (
-            <View style={styles.activeTripBox}>
-              <Ionicons
-                name="navigate"
-                size={25}
-                color="#16A34A"
-              />
-
-              <View style={styles.activeTripInfo}>
-                <Text style={styles.activeTripTitle}>
-                  Trip In Progress
-                </Text>
-
-                <Text style={styles.activeTripDescription}>
-                  Your bus is currently on the road.
-                </Text>
+                  <View style={styles.gpsActiveRow}>
+                    <View style={styles.gpsActiveDot} />
+                    <Text style={styles.gpsActiveText}>
+                      GPS tracking should be active
+                    </Text>
+                  </View>
+                </View>
               </View>
-            </View>
-          )}
-        </>
-      )}
+            )}
+          </>
+        )}
 
-      <View style={{ height: 30 }} />
-    </ScrollView>
+        <View style={{ height: 35 }} />
+      </ScrollView>
+
+      {/* CUSTOM ALERT */}
+      <CustomAlert
+        visible={alertData.visible}
+        title={alertData.title}
+        message={alertData.message}
+        type={alertData.type}
+        buttonText={alertData.buttonText}
+        onClose={closeAlert}
+      />
+    </View>
   );
 }
 
-// -----------------------------------------
 // STYLES
-// -----------------------------------------
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F1F5F9",
+    backgroundColor: "#F4F8FC",
+    paddingTop: 40,
   },
-  content: {
-    padding: 18,
-  },
-  center: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#F1F5F9",
-  },
-  loadingText: {
-    marginTop: 12,
-    color: "#64748B",
-  },
+
+  // FIXED HEADER
   header: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 20,
+    paddingHorizontal: 18,
+    paddingTop: 12,
+    paddingBottom: 14,
+    backgroundColor: "#F4F8FC",
+    zIndex: 10,
+    elevation: 3,
   },
-  backButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
+
+  content: {
+    paddingHorizontal: 18,
+    paddingTop: 17,
+    paddingBottom: 20,
+  },
+
+  // LOADING
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#F4F7FB",
+  },
+
+  loadingIcon: {
+    width: 75,
+    height: 75,
+    borderRadius: 24,
+    backgroundColor: "#E8F3FF",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  loadingTitle: {
+    color: "#172B45",
+    fontSize: 17,
+    fontWeight: "900",
+    marginTop: 17,
+  },
+
+  loadingText: {
+    color: "#8492A6",
+    fontSize: 12,
+    marginTop: 7,
+  },
+
+  // HEADER
+  headerButton: {
+    width: 43,
+    height: 43,
+    borderRadius: 14,
     backgroundColor: "#FFFFFF",
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 2,
+  },
+
+  headerTextContainer: {
+    flex: 1,
+    marginHorizontal: 12,
+  },
+
+  headerEyebrow: {
+    color: "#1677D2",
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1.5,
+    marginBottom: 4,
+  },
+
+  headerTitle: {
+    color: "#172B45",
+    fontSize: 21,
+    fontWeight: "900",
+  },
+
+  headerSubtitle: {
+    color: "#8492A6",
+    fontSize: 10,
+    marginTop: 3,
+  },
+
+  // BUS HERO
+  busHeroCard: {
+    backgroundColor: "#1677D2",
+    borderRadius: 20,
+    padding: 18,
+    marginBottom: 24,
+    elevation: 4,
+  },
+
+  busHeroTop: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  busIcon: {
+    width: 53,
+    height: 53,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.19)",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+
+  busHeroInfo: {
+    flex: 1,
+  },
+
+  busName: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#FFFFFF",
+  },
+
+  plateNumber: {
+    fontSize: 11,
+    color: "#DCEBFA",
+    marginTop: 5,
+  },
+
+  busStatusBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: "#FFFFFF",
+  },
+
+  inTransitBadge: {
+    backgroundColor: "#DCFCE7",
+  },
+
+  dockedBadge: {
+    backgroundColor: "#DBEAFE",
+  },
+
+  offlineBadge: {
+    backgroundColor: "#F1F5F9",
+  },
+
+  statusDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+  },
+
+  inTransitDot: {
+    backgroundColor: "#16A34A",
+  },
+
+  dockedDot: {
+    backgroundColor: "#2563EB",
+  },
+
+  offlineDot: {
+    backgroundColor: "#94A3B8",
+  },
+
+  busStatusText: {
+    color: "#334155",
+    fontSize: 9,
+    fontWeight: "900",
+    textTransform: "capitalize",
+  },
+
+  busHeroDivider: {
+    height: 1,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    marginVertical: 16,
+  },
+
+  busMetaRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 18,
+  },
+
+  busMetaItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+
+  busMetaText: {
+    fontSize: 11,
+    color: "#FFFFFF",
+    fontWeight: "600",
+  },
+
+  // SECTION HEADERS
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 13,
+    marginTop: 5,
+  },
+
+  sectionIcon: {
+    width: 39,
+    height: 39,
+    borderRadius: 12,
+    backgroundColor: "#E5F1FF",
     justifyContent: "center",
     alignItems: "center",
     marginRight: 11,
   },
-  headerTextContainer: {
+
+  sectionHeaderText: {
     flex: 1,
   },
-  headerTitle: {
-    fontSize: 21,
-    fontWeight: "800",
-    color: "#0F172A",
+
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: "900",
+    color: "#172B45",
   },
-  headerSubtitle: {
-    fontSize: 11,
-    color: "#64748B",
-    marginTop: 3,
+
+  sectionSubtitle: {
+    color: "#8492A6",
+    fontSize: 10,
+    marginTop: 4,
   },
-  refreshButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+
+  // TRIP INFORMATION
+  infoCard: {
     backgroundColor: "#FFFFFF",
-    justifyContent: "center",
-    alignItems: "center",
+    borderRadius: 17,
+    padding: 16,
+    marginBottom: 22,
+    elevation: 2,
   },
-  busCard: {
+
+  destinationHero: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    padding: 17,
-    borderRadius: 16,
-    marginBottom: 15,
   },
-  busIcon: {
-    width: 55,
-    height: 55,
-    borderRadius: 15,
-    backgroundColor: "#CFFAFE",
+
+  destinationIcon: {
+    width: 43,
+    height: 43,
+    borderRadius: 13,
+    backgroundColor: "#E5F1FF",
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 14,
+    marginRight: 11,
   },
-  busInfo: {
+
+  destinationInfo: {
     flex: 1,
   },
-  busName: {
-    fontSize: 17,
-    fontWeight: "800",
-    color: "#0F172A",
+
+  destinationLabel: {
+    fontSize: 9,
+    color: "#94A3B8",
+    fontWeight: "900",
+    letterSpacing: 1,
   },
-  plateNumber: {
-    fontSize: 12,
-    color: "#475569",
-    marginTop: 4,
-  },
-  companyText: {
-    fontSize: 11,
-    color: "#0891B2",
-    marginTop: 4,
-  },
-  sectionCard: {
-    backgroundColor: "#FFFFFF",
-    padding: 17,
-    borderRadius: 16,
-    marginBottom: 15,
-  },
-  sectionTitle: {
+
+  destinationValue: {
+    color: "#172B45",
     fontSize: 16,
-    fontWeight: "800",
-    color: "#0F172A",
-    marginBottom: 13,
+    fontWeight: "900",
+    marginTop: 4,
   },
-  sectionDescription: {
-    color: "#64748B",
-    fontSize: 12,
-    lineHeight: 18,
-    marginTop: -6,
-    marginBottom: 13,
+
+  tripStatusBadge: {
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    borderRadius: 20,
   },
+
+  activeTripBadge: {
+    backgroundColor: "#DCFCE7",
+  },
+
+  plannedTripBadge: {
+    backgroundColor: "#FEF3C7",
+  },
+
+  tripStatusText: {
+    color: "#334155",
+    fontSize: 10,
+    fontWeight: "900",
+    textTransform: "capitalize",
+  },
+
+  infoDivider: {
+    height: 1,
+    backgroundColor: "#EDF1F6",
+    marginVertical: 15,
+  },
+
   infoRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 10,
+    paddingVertical: 9,
     borderBottomWidth: 1,
     borderBottomColor: "#F1F5F9",
   },
+
   infoLabel: {
-    fontSize: 12,
-    color: "#64748B",
+    fontSize: 11,
+    color: "#8492A6",
   },
+
   infoValue: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#0F172A",
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#172B45",
     textTransform: "capitalize",
   },
-  activeText: {
-    color: "#16A34A",
-  },
-  plannedText: {
-    color: "#D97706",
-  },
-  noTerminalBox: {
-    backgroundColor: "#F8FAFC",
-    borderRadius: 12,
-    padding: 17,
+
+  // TERMINAL
+  terminalCountBadge: {
+    backgroundColor: "#E5F1FF",
+    borderRadius: 10,
+    minWidth: 29,
+    height: 29,
+    justifyContent: "center",
     alignItems: "center",
+    paddingHorizontal: 7,
   },
-  noTerminalText: {
-    textAlign: "center",
-    fontSize: 12,
-    color: "#64748B",
-    marginTop: 8,
-    lineHeight: 18,
+
+  terminalCountText: {
+    color: "#1677D2",
+    fontWeight: "900",
+    fontSize: 11,
   },
+
+  terminalCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 17,
+    padding: 15,
+    marginBottom: 22,
+    elevation: 2,
+  },
+
+  terminalIntro: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    backgroundColor: "#EFF6FF",
+    padding: 11,
+    borderRadius: 11,
+    marginBottom: 14,
+  },
+
+  terminalIntroText: {
+    flex: 1,
+    color: "#475569",
+    fontSize: 10,
+    lineHeight: 16,
+  },
+
   terminalOption: {
     flexDirection: "row",
     alignItems: "center",
     padding: 12,
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#E2E8F0",
-    borderRadius: 12,
-    marginBottom: 9,
+    borderColor: "#E7EDF5",
+    borderRadius: 13,
+    marginBottom: 10,
   },
+
   selectedTerminal: {
-    borderColor: "#06B6D4",
-    backgroundColor: "#ECFEFF",
+    backgroundColor: "#EFF6FF",
+    borderColor: "#1677D2",
+    borderWidth: 1.5,
   },
+
   terminalIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
-    backgroundColor: "#CFFAFE",
+    width: 41,
+    height: 41,
+    borderRadius: 12,
+    backgroundColor: "#E5F1FF",
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 10,
+    marginRight: 11,
   },
+
+  selectedTerminalIcon: {
+    backgroundColor: "#1677D2",
+  },
+
   terminalInfo: {
     flex: 1,
-    paddingRight: 8,
+    paddingRight: 7,
   },
+
   terminalName: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: "#0F172A",
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#172B45",
   },
+
+  selectedTerminalName: {
+    color: "#1264B2",
+  },
+
   terminalAddress: {
+    color: "#8492A6",
     fontSize: 10,
-    color: "#64748B",
-    marginTop: 4,
+    marginTop: 5,
+    lineHeight: 15,
   },
+
+  selectedTerminalLabel: {
+    fontSize: 8,
+    color: "#1677D2",
+    fontWeight: "900",
+    letterSpacing: 0.8,
+    marginTop: 7,
+  },
+
   dockButton: {
-    height: 48,
-    backgroundColor: "#0891B2",
-    borderRadius: 11,
+    minHeight: 50,
+    backgroundColor: "#1677D2",
+    borderRadius: 13,
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    gap: 8,
-    marginTop: 9,
+    gap: 9,
+    marginTop: 5,
   },
-  primaryButton: {
-    backgroundColor: "#06B6D4",
-    padding: 13,
-    borderRadius: 10,
-    marginTop: 15,
-  },
-  primaryButtonText: {
+
+  dockButtonText: {
     color: "#FFFFFF",
-    fontSize: 13,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "900",
   },
-  dockedBox: {
+
+  // EMPTY TERMINALS
+  noTerminalBox: {
+    backgroundColor: "#F8FAFC",
+    borderRadius: 13,
+    padding: 23,
+    alignItems: "center",
+  },
+
+  noTerminalIcon: {
+    width: 58,
+    height: 58,
+    borderRadius: 18,
+    backgroundColor: "#E2E8F0",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  noTerminalTitle: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#334155",
+    marginTop: 11,
+  },
+
+  noTerminalText: {
+    fontSize: 10,
+    color: "#94A3B8",
+    textAlign: "center",
+    lineHeight: 16,
+    marginTop: 6,
+  },
+
+  // DOCKING STATUS
+  dockingStatusCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 17,
+    padding: 16,
+    marginBottom: 22,
+    elevation: 2,
+  },
+
+  dockingSuccessTop: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#DCFCE7",
-    borderRadius: 12,
-    padding: 13,
-    gap: 10,
   },
-  dockedInfo: {
+
+  dockingSuccessIcon: {
+    width: 43,
+    height: 43,
+    borderRadius: 14,
+    backgroundColor: "#16A34A",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 11,
+  },
+
+  dockingSuccessInfo: {
     flex: 1,
   },
-  dockedTitle: {
-    fontSize: 13,
-    fontWeight: "800",
+
+  dockingSuccessTitle: {
+    fontSize: 12,
+    fontWeight: "900",
     color: "#166534",
   },
-  dockedTerminal: {
-    fontSize: 11,
-    color: "#15803D",
+
+  dockingSuccessSubtitle: {
+    color: "#65A30D",
+    fontSize: 10,
     marginTop: 4,
   },
-  notDockedBox: {
+
+  dockedStatusPill: {
+    backgroundColor: "#DCFCE7",
+    borderRadius: 20,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+  },
+
+  dockedStatusText: {
+    color: "#15803D",
+    fontSize: 9,
+    fontWeight: "900",
+  },
+
+  dockingTerminalInfo: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#FEF3C7",
-    borderRadius: 12,
-    padding: 13,
     gap: 9,
+    backgroundColor: "#EFF6FF",
+    borderRadius: 11,
+    padding: 12,
+    marginTop: 15,
   },
-  notDockedText: {
+
+  dockingTerminalText: {
     flex: 1,
+  },
+
+  dockingTerminalLabel: {
+    color: "#8492A6",
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+  },
+
+  dockingTerminalName: {
+    color: "#1677D2",
     fontSize: 12,
+    fontWeight: "900",
+    marginTop: 4,
+  },
+
+  notDockedContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 11,
+  },
+
+  notDockedIcon: {
+    width: 43,
+    height: 43,
+    borderRadius: 13,
+    backgroundColor: "#FEF3C7",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  notDockedInfo: {
+    flex: 1,
+  },
+
+  notDockedTitle: {
+    fontSize: 12,
+    fontWeight: "900",
     color: "#92400E",
   },
+
+  notDockedText: {
+    color: "#A16207",
+    fontSize: 10,
+    lineHeight: 16,
+    marginTop: 4,
+  },
+
+  // START TRIP
+  startTripCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    padding: 17,
+    marginBottom: 18,
+    elevation: 2,
+  },
+
+  startTripHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 15,
+  },
+
+  startTripIcon: {
+    width: 43,
+    height: 43,
+    borderRadius: 13,
+    backgroundColor: "#E5F1FF",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 11,
+  },
+
+  startTripHeaderText: {
+    flex: 1,
+  },
+
+  startTripTitle: {
+    fontSize: 15,
+    fontWeight: "900",
+    color: "#172B45",
+  },
+
+  startTripSubtitle: {
+    color: "#8492A6",
+    fontSize: 10,
+    marginTop: 4,
+  },
+
+  startTripRequirements: {
+    backgroundColor: "#F8FAFC",
+    borderRadius: 12,
+    padding: 12,
+    gap: 10,
+    marginBottom: 15,
+  },
+
+  requirementRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+
+  requirementText: {
+    color: "#64748B",
+    fontSize: 10,
+    flex: 1,
+  },
+
   startButton: {
-    height: 53,
+    minHeight: 53,
     backgroundColor: "#16A34A",
     borderRadius: 13,
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    gap: 9,
-    marginBottom: 15,
+    gap: 10,
+    elevation: 3,
   },
+
   startButtonText: {
     color: "#FFFFFF",
-    fontSize: 15,
-    fontWeight: "800",
+    fontSize: 14,
+    fontWeight: "900",
   },
+
+  startDisabledHint: {
+    textAlign: "center",
+    color: "#94A3B8",
+    fontSize: 10,
+    marginTop: 10,
+  },
+
   disabledButton: {
     opacity: 0.45,
   },
-  activeTripBox: {
-    flexDirection: "row",
-    alignItems: "center",
+
+  // ACTIVE TRIP
+  activeTripCard: {
     backgroundColor: "#DCFCE7",
-    borderRadius: 13,
-    padding: 15,
-    gap: 11,
+    borderRadius: 17,
+    padding: 17,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    marginBottom: 20,
   },
+
+  activeTripIcon: {
+    width: 45,
+    height: 45,
+    borderRadius: 14,
+    backgroundColor: "#16A34A",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
   activeTripInfo: {
     flex: 1,
   },
+
   activeTripTitle: {
-    fontSize: 14,
-    fontWeight: "800",
     color: "#166534",
+    fontSize: 14,
+    fontWeight: "900",
   },
+
   activeTripDescription: {
-    fontSize: 11,
     color: "#15803D",
-    marginTop: 4,
+    fontSize: 11,
+    lineHeight: 17,
+    marginTop: 5,
   },
-  emptyCard: {
-    backgroundColor: "#FFFFFF",
-    padding: 22,
-    borderRadius: 16,
+
+  gpsActiveRow: {
+    flexDirection: "row",
     alignItems: "center",
-  },
-  emptyTitle: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: "#0F172A",
+    gap: 6,
     marginTop: 10,
   },
+
+  gpsActiveDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: "#16A34A",
+  },
+
+  gpsActiveText: {
+    color: "#15803D",
+    fontSize: 10,
+    fontWeight: "800",
+  },
+
+  // EMPTY STATE
+  emptyCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    padding: 25,
+    alignItems: "center",
+    elevation: 2,
+  },
+
+  emptyIcon: {
+    width: 70,
+    height: 70,
+    borderRadius: 22,
+    backgroundColor: "#FEF2F2",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#172B45",
+    marginTop: 14,
+  },
+
   emptyText: {
-    fontSize: 12,
-    color: "#64748B",
+    fontSize: 11,
+    color: "#8492A6",
     textAlign: "center",
     lineHeight: 18,
-    marginTop: 6,
+    marginTop: 7,
+  },
+
+  backToManagementButton: {
+    backgroundColor: "#1677D2",
+    borderRadius: 11,
+    paddingHorizontal: 17,
+    paddingVertical: 13,
+    marginTop: 17,
+  },
+
+  primaryButtonText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "900",
   },
 });

@@ -1,5 +1,9 @@
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useState,
+} from "react";
 
 import {
   View,
@@ -8,19 +12,35 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
+  Modal,
   RefreshControl,
   StatusBar,
 } from "react-native";
 
 import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "../config/supabase";
+import CustomAlert from "../components/CustomAlert";
+
+const COLORS = {
+  primary: "#1677D2",
+  primaryDark: "#105BA8",
+  primaryLight: "#E8F3FF",
+  background: "#F4F7FB",
+  white: "#FFFFFF",
+  text: "#142238",
+  secondary: "#718096",
+  border: "#E5EAF1",
+  green: "#16A34A",
+  greenLight: "#DCFCE7",
+  orange: "#D97706",
+  orangeLight: "#FEF3C7",
+  red: "#DC2626",
+};
 
 export default function TerminalBookingScreen({ navigation, route }) {
   const dockingId = route?.params?.dockingId;
 
   const [selectedBus, setSelectedBus] = useState(null);
-
   const [passengerCount, setPassengerCount] = useState(1);
   const [availableSeats, setAvailableSeats] = useState(0);
 
@@ -29,24 +49,110 @@ export default function TerminalBookingScreen({ navigation, route }) {
   const [booking, setBooking] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
-  // ---------------------------------------
-  // LOAD ONLY THE SELECTED BUS
-  // ---------------------------------------
+  // MODAL STATE
+  const [confirmVisible, setConfirmVisible] = useState(false);
 
+  // CUSTOM ALERT STATE
+  const [alertData, setAlertData] = useState({
+    visible: false,
+    title: "",
+    message: "",
+    type: "error",
+    buttonText: "OK",
+  });
+
+  const [alertAction, setAlertAction] = useState(null);
+
+  // SHOW CUSTOM ALERT
+  const showAlert = (
+    title,
+    message,
+    type = "error",
+    buttonText = "OK",
+    action = null
+  ) => {
+    setAlertData({
+      visible: true,
+      title,
+      message,
+      type,
+      buttonText,
+    });
+
+    setAlertAction(() => action);
+  };
+
+  // CLOSE CUSTOM ALERT
+  const closeAlert = () => {
+    setAlertData((current) => ({
+      ...current,
+      visible: false,
+    }));
+
+    if (alertAction) {
+      const action = alertAction;
+      setAlertAction(null);
+      action();
+    }
+  };
+
+  // LOAD AVAILABLE SEATS
+  const loadAvailability = async (currentDockingId) => {
+    try {
+      setLoadingAvailability(true);
+
+      const { data, error } = await supabase.rpc(
+        "get_docked_bus_availability",
+        {
+          p_docking_id: currentDockingId,
+        }
+      );
+
+      if (error) throw error;
+
+      const result = Array.isArray(data) ? data[0] : data;
+
+      if (!result) {
+        throw new Error("Unable to retrieve bus availability.");
+      }
+
+      const available = Number(result.available_seats || 0);
+
+      setAvailableSeats(available);
+
+      setPassengerCount((current) =>
+        Math.max(1, Math.min(current, available || 1))
+      );
+
+      return available;
+    } catch (error) {
+      console.error("Load availability error:", error);
+
+      showAlert(
+        "Availability Error",
+        error.message || "Unable to check available seats.",
+        "error"
+      );
+
+      setAvailableSeats(0);
+      return 0;
+    } finally {
+      setLoadingAvailability(false);
+    }
+  };
+
+  // LOAD SELECTED BUS
   const loadSelectedBus = useCallback(async () => {
     if (!dockingId) {
       setSelectedBus(null);
       setLoading(false);
 
-      Alert.alert(
+      showAlert(
         "Bus Not Found",
         "No selected bus was provided. Please choose a bus again.",
-        [
-          {
-            text: "Go Back",
-            onPress: () => navigation.goBack(),
-          },
-        ]
+        "warning",
+        "Go Back",
+        () => navigation.goBack()
       );
 
       return;
@@ -66,31 +172,35 @@ export default function TerminalBookingScreen({ navigation, route }) {
         throw new Error("This bus is no longer docked at the terminal.");
       }
 
-      const [busResult, tripResult, terminalResult, fareResult] =
-        await Promise.all([
-          supabase
-            .from("buses")
-            .select("*")
-            .eq("bus_id", docking.bus_id)
-            .maybeSingle(),
+      const [
+        busResult,
+        tripResult,
+        terminalResult,
+        fareResult,
+      ] = await Promise.all([
+        supabase
+          .from("buses")
+          .select("*")
+          .eq("bus_id", docking.bus_id)
+          .maybeSingle(),
 
-          supabase
-            .from("bus_trips")
-            .select("*")
-            .eq("trip_id", docking.trip_id)
-            .maybeSingle(),
+        supabase
+          .from("bus_trips")
+          .select("*")
+          .eq("trip_id", docking.trip_id)
+          .maybeSingle(),
 
-          supabase
-            .from("terminals")
-            .select("*")
-            .eq("terminal_id", docking.terminal_id)
-            .maybeSingle(),
+        supabase
+          .from("terminals")
+          .select("*")
+          .eq("terminal_id", docking.terminal_id)
+          .maybeSingle(),
 
-          supabase
-            .from("terminal_fares")
-            .select("origin_terminal_id, destination_location, fare")
-            .eq("origin_terminal_id", docking.terminal_id),
-        ]);
+        supabase
+          .from("terminal_fares")
+          .select("origin_terminal_id, destination_location, fare")
+          .eq("origin_terminal_id", docking.terminal_id),
+      ]);
 
       if (busResult.error) throw busResult.error;
       if (tripResult.error) throw tripResult.error;
@@ -101,22 +211,17 @@ export default function TerminalBookingScreen({ navigation, route }) {
       const trip = tripResult.data;
       const terminal = terminalResult.data;
 
-        console.log("SELECTED DOCKING:", docking);
-        console.log("BUS RESULT:", busResult.data);
-        console.log("TRIP RESULT:", tripResult.data);
-        console.log("TERMINAL RESULT:", terminalResult.data);
+      if (!bus) {
+        throw new Error("Bus information is missing or blocked by RLS.");
+      }
 
-        if (!bus) {
-          throw new Error("Bus information is missing or blocked by RLS.");
-        }
+      if (!trip) {
+        throw new Error("Trip information is missing or blocked by RLS.");
+      }
 
-        if (!trip) {
-          throw new Error("Trip information is missing or blocked by RLS.");
-        }
-
-        if (!terminal) {
-          throw new Error("Terminal information is missing or blocked by RLS.");
-}
+      if (!terminal) {
+        throw new Error("Terminal information is missing or blocked by RLS.");
+      }
 
       if (
         bus.bus_status !== "docked" ||
@@ -150,84 +255,29 @@ export default function TerminalBookingScreen({ navigation, route }) {
       setSelectedBus(null);
       setAvailableSeats(0);
 
-      Alert.alert(
+      showAlert(
         "Unable to Load Bus",
-        error.message || "Unable to retrieve the selected bus."
+        error.message || "Unable to retrieve the selected bus.",
+        "error"
       );
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [dockingId]);
+  }, [dockingId, navigation]);
 
-  // ---------------------------------------
-  // LOAD AVAILABLE SEATS
-  // ---------------------------------------
-
-  const loadAvailability = async (currentDockingId) => {
-    try {
-      setLoadingAvailability(true);
-
-      const { data, error } = await supabase.rpc(
-        "get_docked_bus_availability",
-        {
-          p_docking_id: currentDockingId,
-        }
-      );
-
-      if (error) throw error;
-
-      const result = Array.isArray(data) ? data[0] : data;
-
-      if (!result) {
-        throw new Error("Unable to retrieve bus availability.");
-      }
-
-      const available = Number(result.available_seats || 0);
-
-      setAvailableSeats(available);
-
-      setPassengerCount((current) =>
-        Math.max(1, Math.min(current, available || 1))
-      );
-
-      return available;
-    } catch (error) {
-      console.error("Load availability error:", error);
-
-      Alert.alert(
-        "Availability Error",
-        error.message || "Unable to check available seats."
-      );
-
-      setAvailableSeats(0);
-      return 0;
-    } finally {
-      setLoadingAvailability(false);
-    }
-  };
-
-  // ---------------------------------------
   // INITIAL LOAD
-  // ---------------------------------------
-
   useEffect(() => {
     loadSelectedBus();
   }, [loadSelectedBus]);
 
-  // ---------------------------------------
   // REFRESH
-  // ---------------------------------------
-
   const handleRefresh = async () => {
     setRefreshing(true);
     await loadSelectedBus();
   };
 
-  // ---------------------------------------
   // PASSENGER QUANTITY
-  // ---------------------------------------
-
   const increasePassengers = () => {
     if (passengerCount >= availableSeats) return;
 
@@ -240,45 +290,59 @@ export default function TerminalBookingScreen({ navigation, route }) {
     setPassengerCount((current) => current - 1);
   };
 
+  // TOTAL FARE
   const totalFare = selectedBus
     ? Number(selectedBus.fare || 0) * passengerCount
     : 0;
 
-  // ---------------------------------------
-  // RESERVE PASSENGERS
-  // ---------------------------------------
-
-  const handleReserve = async () => {
+  // OPEN RESERVATION CONFIRMATION
+  const handleReserve = () => {
     if (!selectedBus) {
-      Alert.alert("Bus Not Found", "Please select a bus again.");
+      showAlert(
+        "Bus Not Found",
+        "Please select a bus again.",
+        "warning"
+      );
       return;
     }
 
     if (selectedBus.fare === null) {
-      Alert.alert(
+      showAlert(
         "Fare Unavailable",
-        "No fare is configured for this bus destination."
+        "No fare is configured for this bus destination.",
+        "warning"
       );
       return;
     }
 
     if (passengerCount < 1) {
-      Alert.alert(
+      showAlert(
         "Invalid Quantity",
-        "Please select at least one passenger."
+        "Please select at least one passenger.",
+        "warning"
       );
       return;
     }
 
     if (passengerCount > availableSeats) {
-      Alert.alert(
+      showAlert(
         "Not Enough Seats",
-        `Only ${availableSeats} seats are currently available.`
+        `Only ${availableSeats} seats are currently available.`,
+        "warning"
       );
 
-      await loadAvailability(selectedBus.docking_id);
+      loadAvailability(selectedBus.docking_id);
       return;
     }
+
+    setConfirmVisible(true);
+  };
+
+  // CONFIRM RESERVATION
+  const confirmReservation = async () => {
+    if (booking || !selectedBus) return;
+
+    setConfirmVisible(false);
 
     try {
       setBooking(true);
@@ -291,7 +355,11 @@ export default function TerminalBookingScreen({ navigation, route }) {
       if (userError) throw userError;
 
       if (!user) {
-        Alert.alert("Login Required", "Please log in before booking.");
+        showAlert(
+          "Login Required",
+          "Please log in before booking.",
+          "warning"
+        );
         return;
       }
 
@@ -316,32 +384,29 @@ export default function TerminalBookingScreen({ navigation, route }) {
       const reservedCount = Number(result.passenger_count);
       const amount = Number(result.total_amount);
 
-      Alert.alert(
+      showAlert(
         "Reservation Successful!",
         `Booking Reference: ${reference}\n\n` +
           `Passengers: ${reservedCount}\n` +
           `Total Fare: ₱${amount.toFixed(2)}\n\n` +
-          "Please proceed to the cashier within 15 minutes to complete your payment.",
-        [
-          {
-            text: "Proceed to Payment",
-            onPress: () => {
-              navigation.navigate("Payment", {
-                bookingId: bookingId,
-              });
-            },
-          },
-        ],
-        { cancelable: false }
+          "Your reservation is held for 15 minutes. Please proceed to the cashier to complete your payment.",
+        "success",
+        "Proceed to Payment",
+        () => {
+          navigation.navigate("Payment", {
+            bookingId,
+          });
+        }
       );
 
       await loadAvailability(selectedBus.docking_id);
     } catch (error) {
       console.error("Reservation error:", error);
 
-      Alert.alert(
+      showAlert(
         "Reservation Failed",
-        error.message || "Unable to reserve your passengers."
+        error.message || "Unable to reserve your passengers.",
+        "error"
       );
 
       await loadAvailability(selectedBus.docking_id);
@@ -350,34 +415,60 @@ export default function TerminalBookingScreen({ navigation, route }) {
     }
   };
 
-  // ---------------------------------------
   // LOADING SCREEN
-  // ---------------------------------------
-
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <StatusBar backgroundColor="#F3F6FB" barStyle="dark-content" />
+        <StatusBar
+          backgroundColor={COLORS.background}
+          barStyle="dark-content"
+        />
 
-        <ActivityIndicator size="large" color="#0891B2" />
+        <View style={styles.loadingIcon}>
+          <Ionicons
+            name="bus-outline"
+            size={32}
+            color={COLORS.primary}
+          />
+        </View>
+
+        <ActivityIndicator
+          size="large"
+          color={COLORS.primary}
+        />
 
         <Text style={styles.loadingText}>
           Loading selected bus...
         </Text>
+
+        <CustomAlert
+          visible={alertData.visible}
+          title={alertData.title}
+          message={alertData.message}
+          type={alertData.type}
+          buttonText={alertData.buttonText}
+          onClose={closeAlert}
+        />
       </View>
     );
   }
 
-  // ---------------------------------------
   // BUS NOT AVAILABLE
-  // ---------------------------------------
-
   if (!selectedBus) {
     return (
       <View style={styles.centerContainer}>
-        <StatusBar backgroundColor="#F3F6FB" barStyle="dark-content" />
+        <StatusBar
+          backgroundColor={COLORS.background}
+          barStyle="dark-content"
+        />
 
-        <Ionicons name="bus-outline" size={60} color="#94A3B8" />
+        <View style={styles.emptyIcon}>
+          <Ionicons
+            name="bus-outline"
+            size={42}
+            color={COLORS.secondary}
+          />
+        </View>
 
         <Text style={styles.emptyTitle}>
           Bus Not Available
@@ -388,102 +479,171 @@ export default function TerminalBookingScreen({ navigation, route }) {
         </Text>
 
         <TouchableOpacity
-          style={styles.backButton}
+          style={styles.primaryButton}
           onPress={() => navigation.goBack()}
+          activeOpacity={0.8}
         >
-          <Text style={styles.backButtonText}>
+          <Ionicons
+            name="arrow-back"
+            size={18}
+            color={COLORS.white}
+          />
+
+          <Text style={styles.primaryButtonText}>
             Return to Bus List
           </Text>
         </TouchableOpacity>
+
+        <CustomAlert
+          visible={alertData.visible}
+          title={alertData.title}
+          message={alertData.message}
+          type={alertData.type}
+          buttonText={alertData.buttonText}
+          onClose={closeAlert}
+        />
       </View>
     );
   }
 
-  // ---------------------------------------
   // MAIN SCREEN
-  // ---------------------------------------
-
   return (
     <View style={styles.container}>
-      <StatusBar backgroundColor="#F3F6FB" barStyle="dark-content" />
+      <StatusBar
+        backgroundColor={COLORS.white}
+        barStyle="dark-content"
+      />
 
       <ScrollView
+        showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            colors={["#0891B2"]}
+            colors={[COLORS.primary]}
+            tintColor={COLORS.primary}
           />
         }
       >
+        {/* HEADER */}
         <View style={styles.header}>
-          <Text style={styles.title}>Terminal Booking</Text>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.8}
+          >
+            <Ionicons
+              name="arrow-back"
+              size={22}
+              color={COLORS.text}
+            />
+          </TouchableOpacity>
 
-          <Text style={styles.subtitle}>
-            Review your selected bus and choose your passenger quantity.
-          </Text>
+          <View style={styles.headerTextContainer}>
+            <Text style={styles.headerTitle}>
+              Terminal Booking
+            </Text>
+
+            <Text style={styles.headerSubtitle}>
+              Review your selected bus and passenger quantity.
+            </Text>
+          </View>
         </View>
 
-        {/* SELECTED BUS DETAILS */}
-
-        <View style={styles.busCard}>
-          <View style={styles.busTopRow}>
-            <View style={styles.busIcon}>
-              <Ionicons name="bus" size={27} color="#0891B2" />
+        {/* SELECTED BUS */}
+        <View style={styles.card}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionIcon}>
+              <Ionicons
+                name="bus-outline"
+                size={21}
+                color={COLORS.primary}
+              />
             </View>
 
-            <View style={styles.busInfo}>
-              <Text style={styles.busName}>
-                {selectedBus.bus.bus_name || "RouteX Bus"}
+            <View style={styles.sectionHeaderText}>
+              <Text style={styles.sectionTitle}>
+                Selected Bus
               </Text>
 
-              <Text style={styles.plateNumber}>
-                {selectedBus.bus.plate_number || "Plate number unavailable"}
+              <Text style={styles.sectionSubtitle}>
+                Your selected terminal departure
               </Text>
             </View>
 
             <View style={styles.dockedBadge}>
               <View style={styles.statusDot} />
-              <Text style={styles.dockedText}>DOCKED</Text>
-            </View>
-          </View>
 
-          <View style={styles.busDetails}>
-            <View style={styles.detailRow}>
-              <Ionicons name="location-outline" size={17} color="#64748B" />
-
-              <Text style={styles.detailText}>
-                From: {selectedBus.terminal.terminal_name || "Terminal"}
-              </Text>
-            </View>
-
-            <View style={styles.detailRow}>
-              <Ionicons name="navigate-outline" size={17} color="#64748B" />
-
-              <Text style={styles.detailText}>
-                To: {selectedBus.trip.destination || "Destination unavailable"}
-              </Text>
-            </View>
-
-            <View style={styles.detailRow}>
-              <Ionicons name="people-outline" size={17} color="#64748B" />
-
-              <Text style={styles.detailText}>
-                Bus Capacity: {selectedBus.bus.capacity || 0} passengers
+              <Text style={styles.dockedText}>
+                DOCKED
               </Text>
             </View>
           </View>
 
-          <View style={styles.busBottomRow}>
-            <View>
-              <Text style={styles.fareLabel}>
-                Fare per passenger
-              </Text>
+          <Text style={styles.busName}>
+            {selectedBus.bus.bus_name || "RouteX Bus"}
+          </Text>
 
-              <Text style={styles.fareAmount}>
+          <Text style={styles.plateNumber}>
+            {selectedBus.bus.plate_number || "Plate number unavailable"}
+          </Text>
+
+          <View style={styles.detailDivider} />
+
+          <View style={styles.routeRow}>
+            <View style={styles.routeIconColumn}>
+              <View style={styles.originDot} />
+              <View style={styles.routeLine} />
+              <View style={styles.destinationDot} />
+            </View>
+
+            <View style={styles.routeInfo}>
+              <View style={styles.routeItem}>
+                <Text style={styles.routeLabel}>
+                  DEPARTURE TERMINAL
+                </Text>
+
+                <Text style={styles.routeValue}>
+                  {selectedBus.terminal.terminal_name || "Terminal"}
+                </Text>
+              </View>
+
+              <View style={styles.routeItem}>
+                <Text style={styles.routeLabel}>
+                  DESTINATION
+                </Text>
+
+                <Text style={styles.routeValue}>
+                  {selectedBus.trip.destination || "Unavailable"}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.busInfoFooter}>
+            <View style={styles.busInfoItem}>
+              <Ionicons
+                name="people-outline"
+                size={17}
+                color={COLORS.secondary}
+              />
+
+              <Text style={styles.busInfoText}>
+                Capacity: {selectedBus.bus.capacity || 0}
+              </Text>
+            </View>
+
+            <View style={styles.busInfoItem}>
+              <Ionicons
+                name="cash-outline"
+                size={17}
+                color={COLORS.secondary}
+              />
+
+              <Text style={styles.busInfoText}>
                 {selectedBus.fare !== null
-                  ? `₱${Number(selectedBus.fare).toFixed(2)}`
+                  ? `₱${Number(selectedBus.fare).toFixed(2)} / person`
                   : "Fare unavailable"}
               </Text>
             </View>
@@ -491,31 +651,50 @@ export default function TerminalBookingScreen({ navigation, route }) {
         </View>
 
         {/* PASSENGER QUANTITY */}
-
-        <View style={styles.bookingPanel}>
-          <Text style={styles.panelTitle}>
-            Passenger Quantity
-          </Text>
-
-          <Text style={styles.panelSubtitle}>
-            Choose how many passengers will travel on this bus.
-          </Text>
-
-          <View style={styles.availabilityCard}>
-            <View style={styles.availabilityIcon}>
-              <Ionicons name="people" size={22} color="#0891B2" />
+        <View style={styles.card}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionIcon}>
+              <Ionicons
+                name="people-outline"
+                size={21}
+                color={COLORS.primary}
+              />
             </View>
 
-            <View style={{ flex: 1 }}>
+            <View style={styles.sectionHeaderText}>
+              <Text style={styles.sectionTitle}>
+                Passenger Quantity
+              </Text>
+
+              <Text style={styles.sectionSubtitle}>
+                Select the number of passengers
+              </Text>
+            </View>
+          </View>
+
+          {/* AVAILABLE SEATS */}
+          <View style={styles.availabilityCard}>
+            <View style={styles.availabilityIcon}>
+              <Ionicons
+                name="people"
+                size={21}
+                color={COLORS.primary}
+              />
+            </View>
+
+            <View style={styles.availabilityInfo}>
               <Text style={styles.availabilityLabel}>
                 Available Seats
               </Text>
 
               {loadingAvailability ? (
                 <ActivityIndicator
-                  color="#0891B2"
+                  color={COLORS.primary}
                   size="small"
-                  style={{ alignSelf: "flex-start", marginTop: 5 }}
+                  style={{
+                    alignSelf: "flex-start",
+                    marginTop: 5,
+                  }}
                 />
               ) : (
                 <Text style={styles.availabilityNumber}>
@@ -524,14 +703,15 @@ export default function TerminalBookingScreen({ navigation, route }) {
               )}
             </View>
 
-            <Text style={styles.capacityText}>
-              Total: {selectedBus.bus.capacity || 0}
-            </Text>
+            <View style={styles.capacityBadge}>
+              <Text style={styles.capacityText}>
+                Total: {selectedBus.bus.capacity || 0}
+              </Text>
+            </View>
           </View>
 
-          {/* QUANTITY CONTROLS */}
-
-          <View style={styles.quantityContainer}>
+          {/* QUANTITY SELECTOR */}
+          <View style={styles.quantityCard}>
             <TouchableOpacity
               style={[
                 styles.quantityButton,
@@ -539,11 +719,16 @@ export default function TerminalBookingScreen({ navigation, route }) {
               ]}
               onPress={decreasePassengers}
               disabled={passengerCount <= 1}
+              activeOpacity={0.7}
             >
               <Ionicons
                 name="remove"
-                size={25}
-                color={passengerCount <= 1 ? "#94A3B8" : "#0891B2"}
+                size={23}
+                color={
+                  passengerCount <= 1
+                    ? "#A0AEC0"
+                    : COLORS.primary
+                }
               />
             </TouchableOpacity>
 
@@ -567,210 +752,397 @@ export default function TerminalBookingScreen({ navigation, route }) {
                 passengerCount >= availableSeats ||
                 loadingAvailability
               }
+              activeOpacity={0.7}
             >
               <Ionicons
                 name="add"
-                size={25}
+                size={23}
                 color={
                   passengerCount >= availableSeats
-                    ? "#94A3B8"
-                    : "#0891B2"
+                    ? "#A0AEC0"
+                    : COLORS.primary
                 }
               />
             </TouchableOpacity>
           </View>
 
-          {/* FARE SUMMARY */}
+          {availableSeats === 0 && !loadingAvailability && (
+            <View style={styles.noSeatsNotice}>
+              <Ionicons
+                name="alert-circle-outline"
+                size={18}
+                color={COLORS.red}
+              />
 
-          <View style={styles.fareSummary}>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>
-                Fare per passenger
-              </Text>
-
-              <Text style={styles.summaryValue}>
-                ₱{Number(selectedBus.fare || 0).toFixed(2)}
-              </Text>
-            </View>
-
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>
-                Number of passengers
-              </Text>
-
-              <Text style={styles.summaryValue}>
-                {passengerCount}
+              <Text style={styles.noSeatsText}>
+                No seats are currently available for this bus.
               </Text>
             </View>
+          )}
+        </View>
 
-            <View style={styles.summaryDivider} />
+        {/* FARE SUMMARY */}
+        <View style={styles.card}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionIcon}>
+              <Ionicons
+                name="receipt-outline"
+                size={21}
+                color={COLORS.primary}
+              />
+            </View>
 
-            <View style={styles.summaryRow}>
-              <Text style={styles.totalLabel}>
-                Total Fare
+            <View style={styles.sectionHeaderText}>
+              <Text style={styles.sectionTitle}>
+                Fare Summary
               </Text>
 
-              <Text style={styles.totalAmount}>
-                ₱{totalFare.toFixed(2)}
+              <Text style={styles.sectionSubtitle}>
+                Review your total booking cost
               </Text>
             </View>
           </View>
 
-          {/* PAYMENT NOTICE */}
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryLabel}>
+              Fare per passenger
+            </Text>
 
-          <View style={styles.paymentNotice}>
-            <Ionicons name="time-outline" size={19} color="#B45309" />
-
-            <Text style={styles.paymentNoticeText}>
-              Your reservation will be held for 15 minutes.
-              Please proceed to the cashier to complete payment.
+            <Text style={styles.summaryValue}>
+              ₱{Number(selectedBus.fare || 0).toFixed(2)}
             </Text>
           </View>
 
-          {/* RESERVE BUTTON */}
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryLabel}>
+              Number of passengers
+            </Text>
 
-          <TouchableOpacity
-            style={[
-              styles.reserveButton,
-              (booking ||
-                loadingAvailability ||
-                availableSeats < 1 ||
-                selectedBus.fare === null) &&
-                styles.reserveButtonDisabled,
-            ]}
-            onPress={handleReserve}
-            disabled={
+            <Text style={styles.summaryValue}>
+              {passengerCount}
+            </Text>
+          </View>
+
+          <View style={styles.summaryDivider} />
+
+          <View style={styles.totalRow}>
+            <Text style={styles.totalLabel}>
+              Total Fare
+            </Text>
+
+            <Text style={styles.totalAmount}>
+              ₱{totalFare.toFixed(2)}
+            </Text>
+          </View>
+        </View>
+
+        {/* PAYMENT NOTICE */}
+        <View style={styles.noticeCard}>
+          <View style={styles.noticeIcon}>
+            <Ionicons
+              name="time-outline"
+              size={21}
+              color={COLORS.orange}
+            />
+          </View>
+
+          <View style={styles.noticeContent}>
+            <Text style={styles.noticeTitle}>
+              Payment Reminder
+            </Text>
+
+            <Text style={styles.noticeText}>
+              Your reservation will be held for 15 minutes.
+              Please proceed to the terminal cashier to complete
+              your payment.
+            </Text>
+          </View>
+        </View>
+
+        {/* RESERVE BUTTON */}
+        <TouchableOpacity
+          style={[
+            styles.reserveButton,
+            (
               booking ||
               loadingAvailability ||
               availableSeats < 1 ||
               selectedBus.fare === null
-            }
-            activeOpacity={0.85}
-          >
-            {booking ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <>
-                <Ionicons
-                  name="ticket-outline"
-                  size={20}
-                  color="#FFFFFF"
-                />
+            ) && styles.reserveButtonDisabled,
+          ]}
+          onPress={handleReserve}
+          disabled={
+            booking ||
+            loadingAvailability ||
+            availableSeats < 1 ||
+            selectedBus.fare === null
+          }
+          activeOpacity={0.85}
+        >
+          {booking ? (
+            <ActivityIndicator color={COLORS.white} />
+          ) : (
+            <>
+              <Ionicons
+                name="ticket-outline"
+                size={20}
+                color={COLORS.white}
+              />
 
-                <Text style={styles.reserveButtonText}>
-                  Reserve {passengerCount}{" "}
-                  {passengerCount === 1 ? "Passenger" : "Passengers"}
-                </Text>
-              </>
-            )}
-          </TouchableOpacity>
+              <Text style={styles.reserveButtonText}>
+                Reserve {passengerCount}{" "}
+                {passengerCount === 1 ? "Passenger" : "Passengers"}
+              </Text>
+            </>
+          )}
+        </TouchableOpacity>
 
-          {/* RETURN TO BUS LIST */}
+        {/* CHANGE BUS */}
+        <TouchableOpacity
+          style={styles.changeBusButton}
+          onPress={() => navigation.goBack()}
+          activeOpacity={0.8}
+        >
+          <Ionicons
+            name="arrow-back"
+            size={16}
+            color={COLORS.primary}
+          />
 
-          <TouchableOpacity
-            style={styles.changeBusButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Ionicons
-              name="arrow-back"
-              size={16}
-              color="#0891B2"
-            />
-
-            <Text style={styles.changeBusText}>
-              Choose Another Bus
-            </Text>
-          </TouchableOpacity>
-        </View>
+          <Text style={styles.changeBusText}>
+            Choose Another Bus
+          </Text>
+        </TouchableOpacity>
       </ScrollView>
+
+      {/* RESERVATION CONFIRMATION MODAL */}
+      <Modal
+        visible={confirmVisible}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => setConfirmVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.confirmModal}>
+            <View style={styles.modalIcon}>
+              <Ionicons
+                name="ticket-outline"
+                size={30}
+                color={COLORS.primary}
+              />
+            </View>
+
+            <Text style={styles.modalTitle}>
+              Confirm Reservation
+            </Text>
+
+            <Text style={styles.modalSubtitle}>
+              Please review your booking details before proceeding.
+            </Text>
+
+            <View style={styles.modalDetails}>
+              <View style={styles.modalDetailRow}>
+                <Text style={styles.modalDetailLabel}>
+                  Destination
+                </Text>
+
+                <Text style={styles.modalDetailValue}>
+                  {selectedBus.trip.destination}
+                </Text>
+              </View>
+
+              <View style={styles.modalDetailRow}>
+                <Text style={styles.modalDetailLabel}>
+                  Passengers
+                </Text>
+
+                <Text style={styles.modalDetailValue}>
+                  {passengerCount}
+                </Text>
+              </View>
+
+              <View style={styles.modalDetailRow}>
+                <Text style={styles.modalDetailLabel}>
+                  Fare per passenger
+                </Text>
+
+                <Text style={styles.modalDetailValue}>
+                  ₱{Number(selectedBus.fare || 0).toFixed(2)}
+                </Text>
+              </View>
+
+              <View style={styles.modalDivider} />
+
+              <View style={styles.modalTotalRow}>
+                <Text style={styles.modalTotalLabel}>
+                  Total Fare
+                </Text>
+
+                <Text style={styles.modalTotalAmount}>
+                  ₱{totalFare.toFixed(2)}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.modalNotice}>
+              <Ionicons
+                name="time-outline"
+                size={17}
+                color={COLORS.orange}
+              />
+
+              <Text style={styles.modalNoticeText}>
+                Your reservation will be held for 15 minutes.
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={styles.confirmButton}
+              onPress={confirmReservation}
+              disabled={booking}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.confirmButtonText}>
+                Confirm Reservation
+              </Text>
+
+              <Ionicons
+                name="arrow-forward"
+                size={18}
+                color={COLORS.white}
+              />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={() => setConfirmVisible(false)}
+              disabled={booking}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.cancelButtonText}>
+                Cancel
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* CUSTOM ALERT */}
+      <CustomAlert
+        visible={alertData.visible}
+        title={alertData.title}
+        message={alertData.message}
+        type={alertData.type}
+        buttonText={alertData.buttonText}
+        onClose={closeAlert}
+      />
     </View>
   );
 }
 
-// ---------------------------------------
 // STYLES
-// ---------------------------------------
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F3F6FB",
+    backgroundColor: COLORS.background,
+  },
+
+  scrollContent: {
+    paddingHorizontal: 17,
+    paddingTop: 35,
+    paddingBottom: 35,
   },
 
   centerContainer: {
     flex: 1,
-    backgroundColor: "#F3F6FB",
+    backgroundColor: COLORS.background,
     alignItems: "center",
     justifyContent: "center",
     padding: 25,
   },
 
-  scrollContent: {
-    padding: 16,
-    paddingBottom: 35,
-  },
-
+  // HEADER
   header: {
-    marginBottom: 20,
-    marginTop: 8,
-  },
-
-  title: {
-    fontSize: 25,
-    fontWeight: "800",
-    color: "#0F172A",
-  },
-
-  subtitle: {
-    fontSize: 14,
-    color: "#64748B",
-    marginTop: 6,
-    lineHeight: 21,
-  },
-
-  busCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-  },
-
-  busTopRow: {
     flexDirection: "row",
     alignItems: "center",
+    marginBottom: 20,
   },
 
-  busIcon: {
-    width: 47,
-    height: 47,
+  backButton: {
+    width: 42,
+    height: 42,
     borderRadius: 13,
-    backgroundColor: "#ECFEFF",
+    backgroundColor: COLORS.primaryLight,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 13,
+  },
+
+  headerTextContainer: {
+    flex: 1,
+  },
+
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: "900",
+    color: COLORS.text,
+  },
+
+  headerSubtitle: {
+    fontSize: 12,
+    color: COLORS.secondary,
+    marginTop: 4,
+    lineHeight: 17,
+  },
+
+  // CARDS
+  card: {
+    backgroundColor: COLORS.white,
+    borderRadius: 17,
+    padding: 17,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginBottom: 14,
+  },
+
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 17,
+  },
+
+  sectionIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 13,
+    backgroundColor: COLORS.primaryLight,
     alignItems: "center",
     justifyContent: "center",
     marginRight: 11,
   },
 
-  busInfo: {
+  sectionHeaderText: {
     flex: 1,
   },
 
-  busName: {
-    fontSize: 16,
+  sectionTitle: {
+    fontSize: 15,
     fontWeight: "800",
-    color: "#0F172A",
+    color: COLORS.text,
   },
 
-  plateNumber: {
-    fontSize: 12,
-    color: "#64748B",
+  sectionSubtitle: {
+    color: COLORS.secondary,
+    fontSize: 11,
     marginTop: 4,
   },
 
+  // BUS DETAILS
   dockedBadge: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#DCFCE7",
+    backgroundColor: COLORS.greenLight,
     paddingHorizontal: 9,
     paddingVertical: 6,
     borderRadius: 20,
@@ -780,231 +1152,325 @@ const styles = StyleSheet.create({
     width: 7,
     height: 7,
     borderRadius: 5,
-    backgroundColor: "#16A34A",
+    backgroundColor: COLORS.green,
     marginRight: 5,
   },
 
   dockedText: {
-    color: "#15803D",
-    fontSize: 10,
-    fontWeight: "800",
+    color: COLORS.green,
+    fontSize: 9,
+    fontWeight: "900",
   },
 
-  busDetails: {
-    marginTop: 16,
-    gap: 9,
+  busName: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: COLORS.text,
   },
 
-  detailRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-
-  detailText: {
-    color: "#475569",
+  plateNumber: {
     fontSize: 12,
-    flex: 1,
+    color: COLORS.secondary,
+    marginTop: 4,
   },
 
-  busBottomRow: {
+  detailDivider: {
+    height: 1,
+    backgroundColor: COLORS.border,
+    marginVertical: 16,
+  },
+
+  routeRow: {
+    flexDirection: "row",
+  },
+
+  routeIconColumn: {
+    width: 18,
+    alignItems: "center",
+    paddingTop: 3,
+    paddingBottom: 4,
+  },
+
+  originDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: COLORS.primary,
+  },
+
+  routeLine: {
+    width: 2,
+    height: 34,
+    backgroundColor: "#CBD5E1",
+    marginVertical: 3,
+  },
+
+  destinationDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: COLORS.green,
+  },
+
+  routeInfo: {
+    flex: 1,
+    marginLeft: 10,
+    justifyContent: "space-between",
+    gap: 15,
+  },
+
+  routeItem: {
+    gap: 4,
+  },
+
+  routeLabel: {
+    color: COLORS.secondary,
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 0.6,
+  },
+
+  routeValue: {
+    color: COLORS.text,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+
+  busInfoFooter: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 15,
     borderTopWidth: 1,
-    borderTopColor: "#F1F5F9",
-    marginTop: 15,
+    borderTopColor: COLORS.border,
+    marginTop: 16,
     paddingTop: 13,
   },
 
-  fareLabel: {
-    color: "#64748B",
+  busInfoItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+
+  busInfoText: {
     fontSize: 11,
+    color: COLORS.secondary,
+    fontWeight: "600",
   },
 
-  fareAmount: {
-    color: "#0F172A",
-    fontWeight: "800",
-    fontSize: 18,
-    marginTop: 3,
-  },
-
-  bookingPanel: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 18,
-    padding: 18,
-    marginTop: 15,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-  },
-
-  panelTitle: {
-    fontSize: 19,
-    fontWeight: "800",
-    color: "#0F172A",
-  },
-
-  panelSubtitle: {
-    color: "#64748B",
-    fontSize: 13,
-    marginTop: 5,
-    lineHeight: 19,
-  },
-
+  // AVAILABILITY
   availabilityCard: {
-    backgroundColor: "#ECFEFF",
+    backgroundColor: COLORS.primaryLight,
     borderRadius: 13,
     padding: 13,
-    marginTop: 18,
     flexDirection: "row",
     alignItems: "center",
   },
 
   availabilityIcon: {
-    width: 43,
-    height: 43,
+    width: 42,
+    height: 42,
     borderRadius: 12,
-    backgroundColor: "#CFFAFE",
+    backgroundColor: "#D5E9FF",
     justifyContent: "center",
     alignItems: "center",
     marginRight: 11,
   },
 
+  availabilityInfo: {
+    flex: 1,
+  },
+
   availabilityLabel: {
-    color: "#475569",
-    fontSize: 12,
+    color: COLORS.secondary,
+    fontSize: 11,
   },
 
   availabilityNumber: {
-    color: "#0E7490",
-    fontSize: 23,
-    fontWeight: "800",
+    color: COLORS.primaryDark,
+    fontSize: 22,
+    fontWeight: "900",
     marginTop: 2,
   },
 
-  capacityText: {
-    color: "#64748B",
-    fontSize: 12,
-    fontWeight: "600",
+  capacityBadge: {
+    backgroundColor: COLORS.white,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 9,
   },
 
-  quantityContainer: {
+  capacityText: {
+    color: COLORS.secondary,
+    fontSize: 10,
+    fontWeight: "700",
+  },
+
+  // QUANTITY SELECTOR
+  quantityCard: {
+    backgroundColor: "#F8FAFC",
+    borderRadius: 14,
+    paddingVertical: 16,
+    marginTop: 15,
     flexDirection: "row",
-    justifyContent: "center",
     alignItems: "center",
-    marginTop: 22,
-    marginBottom: 20,
-    gap: 27,
+    justifyContent: "center",
+    gap: 35,
   },
 
   quantityButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    backgroundColor: "#ECFEFF",
+    width: 45,
+    height: 45,
+    borderRadius: 13,
+    backgroundColor: COLORS.primaryLight,
     borderWidth: 1,
-    borderColor: "#A5F3FC",
+    borderColor: "#C7DFFF",
     alignItems: "center",
     justifyContent: "center",
   },
 
   disabledButton: {
     backgroundColor: "#F1F5F9",
-    borderColor: "#E2E8F0",
+    borderColor: COLORS.border,
   },
 
   quantityValueContainer: {
     alignItems: "center",
-    minWidth: 85,
+    minWidth: 75,
   },
 
   quantityValue: {
-    fontSize: 34,
-    fontWeight: "800",
-    color: "#0F172A",
+    fontSize: 32,
+    fontWeight: "900",
+    color: COLORS.text,
   },
 
   quantityLabel: {
-    fontSize: 12,
-    color: "#64748B",
+    fontSize: 11,
+    color: COLORS.secondary,
     marginTop: 2,
   },
 
-  fareSummary: {
-    backgroundColor: "#F8FAFC",
-    borderRadius: 13,
-    padding: 15,
+  noSeatsNotice: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FEF2F2",
+    borderRadius: 10,
+    padding: 11,
+    marginTop: 13,
+    gap: 8,
   },
 
+  noSeatsText: {
+    flex: 1,
+    fontSize: 11,
+    color: COLORS.red,
+    lineHeight: 17,
+  },
+
+  // FARE SUMMARY
   summaryRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginVertical: 5,
+    marginVertical: 7,
   },
 
   summaryLabel: {
-    fontSize: 13,
-    color: "#64748B",
+    fontSize: 12,
+    color: COLORS.secondary,
   },
 
   summaryValue: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "700",
-    color: "#334155",
+    color: COLORS.text,
   },
 
   summaryDivider: {
     height: 1,
-    backgroundColor: "#E2E8F0",
-    marginVertical: 10,
+    backgroundColor: COLORS.border,
+    marginVertical: 11,
+  },
+
+  totalRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
 
   totalLabel: {
-    fontSize: 15,
-    color: "#0F172A",
+    fontSize: 14,
     fontWeight: "800",
+    color: COLORS.text,
   },
 
   totalAmount: {
     fontSize: 21,
-    color: "#0891B2",
-    fontWeight: "800",
+    fontWeight: "900",
+    color: COLORS.primary,
   },
 
-  paymentNotice: {
+  // PAYMENT NOTICE
+  noticeCard: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    backgroundColor: "#FFFBEB",
-    borderRadius: 10,
-    padding: 12,
-    marginTop: 15,
-    gap: 9,
+    backgroundColor: COLORS.orangeLight,
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 15,
   },
 
-  paymentNoticeText: {
+  noticeIcon: {
+    marginRight: 10,
+    marginTop: 1,
+  },
+
+  noticeContent: {
     flex: 1,
+  },
+
+  noticeTitle: {
     color: "#92400E",
     fontSize: 12,
+    fontWeight: "900",
+    marginBottom: 5,
+  },
+
+  noticeText: {
+    color: "#92400E",
+    fontSize: 11,
     lineHeight: 18,
   },
 
+  // BUTTONS
   reserveButton: {
-    backgroundColor: "#0891B2",
-    borderRadius: 12,
+    backgroundColor: COLORS.primary,
+    borderRadius: 13,
     paddingVertical: 16,
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
     gap: 9,
-    marginTop: 18,
+    marginTop: 2,
+    elevation: 2,
+    shadowColor: COLORS.primary,
+    shadowOffset: {
+      width: 0,
+      height: 3,
+    },
+    shadowOpacity: 0.15,
+    shadowRadius: 5,
   },
 
   reserveButtonDisabled: {
     backgroundColor: "#94A3B8",
+    elevation: 0,
   },
 
   reserveButtonText: {
-    color: "#FFFFFF",
-    fontSize: 15,
-    fontWeight: "800",
+    color: COLORS.white,
+    fontSize: 14,
+    fontWeight: "900",
   },
 
   changeBusButton: {
@@ -1012,45 +1478,222 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     flexDirection: "row",
     gap: 7,
-    paddingVertical: 15,
+    paddingVertical: 16,
   },
 
   changeBusText: {
-    color: "#0891B2",
-    fontSize: 13,
-    fontWeight: "700",
+    color: COLORS.primary,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+
+  // LOADING AND EMPTY STATES
+  loadingIcon: {
+    width: 65,
+    height: 65,
+    borderRadius: 20,
+    backgroundColor: COLORS.primaryLight,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 20,
   },
 
   loadingText: {
-    color: "#64748B",
+    color: COLORS.secondary,
     marginTop: 12,
+    fontSize: 13,
+  },
+
+  emptyIcon: {
+    width: 82,
+    height: 82,
+    borderRadius: 25,
+    backgroundColor: "#E9EEF5",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
   },
 
   emptyTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#0F172A",
-    marginTop: 15,
+    fontSize: 20,
+    fontWeight: "900",
+    color: COLORS.text,
   },
 
   emptyText: {
-    color: "#64748B",
+    color: COLORS.secondary,
     textAlign: "center",
     fontSize: 13,
-    marginTop: 7,
+    marginTop: 8,
     lineHeight: 20,
   },
 
-  backButton: {
-    backgroundColor: "#0891B2",
+  primaryButton: {
+    backgroundColor: COLORS.primary,
     paddingHorizontal: 22,
-    paddingVertical: 13,
-    borderRadius: 10,
-    marginTop: 20,
+    paddingVertical: 14,
+    borderRadius: 12,
+    marginTop: 22,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
 
-  backButtonText: {
-    color: "#FFFFFF",
-    fontWeight: "700",
+  primaryButtonText: {
+    color: COLORS.white,
+    fontWeight: "800",
+    fontSize: 13,
+  },
+
+  // CONFIRMATION MODAL
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.55)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 22,
+  },
+
+  confirmModal: {
+    width: "100%",
+    maxWidth: 420,
+    backgroundColor: COLORS.white,
+    borderRadius: 22,
+    padding: 22,
+    alignItems: "center",
+    elevation: 10,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 5,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+  },
+
+  modalIcon: {
+    width: 62,
+    height: 62,
+    borderRadius: 20,
+    backgroundColor: COLORS.primaryLight,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 15,
+  },
+
+  modalTitle: {
+    fontSize: 19,
+    fontWeight: "900",
+    color: COLORS.text,
+    textAlign: "center",
+  },
+
+  modalSubtitle: {
+    fontSize: 12,
+    color: COLORS.secondary,
+    textAlign: "center",
+    lineHeight: 18,
+    marginTop: 7,
+    marginBottom: 20,
+  },
+
+  modalDetails: {
+    width: "100%",
+    backgroundColor: "#F8FAFC",
+    borderRadius: 14,
+    padding: 15,
+  },
+
+  modalDetailRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginVertical: 7,
+    gap: 10,
+  },
+
+  modalDetailLabel: {
+    fontSize: 12,
+    color: COLORS.secondary,
+    flex: 1,
+  },
+
+  modalDetailValue: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: COLORS.text,
+    textAlign: "right",
+    flexShrink: 1,
+  },
+
+  modalDivider: {
+    height: 1,
+    backgroundColor: COLORS.border,
+    marginVertical: 10,
+  },
+
+  modalTotalRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+
+  modalTotalLabel: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: COLORS.text,
+  },
+
+  modalTotalAmount: {
+    fontSize: 21,
+    fontWeight: "900",
+    color: COLORS.primary,
+  },
+
+  modalNotice: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.orangeLight,
+    borderRadius: 10,
+    padding: 11,
+    marginTop: 14,
+    gap: 8,
+  },
+
+  modalNoticeText: {
+    flex: 1,
+    fontSize: 11,
+    color: "#92400E",
+    lineHeight: 16,
+  },
+
+  confirmButton: {
+    width: "100%",
+    backgroundColor: COLORS.primary,
+    borderRadius: 12,
+    paddingVertical: 15,
+    marginTop: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 9,
+  },
+
+  confirmButtonText: {
+    color: COLORS.white,
+    fontSize: 13,
+    fontWeight: "900",
+  },
+
+  cancelButton: {
+    paddingVertical: 13,
+    alignItems: "center",
+  },
+
+  cancelButtonText: {
+    color: COLORS.secondary,
+    fontSize: 13,
+    fontWeight: "800",
   },
 });

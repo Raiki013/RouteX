@@ -1,5 +1,9 @@
 
-import React, { useEffect, useState, useCallback } from "react";
+import React, {
+  useEffect,
+  useState,
+  useCallback,
+} from "react";
 
 import {
   View,
@@ -8,13 +12,31 @@ import {
   ActivityIndicator,
   StyleSheet,
   ScrollView,
-  Alert,
+  StatusBar,
+  RefreshControl,
 } from "react-native";
 
 import { Ionicons } from "@expo/vector-icons";
 import QRCode from "react-native-qrcode-svg";
 
 import { supabase } from "../config/supabase";
+
+const COLORS = {
+  primary: "#1677D2",
+  primaryDark: "#105BA8",
+  primaryLight: "#E8F3FF",
+  background: "#F4F7FB",
+  white: "#FFFFFF",
+  text: "#142238",
+  secondary: "#718096",
+  border: "#E5EAF1",
+  green: "#16A34A",
+  greenLight: "#DCFCE7",
+  orange: "#D97706",
+  orangeLight: "#FEF3C7",
+  red: "#DC2626",
+  redLight: "#FEE2E2",
+};
 
 export default function PaymentScreen({ route, navigation }) {
   const { bookingId } = route.params || {};
@@ -66,21 +88,21 @@ export default function PaymentScreen({ route, navigation }) {
       setBooking(data);
     } catch (error) {
       console.log("Payment screen error:", error.message);
-      Alert.alert("Unable to Load Booking", error.message);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   }, [bookingId]);
 
-  // AUTOMATIC REALTIME PAYMENT REFRESH
+  // INITIAL LOAD AND REALTIME
   useEffect(() => {
-    if (!bookingId) return;
+    if (!bookingId) {
+      setLoading(false);
+      return;
+    }
 
-    // Load the latest booking information
     loadBooking();
 
-    // Listen for cashier updates
     const bookingChannel = supabase
       .channel(`payment-booking-${bookingId}`)
       .on(
@@ -94,11 +116,8 @@ export default function PaymentScreen({ route, navigation }) {
         (payload) => {
           console.log("BOOKING UPDATED:", payload.new);
 
-          // Update the booking information immediately
           setBooking((currentBooking) => {
-            if (!currentBooking) {
-              return currentBooking;
-            }
+            if (!currentBooking) return currentBooking;
 
             return {
               ...currentBooking,
@@ -111,7 +130,6 @@ export default function PaymentScreen({ route, navigation }) {
         console.log("PAYMENT REALTIME STATUS:", status);
       });
 
-    // Cleanup subscription
     return () => {
       supabase.removeChannel(bookingChannel);
     };
@@ -124,11 +142,11 @@ export default function PaymentScreen({ route, navigation }) {
     !!booking?.ticket_code;
 
   const isExpired =
-    booking?.expires_at &&
+    !!booking?.expires_at &&
     new Date(booking.expires_at).getTime() < Date.now() &&
     !isPaid;
 
-  // BOOKING QR CODE
+  // QR CODE
   const bookingQR = booking?.booking_reference
     ? `ROUTEX-BOOKING:${booking.booking_reference}`
     : "";
@@ -140,11 +158,58 @@ export default function PaymentScreen({ route, navigation }) {
     });
   };
 
-  // LOADING SCREEN
+  // FORMAT AMOUNT
+  const formattedAmount = Number(
+    booking?.total_amount || 0
+  ).toLocaleString("en-PH", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+
+  // STATUS CONFIGURATION
+  const getStatusConfig = () => {
+    if (isPaid) {
+      return {
+        title: "Payment Confirmed",
+        subtitle: "Your boarding ticket is ready.",
+        icon: "checkmark-circle",
+        color: COLORS.green,
+        background: COLORS.greenLight,
+      };
+    }
+
+    if (isExpired) {
+      return {
+        title: "Booking Expired",
+        subtitle: "Your payment deadline has passed.",
+        icon: "alert-circle",
+        color: COLORS.red,
+        background: COLORS.redLight,
+      };
+    }
+
+    return {
+      title: "Awaiting Payment",
+      subtitle: "Please proceed to the terminal cashier.",
+      icon: "time",
+      color: COLORS.orange,
+      background: COLORS.orangeLight,
+    };
+  };
+
+  const statusConfig = getStatusConfig();
+
+  // LOADING
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#06B6D4" />
+        <StatusBar barStyle="dark-content" backgroundColor={COLORS.white} />
+
+        <ActivityIndicator
+          size="large"
+          color={COLORS.primary}
+        />
+
         <Text style={styles.loadingText}>
           Loading your booking...
         </Text>
@@ -156,21 +221,30 @@ export default function PaymentScreen({ route, navigation }) {
   if (!booking) {
     return (
       <View style={styles.center}>
-        <Ionicons
-          name="alert-circle-outline"
-          size={55}
-          color="#DC2626"
-        />
+        <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
 
-        <Text style={styles.title}>
+        <View style={styles.emptyIcon}>
+          <Ionicons
+            name="document-text-outline"
+            size={42}
+            color={COLORS.red}
+          />
+        </View>
+
+        <Text style={styles.emptyTitle}>
           Booking Not Found
         </Text>
 
+        <Text style={styles.emptySubtitle}>
+          We couldn't retrieve your booking information.
+        </Text>
+
         <TouchableOpacity
-          style={styles.button}
+          style={styles.primaryButton}
           onPress={() => navigation.goBack()}
+          activeOpacity={0.8}
         >
-          <Text style={styles.buttonText}>
+          <Text style={styles.primaryButtonText}>
             Go Back
           </Text>
         </TouchableOpacity>
@@ -179,460 +253,779 @@ export default function PaymentScreen({ route, navigation }) {
   }
 
   return (
-    <ScrollView
-      contentContainerStyle={styles.container}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* HEADER */}
-      <View style={styles.header}>
-        <Ionicons
-          name="qr-code-outline"
-          size={38}
-          color="#0891B2"
-        />
+    <View style={styles.screen}>
+      <StatusBar
+        barStyle="dark-content"
+        backgroundColor={COLORS.white}
+      />
 
-        <Text style={styles.title}>
-          Terminal Payment
-        </Text>
-
-        <Text style={styles.subtitle}>
-          Present your booking QR code to the cashier.
-        </Text>
-      </View>
-
-      {/* BOOKING CARD */}
-      <View style={styles.card}>
-
-        {/* PAID */}
-        {isPaid ? (
-          <View style={styles.statusContainer}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.container}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => loadBooking(false)}
+            colors={[COLORS.primary]}
+            tintColor={COLORS.primary}
+          />
+        }
+      >
+        {/* HEADER */}
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => {
+              if (navigation.canGoBack()) {
+                navigation.goBack();
+              } else {
+                navigation.navigate("MainTabs");
+              }
+            }}
+            activeOpacity={0.8}
+          >
             <Ionicons
-              name="checkmark-circle"
-              size={55}
-              color="#16A34A"
+              name="arrow-back"
+              size={22}
+              color={COLORS.text}
             />
+          </TouchableOpacity>
 
-            <Text style={styles.paidTitle}>
-              Payment Confirmed!
+          <View style={styles.headerTextContainer}>
+            <Text style={styles.headerTitle}>
+              Payment
             </Text>
 
-            <Text style={styles.statusDescription}>
-              Your payment has been approved.
-              Your boarding ticket is ready.
+            <Text style={styles.headerSubtitle}>
+              Complete your booking payment
             </Text>
           </View>
+        </View>
 
-        ) : isExpired ? (
-
-          /* EXPIRED */
-          <View style={styles.statusContainer}>
+        {/* STATUS CARD */}
+        <View style={styles.statusCard}>
+          <View
+            style={[
+              styles.statusIcon,
+              { backgroundColor: statusConfig.background },
+            ]}
+          >
             <Ionicons
-              name="alert-circle"
-              size={55}
-              color="#DC2626"
+              name={statusConfig.icon}
+              size={32}
+              color={statusConfig.color}
             />
-
-            <Text style={styles.expiredTitle}>
-              Booking Expired
-            </Text>
-
-            <Text style={styles.statusDescription}>
-              Your booking has passed its payment deadline.
-              Please contact the terminal cashier or make a new booking.
-            </Text>
           </View>
 
-        ) : (
+          <Text
+            style={[
+              styles.statusTitle,
+              { color: statusConfig.color },
+            ]}
+          >
+            {statusConfig.title}
+          </Text>
 
-          /* PENDING PAYMENT */
-          <>
-            <View style={styles.pendingBadge}>
-              <Ionicons
-                name="time-outline"
-                size={17}
-                color="#B45309"
-              />
+          <Text style={styles.statusSubtitle}>
+            {statusConfig.subtitle}
+          </Text>
+        </View>
 
-              <Text style={styles.pendingText}>
-                AWAITING CASHIER PAYMENT
-              </Text>
+        {/* QR CODE CARD */}
+        {!isPaid && !isExpired && (
+          <View style={styles.card}>
+            <View style={styles.cardHeader}>
+              <View style={styles.cardHeaderIcon}>
+                <Ionicons
+                  name="qr-code-outline"
+                  size={20}
+                  color={COLORS.primary}
+                />
+              </View>
+
+              <View style={styles.cardHeaderText}>
+                <Text style={styles.cardTitle}>
+                  Booking QR Code
+                </Text>
+
+                <Text style={styles.cardSubtitle}>
+                  Present this code to the cashier
+                </Text>
+              </View>
             </View>
 
-            <Text style={styles.qrTitle}>
-              Your Booking QR Code
-            </Text>
-
-            <View style={styles.qrContainer}>
+            <View style={styles.qrWrapper}>
               {bookingQR ? (
                 <QRCode
                   value={bookingQR}
-                  size={220}
-                  color="#172B4D"
-                  backgroundColor="#FFFFFF"
+                  size={210}
+                  color={COLORS.text}
+                  backgroundColor={COLORS.white}
                 />
               ) : (
-                <Text>
+                <Text style={styles.missingText}>
                   Booking reference unavailable.
                 </Text>
               )}
             </View>
 
-            <Text style={styles.qrInstruction}>
-              Let the cashier scan this QR code to retrieve your booking.
-            </Text>
-          </>
-        )}
-
-        <View style={styles.divider} />
-
-        {/* BOOKING DETAILS */}
-        <Text style={styles.label}>
-          Booking Reference
-        </Text>
-
-        <Text style={styles.reference}>
-          {booking.booking_reference || "Unavailable"}
-        </Text>
-
-        <Text style={styles.label}>
-          Total Amount
-        </Text>
-
-        <Text style={styles.amount}>
-          ₱
-          {Number(booking.total_amount || 0).toLocaleString("en-PH", {
-            minimumFractionDigits: 2,
-          })}
-        </Text>
-
-        <Text style={styles.label}>
-          Booking Status
-        </Text>
-
-        <Text style={styles.value}>
-          {booking.booking_status?.toUpperCase() || "UNKNOWN"}
-        </Text>
-
-        <Text style={styles.label}>
-          Payment Status
-        </Text>
-
-        <Text
-          style={[
-            styles.value,
-            isPaid ? styles.paidColor : styles.unpaidColor,
-          ]}
-        >
-          {booking.payment_status?.toUpperCase() || "UNKNOWN"}
-        </Text>
-
-        {booking.expires_at && !isPaid && (
-          <>
-            <Text style={styles.label}>
-              Payment Deadline
-            </Text>
-
-            <Text style={styles.value}>
-              {new Date(booking.expires_at).toLocaleString()}
-            </Text>
-          </>
-        )}
-      </View>
-
-      {/* PAID: VIEW TICKET */}
-      {isPaid ? (
-
-        <TouchableOpacity
-          style={styles.button}
-          onPress={viewTicket}
-        >
-          <Ionicons
-            name="ticket-outline"
-            size={20}
-            color="#FFFFFF"
-          />
-
-          <Text style={styles.buttonText}>
-            View Boarding Ticket
-          </Text>
-        </TouchableOpacity>
-
-      ) : (
-
-        <>
-          {/* PAYMENT INSTRUCTIONS */}
-          {!isExpired && (
-            <View style={styles.instructionCard}>
+            <View style={styles.qrNote}>
               <Ionicons
-                name="information-circle-outline"
-                size={22}
-                color="#0891B2"
+                name="scan-outline"
+                size={18}
+                color={COLORS.primary}
               />
 
-              <Text style={styles.instructionText}>
-                Pay the displayed amount directly to the cashier.
-                Your boarding ticket will become available after
-                the cashier confirms your payment.
+              <Text style={styles.qrNoteText}>
+                Let the cashier scan this QR code to retrieve
+                your booking details.
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* PAID MESSAGE */}
+        {isPaid && (
+          <View style={styles.successCard}>
+            <Ionicons
+              name="ticket-outline"
+              size={30}
+              color={COLORS.green}
+            />
+
+            <Text style={styles.successTitle}>
+              Your ticket is ready!
+            </Text>
+
+            <Text style={styles.successSubtitle}>
+              Your payment has been approved. You can now
+              view your boarding ticket.
+            </Text>
+
+            <TouchableOpacity
+              style={styles.ticketButton}
+              onPress={viewTicket}
+              activeOpacity={0.85}
+            >
+              <Ionicons
+                name="ticket-outline"
+                size={19}
+                color={COLORS.white}
+              />
+
+              <Text style={styles.primaryButtonText}>
+                View Boarding Ticket
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* EXPIRED MESSAGE */}
+        {isExpired && (
+          <View style={styles.expiredCard}>
+            <Ionicons
+              name="alert-circle-outline"
+              size={30}
+              color={COLORS.red}
+            />
+
+            <Text style={styles.expiredTitle}>
+              Payment Deadline Passed
+            </Text>
+
+            <Text style={styles.expiredSubtitle}>
+              Your booking has expired. Please contact the
+              terminal cashier or make a new booking.
+            </Text>
+          </View>
+        )}
+
+        {/* BOOKING DETAILS */}
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <View style={styles.cardHeaderIcon}>
+              <Ionicons
+                name="receipt-outline"
+                size={20}
+                color={COLORS.primary}
+              />
+            </View>
+
+            <View style={styles.cardHeaderText}>
+              <Text style={styles.cardTitle}>
+                Booking Details
+              </Text>
+
+              <Text style={styles.cardSubtitle}>
+                Summary of your booking
+              </Text>
+            </View>
+          </View>
+
+          {/* REFERENCE */}
+          <View style={styles.referenceBox}>
+            <Text style={styles.referenceLabel}>
+              BOOKING REFERENCE
+            </Text>
+
+            <Text style={styles.referenceValue}>
+              {booking.booking_reference || "Unavailable"}
+            </Text>
+          </View>
+
+          {/* AMOUNT */}
+          <View style={styles.amountBox}>
+            <Text style={styles.amountLabel}>
+              Total Amount
+            </Text>
+
+            <Text style={styles.amountValue}>
+              ₱{formattedAmount}
+            </Text>
+          </View>
+
+          <View style={styles.detailDivider} />
+
+          {/* STATUS DETAILS */}
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>
+              Booking Status
+            </Text>
+
+            <Text style={styles.detailValue}>
+              {booking.booking_status?.toUpperCase() || "UNKNOWN"}
+            </Text>
+          </View>
+
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>
+              Payment Status
+            </Text>
+
+            <Text
+              style={[
+                styles.detailValue,
+                {
+                  color: isPaid
+                    ? COLORS.green
+                    : isExpired
+                    ? COLORS.red
+                    : COLORS.orange,
+                },
+              ]}
+            >
+              {booking.payment_status?.toUpperCase() || "UNKNOWN"}
+            </Text>
+          </View>
+
+          {booking.expires_at && !isPaid && (
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>
+                Payment Deadline
+              </Text>
+
+              <Text style={styles.deadlineValue}>
+                {new Date(booking.expires_at).toLocaleString()}
               </Text>
             </View>
           )}
 
-          {/* MANUAL REFRESH BACKUP */}
+          {booking.paid_at && (
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>
+                Paid At
+              </Text>
+
+              <Text style={styles.deadlineValue}>
+                {new Date(booking.paid_at).toLocaleString()}
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {/* PAYMENT INSTRUCTIONS */}
+        {!isPaid && !isExpired && (
+          <View style={styles.instructionCard}>
+            <View style={styles.instructionIcon}>
+              <Ionicons
+                name="information-circle"
+                size={22}
+                color={COLORS.primary}
+              />
+            </View>
+
+            <View style={styles.instructionContent}>
+              <Text style={styles.instructionTitle}>
+                Payment Instructions
+              </Text>
+
+              <Text style={styles.instructionText}>
+                Pay the displayed amount directly to the
+                terminal cashier. Your boarding ticket will
+                become available once your payment is confirmed.
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* REFRESH PAYMENT */}
+        {!isPaid && (
           <TouchableOpacity
             style={styles.refreshButton}
             onPress={() => loadBooking(false)}
             disabled={refreshing}
+            activeOpacity={0.8}
           >
             {refreshing ? (
-              <ActivityIndicator color="#0891B2" />
+              <ActivityIndicator color={COLORS.primary} />
             ) : (
               <>
                 <Ionicons
                   name="refresh-outline"
                   size={19}
-                  color="#0891B2"
+                  color={COLORS.primary}
                 />
 
-                <Text style={styles.refreshText}>
+                <Text style={styles.refreshButtonText}>
                   Refresh Payment Status
                 </Text>
               </>
             )}
           </TouchableOpacity>
-        </>
-      )}
+        )}
 
-      {/* BACK TO HOME */}
-      <TouchableOpacity
-        style={styles.homeButton}
-        onPress={() => navigation.navigate("MainTabs")}
-      >
-        <Text style={styles.homeButtonText}>
-          Back to Home
-        </Text>
-      </TouchableOpacity>
-    </ScrollView>
+        {/* BACK TO HOME */}
+        <TouchableOpacity
+          style={styles.homeButton}
+          onPress={() => navigation.navigate("MainTabs")}
+          activeOpacity={0.8}
+        >
+          <Ionicons
+            name="home-outline"
+            size={18}
+            color={COLORS.secondary}
+          />
+
+          <Text style={styles.homeButtonText}>
+            Back to Home
+          </Text>
+        </TouchableOpacity>
+
+      </ScrollView>
+    </View>
   );
 }
 
 // STYLES
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+
   container: {
-    flexGrow: 1,
-    backgroundColor: "#F3F6FB",
-    padding: 18,
+    padding: 17,
     paddingBottom: 35,
   },
 
   center: {
     flex: 1,
-    backgroundColor: "#F3F6FB",
+    backgroundColor: COLORS.background,
     justifyContent: "center",
     alignItems: "center",
     padding: 25,
   },
 
+  loadingText: {
+    color: COLORS.secondary,
+    marginTop: 12,
+    fontSize: 13,
+  },
+
+  // HEADER
   header: {
+    flexDirection: "row",
     alignItems: "center",
     marginBottom: 22,
-    marginTop: 15,
   },
 
-  title: {
-    fontSize: 23,
-    fontWeight: "bold",
-    color: "#172B4D",
-    marginTop: 12,
-  },
-
-  subtitle: {
-    color: "#64748B",
-    textAlign: "center",
-    marginTop: 7,
-    fontSize: 14,
-  },
-
-  card: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 18,
-    padding: 22,
-    borderWidth: 1,
-    borderColor: "#DCE3EF",
-  },
-
-  pendingBadge: {
-    flexDirection: "row",
+  backButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 13,
+    backgroundColor: COLORS.primaryLight,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#FEF3C7",
-    padding: 10,
-    borderRadius: 20,
-    alignSelf: "center",
+    marginRight: 13,
+    marginTop: 20
   },
 
-  pendingText: {
-    color: "#B45309",
-    fontSize: 11,
-    fontWeight: "bold",
-    marginLeft: 6,
+  headerTextContainer: {
+    flex: 1,
   },
 
-  qrTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#172B4D",
-    textAlign: "center",
-    marginTop: 22,
+  headerTitle: {
+    marginTop: 20,
+    fontSize: 22,
+    fontWeight: "900",
+    color: COLORS.text,
   },
 
-  qrContainer: {
-    alignSelf: "center",
-    backgroundColor: "#FFFFFF",
-    padding: 15,
-    marginTop: 18,
-    borderRadius: 12,
+  headerSubtitle: {
+    fontSize: 12,
+    color: COLORS.secondary,
+    marginTop: 4,
+  },
+
+  // STATUS CARD
+  statusCard: {
+  backgroundColor: COLORS.white,
+  borderRadius: 16,
+  borderWidth: 1,
+  borderColor: COLORS.border,
+  paddingVertical: 15,
+  paddingHorizontal: 18,
+  alignItems: "center",
+  marginBottom: 15,
+},
+
+  statusIcon: {
+  width: 48,
+  height: 48,
+  borderRadius: 15,
+  alignItems: "center",
+  justifyContent: "center",
+  marginBottom: 8,
+},
+
+statusTitle: {
+  fontSize: 17,
+  fontWeight: "900",
+  textAlign: "center",
+},
+
+statusSubtitle: {
+  fontSize: 11,
+  color: COLORS.secondary,
+  marginTop: 4,
+  textAlign: "center",
+  lineHeight: 16,
+},
+
+  // GENERAL CARD
+  card: {
+    backgroundColor: COLORS.white,
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: COLORS.border,
+    padding: 18,
+    marginBottom: 15,
   },
 
-  qrInstruction: {
-    color: "#64748B",
-    textAlign: "center",
-    marginTop: 15,
-    lineHeight: 21,
-  },
-
-  statusContainer: {
+  cardHeader: {
+    flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 12,
+    marginBottom: 18,
   },
 
-  paidTitle: {
-    color: "#16A34A",
-    fontSize: 21,
-    fontWeight: "bold",
-    marginTop: 12,
+  cardHeaderIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 13,
+    backgroundColor: COLORS.primaryLight,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
   },
 
-  expiredTitle: {
-    color: "#DC2626",
-    fontSize: 21,
-    fontWeight: "bold",
-    marginTop: 12,
+  cardHeaderText: {
+    flex: 1,
   },
 
-  statusDescription: {
-    color: "#64748B",
-    textAlign: "center",
-    lineHeight: 21,
-    marginTop: 8,
-  },
-
-  divider: {
-    height: 1,
-    backgroundColor: "#E2E8F0",
-    marginVertical: 20,
-  },
-
-  label: {
-    color: "#64748B",
-    fontSize: 13,
-    marginTop: 15,
-  },
-
-  reference: {
-    color: "#0891B2",
-    fontSize: 20,
-    fontWeight: "bold",
-    marginTop: 5,
-  },
-
-  amount: {
-    color: "#16A34A",
-    fontSize: 27,
-    fontWeight: "bold",
-    marginTop: 5,
-  },
-
-  value: {
-    color: "#172B4D",
+  cardTitle: {
     fontSize: 15,
-    fontWeight: "600",
+    fontWeight: "800",
+    color: COLORS.text,
+  },
+
+  cardSubtitle: {
+    color: COLORS.secondary,
+    fontSize: 11,
+    marginTop: 4,
+  },
+
+  // QR CODE
+  qrWrapper: {
+    alignSelf: "center",
+    padding: 17,
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 15,
+    marginVertical: 5,
+  },
+
+  missingText: {
+    color: COLORS.secondary,
+    padding: 20,
+  },
+
+  qrNote: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.primaryLight,
+    padding: 13,
+    borderRadius: 12,
+    marginTop: 17,
+  },
+
+  qrNoteText: {
+    flex: 1,
+    color: COLORS.primaryDark,
+    fontSize: 11,
+    lineHeight: 18,
+    marginLeft: 9,
+  },
+
+  // BOOKING REFERENCE
+  referenceBox: {
+    backgroundColor: COLORS.primaryLight,
+    padding: 15,
+    borderRadius: 13,
+  },
+
+  referenceLabel: {
+    fontSize: 10,
+    color: COLORS.secondary,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+  },
+
+  referenceValue: {
+    fontSize: 19,
+    fontWeight: "900",
+    color: COLORS.primary,
+    marginTop: 7,
+  },
+
+  // AMOUNT
+  amountBox: {
+    paddingVertical: 17,
+  },
+
+  amountLabel: {
+    fontSize: 12,
+    color: COLORS.secondary,
+  },
+
+  amountValue: {
+    fontSize: 28,
+    fontWeight: "900",
+    color: COLORS.green,
     marginTop: 5,
   },
 
-  paidColor: {
-    color: "#16A34A",
+  detailDivider: {
+    height: 1,
+    backgroundColor: COLORS.border,
+    marginBottom: 7,
   },
 
-  unpaidColor: {
-    color: "#B45309",
+  detailRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    paddingVertical: 11,
+    gap: 12,
   },
 
+  detailLabel: {
+    fontSize: 12,
+    color: COLORS.secondary,
+    flex: 1,
+  },
+
+  detailValue: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: COLORS.text,
+    textAlign: "right",
+    flex: 1,
+  },
+
+  deadlineValue: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: COLORS.text,
+    textAlign: "right",
+    flex: 1,
+  },
+
+  // PAYMENT INSTRUCTIONS
   instructionCard: {
     flexDirection: "row",
-    backgroundColor: "#E0F2FE",
+    backgroundColor: COLORS.primaryLight,
+    borderRadius: 15,
     padding: 15,
-    borderRadius: 12,
-    marginTop: 18,
-    alignItems: "flex-start",
+    marginBottom: 15,
+  },
+
+  instructionIcon: {
+    marginRight: 10,
+  },
+
+  instructionContent: {
+    flex: 1,
+  },
+
+  instructionTitle: {
+    color: COLORS.primaryDark,
+    fontSize: 13,
+    fontWeight: "800",
+    marginBottom: 5,
   },
 
   instructionText: {
-    color: "#155E75",
-    flex: 1,
-    marginLeft: 10,
-    lineHeight: 21,
-    fontSize: 13,
+    color: "#315B7E",
+    fontSize: 11,
+    lineHeight: 18,
   },
 
-  button: {
-    backgroundColor: "#0891B2",
-    padding: 16,
+  // SUCCESS
+  successCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 18,
+    padding: 22,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#BBF7D0",
+    marginBottom: 15,
+  },
+
+  successTitle: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: COLORS.green,
+    marginTop: 12,
+  },
+
+  successSubtitle: {
+    fontSize: 12,
+    color: COLORS.secondary,
+    textAlign: "center",
+    lineHeight: 19,
+    marginTop: 7,
+  },
+
+  ticketButton: {
+    backgroundColor: COLORS.primary,
+    width: "100%",
+    padding: 15,
     borderRadius: 12,
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    flexDirection: "row",
     marginTop: 20,
   },
 
-  buttonText: {
-    color: "#FFFFFF",
-    fontWeight: "bold",
-    fontSize: 15,
+  // EXPIRED
+  expiredCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 18,
+    padding: 22,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#FECACA",
+    marginBottom: 15,
+  },
+
+  expiredTitle: {
+    fontSize: 17,
+    fontWeight: "900",
+    color: COLORS.red,
+    marginTop: 12,
+  },
+
+  expiredSubtitle: {
+    fontSize: 12,
+    color: COLORS.secondary,
+    textAlign: "center",
+    lineHeight: 19,
+    marginTop: 7,
+  },
+
+  // BUTTONS
+  primaryButton: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 30,
+    paddingVertical: 14,
+    borderRadius: 12,
+    marginTop: 20,
+  },
+
+  primaryButtonText: {
+    color: COLORS.white,
+    fontWeight: "800",
+    fontSize: 13,
     marginLeft: 8,
   },
 
   refreshButton: {
+    backgroundColor: COLORS.white,
     borderWidth: 1,
-    borderColor: "#0891B2",
+    borderColor: COLORS.border,
     padding: 15,
-    borderRadius: 12,
+    borderRadius: 13,
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
-    marginTop: 18,
+    marginBottom: 10,
   },
 
-  refreshText: {
-    color: "#0891B2",
-    fontWeight: "bold",
+  refreshButtonText: {
+    color: COLORS.primary,
+    fontSize: 13,
+    fontWeight: "800",
     marginLeft: 8,
   },
 
   homeButton: {
     padding: 15,
     alignItems: "center",
-    marginTop: 10,
+    justifyContent: "center",
+    flexDirection: "row",
+    marginTop: 2,
   },
 
   homeButtonText: {
-    color: "#64748B",
-    fontWeight: "600",
+    color: COLORS.secondary,
+    fontSize: 12,
+    fontWeight: "700",
+    marginLeft: 7,
   },
 
-  loadingText: {
-    color: "#64748B",
-    marginTop: 12,
+  // EMPTY STATE
+  emptyIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 25,
+    backgroundColor: COLORS.redLight,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 17,
+  },
+
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: "900",
+    color: COLORS.text,
+  },
+
+  emptySubtitle: {
+    fontSize: 13,
+    color: COLORS.secondary,
+    textAlign: "center",
+    marginTop: 8,
+    lineHeight: 20,
   },
 });
