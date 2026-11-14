@@ -60,12 +60,16 @@ input {
 }
 
 .login-card h1 {
+  text-align: center;
+  margin: 10px 0;
   font-size: 27px;
   margin-bottom: 8px;
   color: #172033;
 }
 
 .login-subtitle {
+  text-align: center;
+  margin-bottom: 25px;
   color: #64748b;
   margin-bottom: 28px;
   font-size: 14px;
