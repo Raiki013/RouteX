@@ -46,6 +46,7 @@ export default function OperatorDockingScreen({ navigation, route }) {
     message: "",
     type: "error",
     buttonText: "OK",
+    cancelText: null,
   });
 
   const [alertAction, setAlertAction] = useState(null);
@@ -55,9 +56,10 @@ export default function OperatorDockingScreen({ navigation, route }) {
     message,
     type = "error",
     buttonText = "OK",
-    onClose = null
+    onConfirm = null,
+    cancelText = null
   ) => {
-    setAlertAction(() => onClose);
+    setAlertAction(() => onConfirm);
 
     setAlertData({
       visible: true,
@@ -65,19 +67,37 @@ export default function OperatorDockingScreen({ navigation, route }) {
       message,
       type,
       buttonText,
+      cancelText,
     });
   };
 
-  const closeAlert = () => {
+  // CLOSE ALERT WITHOUT RUNNING ITS ACTION
+  const hideAlert = () => {
     setAlertData((previous) => ({
       ...previous,
       visible: false,
     }));
 
-    const action = alertAction;
     setAlertAction(null);
+  };
+
+  // NORMAL ONE-BUTTON ALERT
+  const closeAlert = () => {
+    const action = alertAction;
+
+    hideAlert();
 
     if (action) action();
+  };
+
+  // CANCEL CONFIRMATION
+  const cancelAlert = () => {
+    hideAlert();
+  };
+
+  // CONFIRM ACTION
+  const confirmAlert = () => {
+    closeAlert();
   };
 
   // GET CURRENT USER
@@ -379,12 +399,14 @@ export default function OperatorDockingScreen({ navigation, route }) {
       return;
     }
 
+    // SHOW CANCEL AND START TRIP BUTTONS
     showAlert(
       "Start Trip",
-      `Start the trip to ${trip.destination}?`,
+      `Are you sure you want to start the trip to ${trip.destination}?`,
       "info",
       "Start Trip",
-      confirmStartTrip
+      confirmStartTrip,
+      "Cancel"
     );
   };
 
@@ -575,7 +597,10 @@ export default function OperatorDockingScreen({ navigation, route }) {
           message={alertData.message}
           type={alertData.type}
           buttonText={alertData.buttonText}
+          cancelText={alertData.cancelText}
           onClose={closeAlert}
+          onConfirm={confirmAlert}
+          onCancel={cancelAlert}
         />
       </View>
     );
@@ -583,8 +608,7 @@ export default function OperatorDockingScreen({ navigation, route }) {
 
   return (
     <View style={styles.container}>
-
-      {/* FIXED HEADER - OUTSIDE SCROLLVIEW */}
+      {/* FIXED HEADER */}
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.headerButton}
@@ -596,9 +620,7 @@ export default function OperatorDockingScreen({ navigation, route }) {
 
         <View style={styles.headerTextContainer}>
           <Text style={styles.headerEyebrow}>ROUTEX OPERATOR</Text>
-
           <Text style={styles.headerTitle}>Bus Docking</Text>
-
           <Text style={styles.headerSubtitle}>
             Prepare your bus before departure
           </Text>
@@ -613,7 +635,7 @@ export default function OperatorDockingScreen({ navigation, route }) {
         </TouchableOpacity>
       </View>
 
-      {/* ONLY THIS PART SCROLLS */}
+      {/* SCROLLABLE CONTENT */}
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.content}
@@ -1144,7 +1166,10 @@ export default function OperatorDockingScreen({ navigation, route }) {
         message={alertData.message}
         type={alertData.type}
         buttonText={alertData.buttonText}
+        cancelText={alertData.cancelText}
         onClose={closeAlert}
+        onConfirm={confirmAlert}
+        onCancel={cancelAlert}
       />
     </View>
   );
@@ -1158,7 +1183,6 @@ const styles = StyleSheet.create({
     paddingTop: 40,
   },
 
-  // FIXED HEADER
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -1176,7 +1200,6 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
 
-  // LOADING
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
@@ -1206,7 +1229,6 @@ const styles = StyleSheet.create({
     marginTop: 7,
   },
 
-  // HEADER
   headerButton: {
     width: 43,
     height: 43,
@@ -1242,7 +1264,6 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
 
-  // BUS HERO
   busHeroCard: {
     backgroundColor: "#1677D2",
     borderRadius: 20,
@@ -1353,7 +1374,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
-  // SECTION HEADERS
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -1387,7 +1407,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 
-  // TRIP INFORMATION
   infoCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 17,
@@ -1477,7 +1496,6 @@ const styles = StyleSheet.create({
     textTransform: "capitalize",
   },
 
-  // TERMINAL
   terminalCountBadge: {
     backgroundColor: "#E5F1FF",
     borderRadius: 10,
@@ -1597,7 +1615,6 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
 
-  // EMPTY TERMINALS
   noTerminalBox: {
     backgroundColor: "#F8FAFC",
     borderRadius: 13,
@@ -1629,7 +1646,6 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
 
-  // DOCKING STATUS
   dockingStatusCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 17,
@@ -1742,7 +1758,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 
-  // START TRIP
   startTripCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 18,
@@ -1831,7 +1846,6 @@ const styles = StyleSheet.create({
     opacity: 0.45,
   },
 
-  // ACTIVE TRIP
   activeTripCard: {
     backgroundColor: "#DCFCE7",
     borderRadius: 17,
@@ -1888,7 +1902,6 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
 
-  // EMPTY STATE
   emptyCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 18,

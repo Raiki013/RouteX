@@ -1,3 +1,4 @@
+
 import React, {
   useCallback,
   useEffect,
@@ -14,33 +15,39 @@ import {
   Modal,
   RefreshControl,
   StatusBar,
-  Alert,
 } from "react-native";
 
 import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "../config/supabase";
+import CustomAlert from "../components/CustomAlert";
+
+const COLORS = {
+  primary: "#1677D2",
+  darkBlue: "#105BA8",
+  lightBlue: "#E8F3FF",
+  paleBlue: "#F0F7FF",
+  background: "#F4F7FB",
+  white: "#FFFFFF",
+  text: "#142238",
+  secondary: "#718096",
+  border: "#E5EAF1",
+  green: "#16A34A",
+  lightGreen: "#DCFCE7",
+  orange: "#D97706",
+  lightOrange: "#FFFBEB",
+  red: "#DC2626",
+  gray: "#94A3B8",
+};
 
 const PASSENGER_TYPES = [
-  {
-    label: "Regular",
-    value: "regular",
-    discount: 0,
-  },
-  {
-    label: "Student",
-    value: "student",
-    discount: 20,
-  },
+  { label: "Regular", value: "regular", discount: 0 },
+  { label: "Student", value: "student", discount: 20 },
   {
     label: "Senior Citizen",
     value: "senior_citizen",
     discount: 20,
   },
-  {
-    label: "PWD",
-    value: "pwd",
-    discount: 20,
-  },
+  { label: "PWD", value: "pwd", discount: 20 },
 ];
 
 export default function TerminalBookingScreen({
@@ -52,8 +59,7 @@ export default function TerminalBookingScreen({
   const [selectedBus, setSelectedBus] = useState(null);
   const [destinationOptions, setDestinationOptions] = useState([]);
   const [fareOptions, setFareOptions] = useState([]);
-  const [selectedDestination, setSelectedDestination] =
-    useState("");
+  const [selectedDestination, setSelectedDestination] = useState("");
 
   const [passengerTypes, setPassengerTypes] = useState([
     "regular",
@@ -62,19 +68,59 @@ export default function TerminalBookingScreen({
   const [availableSeats, setAvailableSeats] = useState(0);
 
   const [loading, setLoading] = useState(true);
-  const [loadingAvailability, setLoadingAvailability] =
-    useState(false);
+  const [loadingAvailability, setLoadingAvailability] = useState(false);
   const [booking, setBooking] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
-  const [selectionVisible, setSelectionVisible] =
-    useState(false);
-  const [selectionMode, setSelectionMode] =
-    useState("destination");
-  const [selectedPassengerIndex, setSelectedPassengerIndex] =
-    useState(0);
+  const [selectionVisible, setSelectionVisible] = useState(false);
+  const [selectionMode, setSelectionMode] = useState("destination");
+  const [selectedPassengerIndex, setSelectedPassengerIndex] = useState(0);
 
   const [confirmVisible, setConfirmVisible] = useState(false);
+
+  // ---------------------------------------------
+  // CUSTOM ALERT
+  // ---------------------------------------------
+
+  const [alertData, setAlertData] = useState({
+    visible: false,
+    title: "",
+    message: "",
+    type: "info",
+    buttonText: "OK",
+    onClose: null,
+  });
+
+  const showAlert = (
+    title,
+    message,
+    type = "info",
+    buttonText = "OK",
+    onClose = null
+  ) => {
+    setAlertData({
+      visible: true,
+      title,
+      message,
+      type,
+      buttonText,
+      onClose,
+    });
+  };
+
+  const closeAlert = () => {
+    const callback = alertData.onClose;
+
+    setAlertData((previous) => ({
+      ...previous,
+      visible: false,
+      onClose: null,
+    }));
+
+    if (callback) {
+      callback();
+    }
+  };
 
   // ---------------------------------------------
   // HELPERS
@@ -90,25 +136,18 @@ export default function TerminalBookingScreen({
     )}`;
   };
 
-  const normalizeLocation = (value) => {
-    return String(value || "").trim().toLowerCase();
-  };
+  const normalizeLocation = (value) =>
+    String(value || "").trim().toLowerCase();
 
-  const getPassengerLabel = (value) => {
-    return (
-      PASSENGER_TYPES.find(
-        (item) => item.value === value
-      )?.label || "Regular"
-    );
-  };
+  const getPassengerLabel = (value) =>
+    PASSENGER_TYPES.find(
+      (item) => item.value === value
+    )?.label || "Regular";
 
-  const getPassengerDiscount = (value) => {
-    return (
-      PASSENGER_TYPES.find(
-        (item) => item.value === value
-      )?.discount || 0
-    );
-  };
+  const getPassengerDiscount = (value) =>
+    PASSENGER_TYPES.find(
+      (item) => item.value === value
+    )?.discount || 0;
 
   // ---------------------------------------------
   // SELECTED FARE
@@ -125,18 +164,14 @@ export default function TerminalBookingScreen({
   );
 
   // ---------------------------------------------
-  // INDIVIDUAL PASSENGER FARES
+  // PASSENGER FARES
   // ---------------------------------------------
 
   const passengerFareDetails = passengerTypes.map(
     (type, index) => {
       const discountRate = getPassengerDiscount(type);
-
       const discountAmount =
         farePerPassenger * (discountRate / 100);
-
-      const finalFare =
-        farePerPassenger - discountAmount;
 
       return {
         passenger_number: index + 1,
@@ -144,7 +179,7 @@ export default function TerminalBookingScreen({
         regular_fare: farePerPassenger,
         discount_rate: discountRate,
         discount_amount: discountAmount,
-        final_fare: finalFare,
+        final_fare: farePerPassenger - discountAmount,
       };
     }
   );
@@ -224,10 +259,10 @@ export default function TerminalBookingScreen({
     } catch (error) {
       console.error("Availability error:", error);
 
-      Alert.alert(
+      showAlert(
         "Availability Error",
-        error.message ||
-          "Unable to load available seats."
+        error.message || "Unable to load available seats.",
+        "error"
       );
     } finally {
       setLoadingAvailability(false);
@@ -235,20 +270,17 @@ export default function TerminalBookingScreen({
   }, [dockingId]);
 
   // ---------------------------------------------
-  // LOAD BUS, TRIP, TERMINAL, ROUTE, AND FARES
+  // LOAD BUS AND ROUTE INFORMATION
   // ---------------------------------------------
 
   const loadSelectedBus = useCallback(async () => {
     if (!dockingId) {
-      Alert.alert(
+      showAlert(
         "Error",
         "Docking information is missing.",
-        [
-          {
-            text: "OK",
-            onPress: () => navigation.goBack(),
-          },
-        ]
+        "error",
+        "OK",
+        () => navigation.goBack()
       );
 
       setLoading(false);
@@ -257,10 +289,6 @@ export default function TerminalBookingScreen({
 
     try {
       setLoading(true);
-
-      // -----------------------------------------
-      // GET DOCKING INFORMATION
-      // -----------------------------------------
 
       const { data: docking, error: dockingError } =
         await supabase
@@ -278,10 +306,6 @@ export default function TerminalBookingScreen({
         );
       }
 
-      // -----------------------------------------
-      // GET BUS INFORMATION
-      // -----------------------------------------
-
       const { data: bus, error: busError } =
         await supabase
           .from("buses")
@@ -290,10 +314,6 @@ export default function TerminalBookingScreen({
           .single();
 
       if (busError) throw busError;
-
-      // -----------------------------------------
-      // GET TRIP INFORMATION
-      // -----------------------------------------
 
       const { data: trip, error: tripError } =
         await supabase
@@ -310,10 +330,6 @@ export default function TerminalBookingScreen({
         );
       }
 
-      // -----------------------------------------
-      // GET TERMINAL INFORMATION
-      // -----------------------------------------
-
       const { data: terminal, error: terminalError } =
         await supabase
           .from("terminals")
@@ -322,10 +338,6 @@ export default function TerminalBookingScreen({
           .single();
 
       if (terminalError) throw terminalError;
-
-      // -----------------------------------------
-      // GET THE BUS'S ASSIGNED ROUTE
-      // -----------------------------------------
 
       const { data: busRoute, error: routeError } =
         await supabase
@@ -348,10 +360,6 @@ export default function TerminalBookingScreen({
         );
       }
 
-      // -----------------------------------------
-      // GET STOPS FROM THE ASSIGNED ROUTE
-      // -----------------------------------------
-
       const { data: routeStops, error: stopsError } =
         await supabase
           .from("route_stops")
@@ -368,10 +376,7 @@ export default function TerminalBookingScreen({
 
       if (stopsError) throw stopsError;
 
-      // -----------------------------------------
-      // BUILD ROUTE DESTINATIONS IN ORDER
-      // -----------------------------------------
-
+      // Build destinations in route order
       let allowedDestinations = [
         ...(routeStops || []).map(
           (stop) => stop.stop_name
@@ -379,7 +384,7 @@ export default function TerminalBookingScreen({
         busRoute.destination_location,
       ].filter(Boolean);
 
-      // Remove duplicate destinations
+      // Remove duplicates
       allowedDestinations = allowedDestinations.filter(
         (location, index, array) =>
           array.findIndex(
@@ -389,10 +394,7 @@ export default function TerminalBookingScreen({
           ) === index
       );
 
-      // -----------------------------------------
-      // LIMIT DESTINATIONS TO THE BUS TRIP DESTINATION
-      // -----------------------------------------
-
+      // Limit destinations to trip destination
       const tripDestination =
         trip.destination?.trim();
 
@@ -410,7 +412,6 @@ export default function TerminalBookingScreen({
           );
         }
 
-        // Only destinations up to the trip destination
         allowedDestinations =
           allowedDestinations.slice(
             0,
@@ -418,10 +419,7 @@ export default function TerminalBookingScreen({
           );
       }
 
-      // -----------------------------------------
-      // GET ACTIVE FARES FOR THE BOARDING TERMINAL
-      // -----------------------------------------
-
+      // Get active fares
       const { data: fares, error: fareError } =
         await supabase
           .from("terminal_fares")
@@ -436,42 +434,31 @@ export default function TerminalBookingScreen({
 
       if (fareError) throw fareError;
 
-      // -----------------------------------------
-      // BUILD ALL DESTINATION OPTIONS
-      // Include destinations even without fares
-      // -----------------------------------------
-
       const destinationOptions = allowedDestinations.map(
         (destination, index) => {
           const matchingFare = (fares || []).find(
             (fare) =>
-              normalizeLocation(fare.destination_location) ===
-                normalizeLocation(destination) &&
+              normalizeLocation(
+                fare.destination_location
+              ) === normalizeLocation(destination) &&
               Number(fare.fare) > 0
           );
 
           return {
             destination_location: destination,
-            fare_id: matchingFare?.fare_id || `route-${index}`,
-            fare: matchingFare ? Number(matchingFare.fare) : null,
+            fare_id:
+              matchingFare?.fare_id || `route-${index}`,
+            fare: matchingFare
+              ? Number(matchingFare.fare)
+              : null,
             hasFare: Boolean(matchingFare),
           };
         }
       );
 
-// -----------------------------------------
-// KEEP ONLY DESTINATIONS WITH ACTIVE FARES
-// These are used for calculating bookings
-// -----------------------------------------
-
-const validFares = destinationOptions
-  .filter((item) => item.hasFare);
-
-      
-
-      // -----------------------------------------
-      // SAVE BUS INFORMATION
-      // -----------------------------------------
+      const validFares = destinationOptions.filter(
+        (item) => item.hasFare
+      );
 
       setSelectedBus({
         ...bus,
@@ -490,38 +477,29 @@ const validFares = destinationOptions
       setPassengerTypes(["regular"]);
 
       if (destinationOptions.length === 0) {
-        Alert.alert(
+        showAlert(
           "No Destinations",
-          "There are no destinations configured for this bus route."
+          "There are no destinations configured for this bus route.",
+          "warning"
         );
       }
-      // -----------------------------------------
-      // LOAD AVAILABLE SEATS
-      // -----------------------------------------
 
       await loadAvailability();
     } catch (error) {
       console.error("Load bus error:", error);
 
-      Alert.alert(
+      showAlert(
         "Unable to Load Bus",
         error.message ||
           "Something went wrong while loading bus information.",
-        [
-          {
-            text: "Go Back",
-            onPress: () => navigation.goBack(),
-          },
-        ]
+        "error",
+        "Go Back",
+        () => navigation.goBack()
       );
     } finally {
       setLoading(false);
     }
-  }, [
-    dockingId,
-    navigation,
-    loadAvailability,
-  ]);
+  }, [dockingId, navigation, loadAvailability]);
 
   useEffect(() => {
     loadSelectedBus();
@@ -533,9 +511,7 @@ const validFares = destinationOptions
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-
     await loadSelectedBus();
-
     setRefreshing(false);
   }, [loadSelectedBus]);
 
@@ -545,11 +521,11 @@ const validFares = destinationOptions
 
   const addPassenger = () => {
     if (passengerTypes.length >= availableSeats) {
-      Alert.alert(
+      showAlert(
         "Seat Limit Reached",
-        `Only ${availableSeats} seat(s) are available.`
+        `Only ${availableSeats} seat(s) are available.`,
+        "warning"
       );
-
       return;
     }
 
@@ -568,7 +544,7 @@ const validFares = destinationOptions
   };
 
   // ---------------------------------------------
-  // OPEN SELECTION MODAL
+  // SELECTION MODALS
   // ---------------------------------------------
 
   const openDestinationSelection = () => {
@@ -581,10 +557,6 @@ const validFares = destinationOptions
     setSelectionMode("passenger");
     setSelectionVisible(true);
   };
-
-  // ---------------------------------------------
-  // SELECT DESTINATION OR PASSENGER TYPE
-  // ---------------------------------------------
 
   const handleSelection = (value) => {
     if (selectionMode === "destination") {
@@ -608,25 +580,29 @@ const validFares = destinationOptions
 
   const handleReserve = () => {
     if (!selectedBus) {
-      Alert.alert("Error", "Bus information is missing.");
+      showAlert(
+        "Error",
+        "Bus information is missing.",
+        "error"
+      );
       return;
     }
 
     if (!selectedDestination) {
-      Alert.alert(
+      showAlert(
         "Select Destination",
-        "Please select your destination first."
+        "Please select your destination first.",
+        "warning"
       );
-
       return;
     }
 
     if (!selectedFare) {
-      Alert.alert(
+      showAlert(
         "Fare Not Found",
-        "No fare is configured for your selected destination."
+        "No fare is configured for your selected destination.",
+        "warning"
       );
-
       return;
     }
 
@@ -634,29 +610,29 @@ const validFares = destinationOptions
       !Number.isFinite(Number(selectedFare.fare)) ||
       Number(selectedFare.fare) <= 0
     ) {
-      Alert.alert(
+      showAlert(
         "Invalid Fare",
-        "The fare for this destination is invalid. Please contact the terminal administrator."
+        "The fare for this destination is invalid. Please contact the terminal administrator.",
+        "error"
       );
-
       return;
     }
 
     if (passengerTypes.length < 1) {
-      Alert.alert(
+      showAlert(
         "Passenger Required",
-        "Please add at least one passenger."
+        "Please add at least one passenger.",
+        "warning"
       );
-
       return;
     }
 
     if (passengerTypes.length > availableSeats) {
-      Alert.alert(
+      showAlert(
         "Not Enough Seats",
-        `Only ${availableSeats} seat(s) are available.`
+        `Only ${availableSeats} seat(s) are available.`,
+        "warning"
       );
-
       return;
     }
 
@@ -664,7 +640,7 @@ const validFares = destinationOptions
   };
 
   // ---------------------------------------------
-  // CONFIRM AND RESERVE
+  // CONFIRM RESERVATION
   // ---------------------------------------------
 
   const confirmReservation = async () => {
@@ -703,29 +679,27 @@ const validFares = destinationOptions
         );
       }
 
-      Alert.alert(
+      showAlert(
         "Booking Successful",
         `Your booking has been reserved successfully.\n\nReference: ${data.booking_reference}\nDestination: ${data.destination_location}\nTotal: ${formatMoney(data.total_amount)}`,
-        [
-          {
-            text: "Continue to Payment",
-            onPress: () => {
-              navigation.navigate("Payment", {
-                bookingId: data.booking_id,
-              });
-            },
-          },
-        ]
+        "success",
+        "Continue to Payment",
+        () => {
+          navigation.navigate("Payment", {
+            bookingId: data.booking_id,
+          });
+        }
       );
 
       await loadAvailability();
     } catch (error) {
       console.error("Reservation error:", error);
 
-      Alert.alert(
+      showAlert(
         "Booking Failed",
         error.message ||
-          "Something went wrong while creating your booking."
+          "Something went wrong while creating your booking.",
+        "error"
       );
 
       await loadAvailability();
@@ -743,17 +717,26 @@ const validFares = destinationOptions
       <View style={styles.loadingContainer}>
         <StatusBar
           barStyle="dark-content"
-          backgroundColor="#F8FAFC"
+          backgroundColor={COLORS.background}
         />
 
         <ActivityIndicator
           size="large"
-          color="#06B6D4"
+          color={COLORS.primary}
         />
 
         <Text style={styles.loadingText}>
           Loading bus information...
         </Text>
+
+        <CustomAlert
+          visible={alertData.visible}
+          title={alertData.title}
+          message={alertData.message}
+          type={alertData.type}
+          buttonText={alertData.buttonText}
+          onClose={closeAlert}
+        />
       </View>
     );
   }
@@ -766,7 +749,7 @@ const validFares = destinationOptions
     <View style={styles.container}>
       <StatusBar
         barStyle="dark-content"
-        backgroundColor="#FFFFFF"
+        backgroundColor={COLORS.white}
       />
 
       {/* HEADER */}
@@ -774,11 +757,12 @@ const validFares = destinationOptions
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => navigation.goBack()}
+          activeOpacity={0.8}
         >
           <Ionicons
             name="arrow-back"
-            size={23}
-            color="#0F172A"
+            size={22}
+            color={COLORS.darkBlue}
           />
         </TouchableOpacity>
 
@@ -795,7 +779,7 @@ const validFares = destinationOptions
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor="#06B6D4"
+            tintColor={COLORS.primary}
           />
         }
         contentContainerStyle={styles.scrollContent}
@@ -806,7 +790,7 @@ const validFares = destinationOptions
             <Ionicons
               name="bus"
               size={30}
-              color="#0891B2"
+              color={COLORS.primary}
             />
           </View>
 
@@ -820,23 +804,23 @@ const validFares = destinationOptions
                 "Plate number unavailable"}
             </Text>
 
-            <Text style={styles.terminalName}>
+            <View style={styles.terminalRow}>
               <Ionicons
                 name="location-outline"
                 size={13}
-                color="#64748B"
-              />{" "}
-              {selectedBus?.terminal?.terminal_name ||
-                "Terminal"}
-            </Text>
+                color={COLORS.secondary}
+              />
+
+              <Text style={styles.terminalName}>
+                {selectedBus?.terminal?.terminal_name ||
+                  "Terminal"}
+              </Text>
+            </View>
           </View>
 
           <View style={styles.dockedBadge}>
             <View style={styles.statusDot} />
-
-            <Text style={styles.dockedText}>
-              Docked
-            </Text>
+            <Text style={styles.dockedText}>Docked</Text>
           </View>
         </View>
 
@@ -851,7 +835,7 @@ const validFares = destinationOptions
               <Ionicons
                 name="navigate-outline"
                 size={19}
-                color="#0891B2"
+                color={COLORS.primary}
               />
             </View>
 
@@ -874,7 +858,7 @@ const validFares = destinationOptions
               <Ionicons
                 name="flag-outline"
                 size={19}
-                color="#0891B2"
+                color={COLORS.primary}
               />
             </View>
 
@@ -897,7 +881,7 @@ const validFares = destinationOptions
               <Ionicons
                 name="location-outline"
                 size={19}
-                color="#0891B2"
+                color={COLORS.primary}
               />
             </View>
 
@@ -932,7 +916,7 @@ const validFares = destinationOptions
             <Ionicons
               name="people-outline"
               size={27}
-              color="#0891B2"
+              color={COLORS.primary}
             />
           </View>
         </View>
@@ -944,19 +928,21 @@ const validFares = destinationOptions
           </Text>
 
           <Text style={styles.sectionDescription}>
-            Choose a destination along the bus's assigned route.
+            Choose a destination along the bus's assigned
+            route.
           </Text>
 
           <TouchableOpacity
             style={styles.selectButton}
             onPress={openDestinationSelection}
             disabled={destinationOptions.length === 0}
+            activeOpacity={0.8}
           >
             <View style={styles.selectButtonLeft}>
               <Ionicons
                 name="location-outline"
                 size={20}
-                color="#0891B2"
+                color={COLORS.primary}
               />
 
               <Text
@@ -974,42 +960,42 @@ const validFares = destinationOptions
             <Ionicons
               name="chevron-down"
               size={20}
-              color="#64748B"
+              color={COLORS.secondary}
             />
           </TouchableOpacity>
 
           {selectedDestination && selectedFare && (
-          <View style={styles.selectedFareContainer}>
-            <Text style={styles.selectedFareLabel}>
-              Regular fare
-            </Text>
+            <View style={styles.selectedFareContainer}>
+              <Text style={styles.selectedFareLabel}>
+                Regular fare
+              </Text>
 
-            <Text style={styles.selectedFareAmount}>
-              {formatMoney(farePerPassenger)}
-            </Text>
-          </View>
-        )}
+              <Text style={styles.selectedFareAmount}>
+                {formatMoney(farePerPassenger)}
+              </Text>
+            </View>
+          )}
 
-        {selectedDestination && !selectedFare && (
-          <View style={styles.missingFareNotice}>
-            <Ionicons
-              name="information-circle-outline"
-              size={18}
-              color="#D97706"
-            />
+          {selectedDestination && !selectedFare && (
+            <View style={styles.missingFareNotice}>
+              <Ionicons
+                name="information-circle-outline"
+                size={18}
+                color={COLORS.orange}
+              />
 
-            <Text style={styles.missingFareText}>
-              Fare not yet available for this destination.
-              Please contact the terminal administrator.
-            </Text>
-          </View>
-        )}
+              <Text style={styles.missingFareText}>
+                Fare not yet available for this destination.
+                Please contact the terminal administrator.
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* PASSENGERS */}
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeaderRow}>
-            <View>
+            <View style={{ flex: 1 }}>
               <Text style={styles.sectionTitle}>
                 Passengers
               </Text>
@@ -1042,6 +1028,7 @@ const validFares = destinationOptions
                 onPress={() =>
                   openPassengerSelection(index)
                 }
+                activeOpacity={0.8}
               >
                 <View>
                   <Text style={styles.passengerLabel}>
@@ -1056,7 +1043,7 @@ const validFares = destinationOptions
                 <Ionicons
                   name="chevron-down"
                   size={19}
-                  color="#64748B"
+                  color={COLORS.secondary}
                 />
               </TouchableOpacity>
 
@@ -1064,6 +1051,7 @@ const validFares = destinationOptions
                 style={styles.removeButton}
                 onPress={() => removePassenger(index)}
                 disabled={passengerTypes.length <= 1}
+                activeOpacity={0.8}
               >
                 <Ionicons
                   name="trash-outline"
@@ -1071,7 +1059,7 @@ const validFares = destinationOptions
                   color={
                     passengerTypes.length <= 1
                       ? "#CBD5E1"
-                      : "#EF4444"
+                      : COLORS.red
                   }
                 />
               </TouchableOpacity>
@@ -1089,11 +1077,12 @@ const validFares = destinationOptions
               passengerTypes.length >= availableSeats ||
               loadingAvailability
             }
+            activeOpacity={0.8}
           >
             <Ionicons
               name="add-circle-outline"
               size={20}
-              color="#0891B2"
+              color={COLORS.primary}
             />
 
             <Text style={styles.addPassengerText}>
@@ -1105,7 +1094,7 @@ const validFares = destinationOptions
             <Ionicons
               name="information-circle-outline"
               size={17}
-              color="#0891B2"
+              color={COLORS.primary}
             />
 
             <Text style={styles.discountNoticeText}>
@@ -1122,25 +1111,30 @@ const validFares = destinationOptions
             Fare Summary
           </Text>
 
-            {!selectedDestination ? (
-              <Text style={styles.emptySummaryText}>
-                Select a destination to calculate your fare.
-              </Text>
-            ) : !selectedFare ? (
-              <Text style={styles.emptySummaryText}>
-                Fare is not yet available for {selectedDestination}.
-                Booking cannot continue until a fare is configured.
-              </Text>
-            ) : (
-              <>
+          {!selectedDestination ? (
+            <Text style={styles.emptySummaryText}>
+              Select a destination to calculate your fare.
+            </Text>
+          ) : !selectedFare ? (
+            <Text style={styles.emptySummaryText}>
+              Fare is not yet available for{" "}
+              {selectedDestination}. Booking cannot continue
+              until a fare is configured.
+            </Text>
+          ) : (
+            <>
               {passengerFareDetails.map(
                 (passenger, index) => (
                   <View
                     key={`fare-${index}`}
                     style={styles.farePassenger}
                   >
-                    <View style={styles.farePassengerHeader}>
-                      <Text style={styles.farePassengerTitle}>
+                    <View
+                      style={styles.farePassengerHeader}
+                    >
+                      <Text
+                        style={styles.farePassengerTitle}
+                      >
                         Passenger {index + 1} (
                         {getPassengerLabel(
                           passenger.passenger_type
@@ -1149,9 +1143,7 @@ const validFares = destinationOptions
                       </Text>
 
                       <Text style={styles.fareAmount}>
-                        {formatMoney(
-                          passenger.final_fare
-                        )}
+                        {formatMoney(passenger.final_fare)}
                       </Text>
                     </View>
 
@@ -1174,7 +1166,8 @@ const validFares = destinationOptions
                       </Text>
 
                       <Text style={styles.discountText}>
-                        -{formatMoney(
+                        -
+                        {formatMoney(
                           passenger.discount_amount
                         )}
                       </Text>
@@ -1222,7 +1215,7 @@ const validFares = destinationOptions
         <TouchableOpacity
           style={[
             styles.bookButton,
-             (!selectedDestination ||
+            (!selectedDestination ||
               !selectedFare ||
               availableSeats <= 0 ||
               booking ||
@@ -1237,9 +1230,10 @@ const validFares = destinationOptions
             booking ||
             loadingAvailability
           }
+          activeOpacity={0.85}
         >
           {booking ? (
-            <ActivityIndicator color="#FFFFFF" />
+            <ActivityIndicator color={COLORS.white} />
           ) : (
             <>
               <Text style={styles.bookButtonText}>
@@ -1249,7 +1243,7 @@ const validFares = destinationOptions
               <Ionicons
                 name="arrow-forward"
                 size={20}
-                color="#FFFFFF"
+                color={COLORS.white}
               />
             </>
           )}
@@ -1261,10 +1255,7 @@ const validFares = destinationOptions
         </Text>
       </ScrollView>
 
-      {/* -------------------------------------- */}
       {/* DESTINATION / PASSENGER SELECTION MODAL */}
-      {/* -------------------------------------- */}
-
       <Modal
         visible={selectionVisible}
         transparent
@@ -1286,72 +1277,85 @@ const validFares = destinationOptions
                 onPress={() =>
                   setSelectionVisible(false)
                 }
+                style={styles.closeButton}
               >
                 <Ionicons
                   name="close"
-                  size={24}
-                  color="#64748B"
+                  size={22}
+                  color={COLORS.secondary}
                 />
               </TouchableOpacity>
             </View>
 
             <ScrollView
               showsVerticalScrollIndicator={false}
+              nestedScrollEnabled
+              keyboardShouldPersistTaps="handled"
             >
               {selectionMode === "destination"
                 ? destinationOptions.map((item) => (
-                      <TouchableOpacity
-                        key={item.fare_id}
-                        style={styles.optionRow}
-                        onPress={() =>
-                          handleSelection(item.destination_location)
-                        }
-                      >
-                        <View style={styles.optionLeft}>
-                          <View style={styles.optionIcon}>
-                            <Ionicons
-                              name="location-outline"
-                              size={19}
-                              color="#0891B2"
-                            />
-                          </View>
-
-                          <View>
-                            <Text style={styles.optionText}>
-                              {item.destination_location}
-                            </Text>
-
-                            {!item.hasFare && (
-                              <Text style={styles.missingOptionText}>
-                                Fare not yet available
-                              </Text>
-                            )}
-                          </View>
+                    <TouchableOpacity
+                      key={item.fare_id}
+                      style={styles.optionRow}
+                      onPress={() =>
+                        handleSelection(
+                          item.destination_location
+                        )
+                      }
+                      activeOpacity={0.75}
+                    >
+                      <View style={styles.optionLeft}>
+                        <View style={styles.optionIcon}>
+                          <Ionicons
+                            name="location-outline"
+                            size={19}
+                            color={COLORS.primary}
+                          />
                         </View>
 
-                        <View style={styles.optionRight}>
-                          <Text
-                            style={[
-                              styles.optionFare,
-                              !item.hasFare && styles.unavailableFare,
-                            ]}
-                          >
-                            {item.hasFare
-                              ? formatMoney(item.fare)
-                              : "No fare"}
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.optionText}>
+                            {item.destination_location}
                           </Text>
 
-                          {normalizeLocation(selectedDestination) ===
-                            normalizeLocation(item.destination_location) && (
-                            <Ionicons
-                              name="checkmark-circle"
-                              size={20}
-                              color="#0891B2"
-                            />
+                          {!item.hasFare && (
+                            <Text
+                              style={styles.missingOptionText}
+                            >
+                              Fare not yet available
+                            </Text>
                           )}
                         </View>
-                      </TouchableOpacity>
-                      ))
+                      </View>
+
+                      <View style={styles.optionRight}>
+                        <Text
+                          style={[
+                            styles.optionFare,
+                            !item.hasFare &&
+                              styles.unavailableFare,
+                          ]}
+                        >
+                          {item.hasFare
+                            ? formatMoney(item.fare)
+                            : "No fare"}
+                        </Text>
+
+                        {normalizeLocation(
+                          selectedDestination
+                        ) ===
+                          normalizeLocation(
+                            item.destination_location
+                          ) && (
+                          <Ionicons
+                            name="checkmark-circle"
+                            size={20}
+                            color={COLORS.primary}
+                          />
+                        )}
+                      </View>
+                    </TouchableOpacity>
+                  ))
                 : PASSENGER_TYPES.map((item) => (
                     <TouchableOpacity
                       key={item.value}
@@ -1359,13 +1363,14 @@ const validFares = destinationOptions
                       onPress={() =>
                         handleSelection(item.value)
                       }
+                      activeOpacity={0.75}
                     >
                       <View style={styles.optionLeft}>
                         <View style={styles.optionIcon}>
                           <Ionicons
                             name="person-outline"
                             size={19}
-                            color="#0891B2"
+                            color={COLORS.primary}
                           />
                         </View>
 
@@ -1388,7 +1393,7 @@ const validFares = destinationOptions
                         <Ionicons
                           name="checkmark-circle"
                           size={20}
-                          color="#0891B2"
+                          color={COLORS.primary}
                         />
                       )}
                     </TouchableOpacity>
@@ -1398,10 +1403,7 @@ const validFares = destinationOptions
         </View>
       </Modal>
 
-      {/* -------------------------------------- */}
       {/* CONFIRMATION MODAL */}
-      {/* -------------------------------------- */}
-
       <Modal
         visible={confirmVisible}
         transparent
@@ -1416,7 +1418,7 @@ const validFares = destinationOptions
               <Ionicons
                 name="receipt-outline"
                 size={30}
-                color="#0891B2"
+                color={COLORS.primary}
               />
             </View>
 
@@ -1473,9 +1475,10 @@ const validFares = destinationOptions
               style={styles.confirmButton}
               onPress={confirmReservation}
               disabled={booking}
+              activeOpacity={0.85}
             >
               {booking ? (
-                <ActivityIndicator color="#FFFFFF" />
+                <ActivityIndicator color={COLORS.white} />
               ) : (
                 <Text style={styles.confirmButtonText}>
                   Confirm Reservation
@@ -1489,6 +1492,7 @@ const validFares = destinationOptions
                 setConfirmVisible(false)
               }
               disabled={booking}
+              activeOpacity={0.8}
             >
               <Text style={styles.cancelButtonText}>
                 Go Back
@@ -1497,6 +1501,16 @@ const validFares = destinationOptions
           </View>
         </View>
       </Modal>
+
+      {/* CUSTOM SWEETALERT-STYLE ALERT */}
+      <CustomAlert
+        visible={alertData.visible}
+        title={alertData.title}
+        message={alertData.message}
+        type={alertData.type}
+        buttonText={alertData.buttonText}
+        onClose={closeAlert}
+      />
     </View>
   );
 }
@@ -1508,31 +1522,31 @@ const validFares = destinationOptions
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: COLORS.background,
   },
 
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#F8FAFC",
+    backgroundColor: COLORS.background,
   },
 
   loadingText: {
     marginTop: 12,
-    color: "#64748B",
+    color: COLORS.secondary,
     fontSize: 14,
   },
 
   header: {
-    height: 60,
-    backgroundColor: "#FFFFFF",
+    height: 62,
+    backgroundColor: COLORS.white,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
+    paddingHorizontal: 18,
     borderBottomWidth: 1,
-    borderBottomColor: "#E2E8F0",
+    borderBottomColor: COLORS.border,
   },
 
   backButton: {
@@ -1541,36 +1555,41 @@ const styles = StyleSheet.create({
     borderRadius: 13,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#F1F5F9",
+    backgroundColor: COLORS.lightBlue,
   },
 
   headerTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#0F172A",
+    fontSize: 19,
+    fontWeight: "800",
+    color: COLORS.text,
   },
 
   scrollContent: {
-    padding: 16,
-    paddingBottom: 35,
+    padding: 18,
+    paddingBottom: 40,
   },
 
   busCard: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    padding: 16,
-    borderRadius: 18,
-    marginBottom: 15,
+    backgroundColor: COLORS.white,
+    padding: 17,
+    borderRadius: 20,
+    marginBottom: 16,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: COLORS.border,
+    elevation: 2,
+    shadowColor: COLORS.text,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
   },
 
   busIconContainer: {
-    width: 55,
-    height: 55,
+    width: 54,
+    height: 54,
     borderRadius: 16,
-    backgroundColor: "#ECFEFF",
+    backgroundColor: COLORS.lightBlue,
     justifyContent: "center",
     alignItems: "center",
     marginRight: 13,
@@ -1582,26 +1601,32 @@ const styles = StyleSheet.create({
 
   busName: {
     fontSize: 16,
-    fontWeight: "700",
-    color: "#0F172A",
+    fontWeight: "800",
+    color: COLORS.text,
   },
 
   plateNumber: {
     fontSize: 13,
-    color: "#64748B",
+    color: COLORS.secondary,
     marginTop: 3,
+  },
+
+  terminalRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 5,
   },
 
   terminalName: {
     fontSize: 12,
-    color: "#64748B",
-    marginTop: 5,
+    color: COLORS.secondary,
+    marginLeft: 3,
   },
 
   dockedBadge: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#DCFCE7",
+    backgroundColor: COLORS.lightGreen,
     paddingHorizontal: 9,
     paddingVertical: 6,
     borderRadius: 20,
@@ -1611,7 +1636,7 @@ const styles = StyleSheet.create({
     width: 7,
     height: 7,
     borderRadius: 5,
-    backgroundColor: "#16A34A",
+    backgroundColor: COLORS.green,
     marginRight: 5,
   },
 
@@ -1622,25 +1647,30 @@ const styles = StyleSheet.create({
   },
 
   sectionCard: {
-    backgroundColor: "#FFFFFF",
-    padding: 17,
-    borderRadius: 18,
-    marginBottom: 15,
+    backgroundColor: COLORS.white,
+    padding: 18,
+    borderRadius: 20,
+    marginBottom: 16,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: COLORS.border,
+    elevation: 2,
+    shadowColor: COLORS.text,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.035,
+    shadowRadius: 6,
   },
 
   sectionTitle: {
     fontSize: 16,
-    fontWeight: "700",
-    color: "#0F172A",
+    fontWeight: "800",
+    color: COLORS.text,
   },
 
   sectionDescription: {
     fontSize: 12,
-    color: "#64748B",
+    color: COLORS.secondary,
     marginTop: 5,
-    marginBottom: 13,
+    marginBottom: 14,
     lineHeight: 18,
   },
 
@@ -1651,10 +1681,10 @@ const styles = StyleSheet.create({
   },
 
   infoIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: "#ECFEFF",
+    width: 40,
+    height: 40,
+    borderRadius: 13,
+    backgroundColor: COLORS.lightBlue,
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
@@ -1666,64 +1696,65 @@ const styles = StyleSheet.create({
 
   infoLabel: {
     fontSize: 12,
-    color: "#64748B",
+    color: COLORS.secondary,
   },
 
   infoValue: {
     fontSize: 14,
-    color: "#0F172A",
-    fontWeight: "600",
+    color: COLORS.text,
+    fontWeight: "700",
     marginTop: 3,
   },
 
   infoDivider: {
     height: 1,
-    backgroundColor: "#F1F5F9",
+    backgroundColor: "#F1F4F8",
   },
 
   availabilityCard: {
-    backgroundColor: "#ECFEFF",
+    backgroundColor: COLORS.lightBlue,
     borderRadius: 18,
-    padding: 17,
-    marginBottom: 15,
+    padding: 18,
+    marginBottom: 16,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     borderWidth: 1,
-    borderColor: "#CFFAFE",
+    borderColor: "#CFE3FA",
   },
 
   availabilityLabel: {
     fontSize: 13,
-    color: "#0E7490",
-    fontWeight: "600",
+    color: COLORS.darkBlue,
+    fontWeight: "700",
   },
 
   availabilityNumber: {
-    fontSize: 27,
+    fontSize: 29,
     fontWeight: "800",
-    color: "#155E75",
+    color: COLORS.darkBlue,
     marginTop: 3,
   },
 
   seatIconContainer: {
-    width: 48,
-    height: 48,
+    width: 49,
+    height: 49,
     borderRadius: 15,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: COLORS.white,
     justifyContent: "center",
     alignItems: "center",
   },
 
   selectButton: {
-    minHeight: 53,
+    minHeight: 54,
     borderWidth: 1,
-    borderColor: "#CBD5E1",
-    borderRadius: 13,
-    paddingHorizontal: 13,
+    borderColor: "#D8E1EC",
+    borderRadius: 14,
+    paddingHorizontal: 14,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    backgroundColor: COLORS.white,
   },
 
   selectButtonLeft: {
@@ -1734,13 +1765,13 @@ const styles = StyleSheet.create({
 
   selectButtonText: {
     fontSize: 14,
-    fontWeight: "600",
-    color: "#0F172A",
+    fontWeight: "700",
+    color: COLORS.text,
     marginLeft: 10,
   },
 
   placeholderText: {
-    color: "#94A3B8",
+    color: COLORS.gray,
     fontWeight: "400",
   },
 
@@ -1749,20 +1780,22 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     marginTop: 13,
-    padding: 12,
-    backgroundColor: "#F0FDFA",
-    borderRadius: 11,
+    padding: 13,
+    backgroundColor: COLORS.paleBlue,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#DCEBFA",
   },
 
   selectedFareLabel: {
     fontSize: 13,
-    color: "#64748B",
+    color: COLORS.secondary,
   },
 
   selectedFareAmount: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "800",
-    color: "#0F766E",
+    color: COLORS.darkBlue,
   },
 
   sectionHeaderRow: {
@@ -1772,10 +1805,10 @@ const styles = StyleSheet.create({
   },
 
   passengerCountBadge: {
-    width: 32,
-    height: 32,
+    width: 34,
+    height: 34,
     borderRadius: 11,
-    backgroundColor: "#ECFEFF",
+    backgroundColor: COLORS.lightBlue,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1783,7 +1816,7 @@ const styles = StyleSheet.create({
   passengerCountText: {
     fontSize: 14,
     fontWeight: "800",
-    color: "#0891B2",
+    color: COLORS.primary,
   },
 
   passengerRow: {
@@ -1793,10 +1826,10 @@ const styles = StyleSheet.create({
   },
 
   passengerNumber: {
-    width: 32,
-    height: 32,
+    width: 33,
+    height: 33,
     borderRadius: 10,
-    backgroundColor: "#F1F5F9",
+    backgroundColor: COLORS.lightBlue,
     alignItems: "center",
     justifyContent: "center",
     marginRight: 9,
@@ -1804,36 +1837,37 @@ const styles = StyleSheet.create({
 
   passengerNumberText: {
     fontSize: 13,
-    fontWeight: "700",
-    color: "#475569",
+    fontWeight: "800",
+    color: COLORS.darkBlue,
   },
 
   passengerSelect: {
     flex: 1,
     minHeight: 58,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
-    borderRadius: 12,
-    paddingHorizontal: 12,
+    borderColor: COLORS.border,
+    borderRadius: 13,
+    paddingHorizontal: 13,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    backgroundColor: COLORS.white,
   },
 
   passengerLabel: {
     fontSize: 11,
-    color: "#64748B",
+    color: COLORS.secondary,
   },
 
   passengerType: {
     fontSize: 14,
-    color: "#0F172A",
-    fontWeight: "600",
+    color: COLORS.text,
+    fontWeight: "700",
     marginTop: 3,
   },
 
   removeButton: {
-    width: 38,
+    width: 39,
     height: 45,
     alignItems: "center",
     justifyContent: "center",
@@ -1841,20 +1875,21 @@ const styles = StyleSheet.create({
   },
 
   addPassengerButton: {
-    minHeight: 47,
+    minHeight: 48,
     borderWidth: 1,
     borderStyle: "dashed",
-    borderColor: "#06B6D4",
-    borderRadius: 12,
+    borderColor: COLORS.primary,
+    borderRadius: 13,
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
     marginTop: 3,
+    backgroundColor: COLORS.paleBlue,
   },
 
   addPassengerText: {
-    color: "#0891B2",
-    fontWeight: "700",
+    color: COLORS.primary,
+    fontWeight: "800",
     fontSize: 13,
     marginLeft: 7,
   },
@@ -1865,9 +1900,9 @@ const styles = StyleSheet.create({
 
   discountNotice: {
     flexDirection: "row",
-    backgroundColor: "#ECFEFF",
-    padding: 11,
-    borderRadius: 11,
+    backgroundColor: COLORS.lightBlue,
+    padding: 12,
+    borderRadius: 12,
     marginTop: 14,
     alignItems: "flex-start",
   },
@@ -1876,14 +1911,14 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 11,
     lineHeight: 17,
-    color: "#155E75",
-    marginLeft: 7,
+    color: COLORS.darkBlue,
+    marginLeft: 8,
   },
 
   farePassenger: {
-    paddingVertical: 12,
+    paddingVertical: 13,
     borderBottomWidth: 1,
-    borderBottomColor: "#F1F5F9",
+    borderBottomColor: "#F1F4F8",
   },
 
   farePassengerHeader: {
@@ -1896,14 +1931,14 @@ const styles = StyleSheet.create({
   farePassengerTitle: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#0F172A",
+    color: COLORS.text,
     flex: 1,
   },
 
   fareAmount: {
     fontSize: 14,
-    fontWeight: "700",
-    color: "#0F172A",
+    fontWeight: "800",
+    color: COLORS.text,
   },
 
   fareDetailRow: {
@@ -1914,85 +1949,98 @@ const styles = StyleSheet.create({
 
   fareDetailLabel: {
     fontSize: 12,
-    color: "#64748B",
+    color: COLORS.secondary,
   },
 
   fareDetailValue: {
     fontSize: 12,
-    color: "#334155",
-    fontWeight: "600",
+    color: COLORS.text,
+    fontWeight: "700",
   },
 
   discountText: {
     fontSize: 12,
-    color: "#059669",
-    fontWeight: "600",
+    color: COLORS.green,
+    fontWeight: "700",
   },
 
   summaryDivider: {
     height: 1,
-    backgroundColor: "#E2E8F0",
-    marginVertical: 13,
+    backgroundColor: COLORS.border,
+    marginVertical: 14,
   },
 
   totalRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginTop: 16,
+    marginTop: 17,
+    paddingTop: 13,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
   },
 
   totalLabel: {
     fontSize: 15,
-    fontWeight: "700",
-    color: "#0F172A",
+    fontWeight: "800",
+    color: COLORS.text,
   },
 
   totalAmount: {
-    fontSize: 21,
+    fontSize: 22,
     fontWeight: "800",
-    color: "#0891B2",
+    color: COLORS.primary,
   },
 
   emptySummaryText: {
-    color: "#94A3B8",
+    color: COLORS.secondary,
     fontSize: 13,
+    lineHeight: 19,
     marginTop: 12,
   },
 
   bookButton: {
-    minHeight: 55,
-    backgroundColor: "#06B6D4",
+    minHeight: 54,
+    backgroundColor: COLORS.primary,
     borderRadius: 15,
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
     marginTop: 3,
     gap: 9,
+    elevation: 3,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.18,
+    shadowRadius: 5,
   },
 
   bookButtonDisabled: {
-    backgroundColor: "#94A3B8",
+    backgroundColor: "#A0AEC0",
+    elevation: 0,
+    shadowOpacity: 0,
   },
 
   bookButtonText: {
-    color: "#FFFFFF",
+    color: COLORS.white,
     fontSize: 15,
     fontWeight: "800",
   },
 
   footerNote: {
     fontSize: 11,
-    color: "#94A3B8",
+    color: COLORS.secondary,
     textAlign: "center",
     lineHeight: 17,
-    marginTop: 13,
+    marginTop: 14,
     paddingHorizontal: 10,
   },
 
+  // MODALS
+
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(15, 23, 42, 0.50)",
+    backgroundColor: "rgba(20, 34, 56, 0.50)",
     justifyContent: "center",
     alignItems: "center",
     padding: 20,
@@ -2001,35 +2049,49 @@ const styles = StyleSheet.create({
   selectionModal: {
     width: "100%",
     maxHeight: "75%",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 20,
-    padding: 18,
+    backgroundColor: COLORS.white,
+    borderRadius: 22,
+    padding: 19,
+    elevation: 8,
+    shadowColor: COLORS.text,
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
   },
 
   modalHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingBottom: 15,
+    paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: "#E2E8F0",
+    borderBottomColor: COLORS.border,
     marginBottom: 5,
   },
 
   modalTitle: {
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: "800",
-    color: "#0F172A",
+    color: COLORS.text,
+  },
+
+  closeButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: COLORS.background,
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   optionRow: {
-    minHeight: 62,
+    minHeight: 65,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     borderBottomWidth: 1,
-    borderBottomColor: "#F1F5F9",
-    paddingVertical: 10,
+    borderBottomColor: "#F1F4F8",
+    paddingVertical: 11,
   },
 
   optionLeft: {
@@ -2039,10 +2101,10 @@ const styles = StyleSheet.create({
   },
 
   optionIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: "#ECFEFF",
+    width: 40,
+    height: 40,
+    borderRadius: 13,
+    backgroundColor: COLORS.lightBlue,
     alignItems: "center",
     justifyContent: "center",
     marginRight: 11,
@@ -2050,57 +2112,94 @@ const styles = StyleSheet.create({
 
   optionText: {
     fontSize: 14,
-    color: "#0F172A",
-    fontWeight: "600",
+    color: COLORS.text,
+    fontWeight: "700",
   },
 
   optionSubtext: {
     fontSize: 11,
-    color: "#64748B",
-    marginTop: 3,
+    color: COLORS.secondary,
+    marginTop: 4,
   },
 
   optionRight: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    marginLeft: 8,
   },
 
   optionFare: {
     fontSize: 13,
-    fontWeight: "700",
-    color: "#0891B2",
+    fontWeight: "800",
+    color: COLORS.primary,
   },
+
+  unavailableFare: {
+    color: COLORS.orange,
+  },
+
+  missingOptionText: {
+    fontSize: 11,
+    color: COLORS.orange,
+    marginTop: 4,
+  },
+
+  missingFareNotice: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    backgroundColor: COLORS.lightOrange,
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+  },
+
+  missingFareText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 18,
+    color: "#92400E",
+    marginLeft: 8,
+  },
+
+  // CONFIRMATION MODAL
 
   confirmModal: {
     width: "100%",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: COLORS.white,
     borderRadius: 22,
     padding: 22,
+    elevation: 8,
+    shadowColor: COLORS.text,
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
   },
 
   confirmIcon: {
-    width: 58,
-    height: 58,
-    borderRadius: 18,
-    backgroundColor: "#ECFEFF",
+    width: 60,
+    height: 60,
+    borderRadius: 19,
+    backgroundColor: COLORS.lightBlue,
     alignItems: "center",
     justifyContent: "center",
     alignSelf: "center",
-    marginBottom: 13,
+    marginBottom: 14,
   },
 
   confirmTitle: {
     fontSize: 19,
     fontWeight: "800",
-    color: "#0F172A",
+    color: COLORS.text,
     textAlign: "center",
   },
 
   confirmDescription: {
     fontSize: 12,
     lineHeight: 18,
-    color: "#64748B",
+    color: COLORS.secondary,
     textAlign: "center",
     marginTop: 7,
     marginBottom: 20,
@@ -2109,26 +2208,26 @@ const styles = StyleSheet.create({
   confirmDetailRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 13,
+    marginBottom: 14,
     gap: 12,
   },
 
   confirmLabel: {
     fontSize: 13,
-    color: "#64748B",
+    color: COLORS.secondary,
   },
 
   confirmValue: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#0F172A",
+    color: COLORS.text,
     textAlign: "right",
     flex: 1,
   },
 
   confirmTotalRow: {
     borderTopWidth: 1,
-    borderTopColor: "#E2E8F0",
+    borderTopColor: COLORS.border,
     paddingTop: 15,
     marginTop: 3,
     marginBottom: 18,
@@ -2139,20 +2238,20 @@ const styles = StyleSheet.create({
 
   confirmTotalLabel: {
     fontSize: 14,
-    fontWeight: "700",
-    color: "#0F172A",
+    fontWeight: "800",
+    color: COLORS.text,
   },
 
   confirmTotalAmount: {
-    fontSize: 20,
+    fontSize: 21,
     fontWeight: "800",
-    color: "#0891B2",
+    color: COLORS.primary,
   },
 
   confirmButton: {
-    minHeight: 51,
-    borderRadius: 13,
-    backgroundColor: "#06B6D4",
+    minHeight: 52,
+    borderRadius: 14,
+    backgroundColor: COLORS.primary,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -2160,11 +2259,11 @@ const styles = StyleSheet.create({
   confirmButtonText: {
     fontSize: 14,
     fontWeight: "800",
-    color: "#FFFFFF",
+    color: COLORS.white,
   },
 
   cancelButton: {
-    minHeight: 45,
+    minHeight: 46,
     justifyContent: "center",
     alignItems: "center",
     marginTop: 5,
@@ -2173,36 +2272,6 @@ const styles = StyleSheet.create({
   cancelButtonText: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#64748B",
+    color: COLORS.red,
   },
-
-  missingFareNotice: {
-  flexDirection: "row",
-  alignItems: "flex-start",
-  backgroundColor: "#FFFBEB",
-  borderRadius: 11,
-  padding: 12,
-  marginTop: 12,
-  borderWidth: 1,
-  borderColor: "#FDE68A",
-},
-
-missingFareText: {
-  flex: 1,
-  fontSize: 12,
-  lineHeight: 18,
-  color: "#92400E",
-  marginLeft: 8,
-},
-
-missingOptionText: {
-  fontSize: 11,
-  color: "#D97706",
-  marginTop: 4,
-},
-
-unavailableFare: {
-  color: "#D97706",
-},
-
 });

@@ -28,7 +28,10 @@ export default function CustomAlert({
   message,
   type = "error",
   buttonText = "OK",
+  cancelText = null,
   onClose,
+  onConfirm,
+  onCancel,
 }) {
   const alertTypes = {
     success: {
@@ -54,6 +57,7 @@ export default function CustomAlert({
   };
 
   const currentType = alertTypes[type] || alertTypes.error;
+  const hasCancelButton = Boolean(cancelText);
 
   return (
     <Modal
@@ -61,7 +65,7 @@ export default function CustomAlert({
       transparent
       animationType="fade"
       statusBarTranslucent
-      onRequestClose={onClose}
+      onRequestClose={hasCancelButton ? onCancel : onClose}
     >
       <View style={styles.overlay}>
         <View style={styles.alertBox}>
@@ -82,13 +86,39 @@ export default function CustomAlert({
 
           <Text style={styles.message}>{message}</Text>
 
-          <TouchableOpacity
-            activeOpacity={0.85}
-            style={styles.button}
-            onPress={onClose}
-          >
-            <Text style={styles.buttonText}>{buttonText}</Text>
-          </TouchableOpacity>
+          {hasCancelButton ? (
+            <View style={styles.buttonRow}>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                style={styles.cancelButton}
+                onPress={onCancel}
+              >
+                <Text style={styles.cancelButtonText}>
+                  {cancelText}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                activeOpacity={0.85}
+                style={styles.confirmButton}
+                onPress={onConfirm}
+              >
+                <Text style={styles.buttonText}>
+                  {buttonText}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={styles.singleButton}
+              onPress={onClose}
+            >
+              <Text style={styles.buttonText}>
+                {buttonText}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     </Modal>
@@ -138,7 +168,30 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
 
-  button: {
+  buttonRow: {
+    flexDirection: "row",
+    width: "100%",
+    gap: 10,
+    marginTop: 24,
+  },
+
+  cancelButton: {
+    flex: 1,
+    backgroundColor: COLORS.red,
+    paddingVertical: 14,
+    borderRadius: 13,
+    alignItems: "center",
+  },
+
+  confirmButton: {
+    flex: 1,
+    backgroundColor: COLORS.green,
+    paddingVertical: 14,
+    borderRadius: 13,
+    alignItems: "center",
+  },
+
+  singleButton: {
     width: "100%",
     backgroundColor: COLORS.primary,
     paddingVertical: 14,
@@ -148,6 +201,12 @@ const styles = StyleSheet.create({
   },
 
   buttonText: {
+    color: COLORS.white,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+
+  cancelButtonText: {
     color: COLORS.white,
     fontSize: 14,
     fontWeight: "800",

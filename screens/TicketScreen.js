@@ -20,6 +20,7 @@ export default function TicketScreen({ route, navigation }) {
 
   const [booking, setBooking] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
     loadTicket();
@@ -27,11 +28,18 @@ export default function TicketScreen({ route, navigation }) {
 
   const loadTicket = async () => {
     try {
+      setLoading(true);
+      setErrorMessage("");
+
       const {
         data: { user },
+        error: userError,
       } = await supabase.auth.getUser();
 
-      if (!user) throw new Error("Please sign in.");
+      if (userError || !user) {
+        setErrorMessage("Please log in to view your ticket.");
+        return;
+      }
 
       const { data, error } = await supabase
         .from("bookings")
@@ -47,30 +55,78 @@ export default function TicketScreen({ route, navigation }) {
         `)
         .eq("booking_id", bookingId)
         .eq("user_id", user.id)
-        .single();
+        .maybeSingle();
 
-      if (error) throw error;
+      if (error) {
+        console.log("Ticket loading error:", error);
+        setErrorMessage("Unable to load your ticket.");
+        return;
+      }
+
+      if (!data) {
+        setErrorMessage("Booking not found.");
+        return;
+      }
 
       setBooking(data);
     } catch (error) {
-      console.log("Ticket error:", error.message);
+      console.log("Unexpected ticket error:", error);
+      setErrorMessage("Something went wrong while loading your ticket.");
     } finally {
       setLoading(false);
     }
   };
 
+  // Return to MainTabs and select Home
+  const goBackHome = () => {
+    navigation.reset({
+      index: 0,
+      routes: [
+        {
+          name: "MainTabs",
+          state: {
+            index: 0,
+            routes: [
+              { name: "Home" },
+              { name: "Notifications" },
+              { name: "Live Tracking" },
+              { name: "Booking" },
+              { name: "Profile" },
+            ],
+          },
+        },
+      ],
+    });
+  };
+
   if (loading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color="#0891B2" />
+      <View style={styles.centerContainer}>
+        <ActivityIndicator size="large" color="#2563EB" />
+        <Text style={styles.loadingText}>Loading your ticket...</Text>
       </View>
     );
   }
 
-  if (!booking) {
+  if (errorMessage) {
     return (
-      <View style={styles.center}>
-        <Text style={styles.title}>Booking not found.</Text>
+      <View style={styles.centerContainer}>
+        <Ionicons
+          name="alert-circle-outline"
+          size={65}
+          color="#EF4444"
+        />
+
+        <Text style={styles.errorTitle}>Ticket Unavailable</Text>
+
+        <Text style={styles.errorText}>{errorMessage}</Text>
+
+        <TouchableOpacity
+          style={styles.button}
+          onPress={goBackHome}
+        >
+          <Text style={styles.buttonText}>Back to Home</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -78,104 +134,115 @@ export default function TicketScreen({ route, navigation }) {
   const isPaid =
     booking.payment_status === "paid" &&
     booking.booking_status === "confirmed" &&
-    !!booking.ticket_code;
+    booking.ticket_code;
 
   if (!isPaid) {
     return (
-      <View style={styles.center}>
-        <Ionicons name="time-outline" size={60} color="#D97706" />
+      <View style={styles.centerContainer}>
+        <Ionicons
+          name="time-outline"
+          size={65}
+          color="#F59E0B"
+        />
 
-        <Text style={styles.title}>
-          Payment Verification Pending
-        </Text>
+        <Text style={styles.errorTitle}>Payment Pending</Text>
 
-        <Text style={styles.subtitle}>
-          Your boarding ticket will be available after the cashier confirms
-          your terminal payment.
+        <Text style={styles.errorText}>
+          Your ticket is not available yet. Please complete your payment
+          and wait for your booking to be confirmed.
         </Text>
 
         <TouchableOpacity
           style={styles.button}
-          onPress={() => {
-            setLoading(true);
-            loadTicket();
-          }}
+          onPress={goBackHome}
         >
-          <Text style={styles.buttonText}>Refresh Status</Text>
+          <Text style={styles.buttonText}>Back to Home</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <View style={styles.ticket}>
-        <View style={styles.success}>
-          <Ionicons
-            name="checkmark-circle"
-            size={48}
-            color="#16A34A"
-          />
-          <Text style={styles.successText}>PAYMENT VERIFIED</Text>
-        </View>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.scrollContent}
+    >
+      <View style={styles.header}>
+        <Ionicons
+          name="checkmark-circle"
+          size={55}
+          color="#16A34A"
+        />
 
-        <Text style={styles.heading}>RouteX Boarding Ticket</Text>
+        <Text style={styles.headerTitle}>Booking Confirmed!</Text>
 
-        <Text style={styles.label}>Boarding QR Code</Text>
-
-        <View style={styles.qrContainer}>
-          <QRCode
-            value={`ROUTEX-TICKET:${booking.ticket_code}`}
-            size={210}
-            color="#172B4D"
-            backgroundColor="#FFFFFF"
-          />
-        </View>
-
-        <Text style={styles.qrNote}>
-          Present this QR code to the boarding personnel.
+        <Text style={styles.headerSubtitle}>
+          Your payment was successful.
         </Text>
+      </View>
 
-        <Text style={styles.label}>Ticket Code</Text>
-        <Text style={styles.code}>{booking.ticket_code}</Text>
+      <View style={styles.ticketCard}>
+        <View style={styles.ticketHeader}>
+          <Text style={styles.ticketTitle}>RouteX E-Ticket</Text>
+
+          <View style={styles.paidBadge}>
+            <Text style={styles.paidText}>PAID</Text>
+          </View>
+        </View>
 
         <View style={styles.divider} />
 
         <Text style={styles.label}>Booking Reference</Text>
         <Text style={styles.value}>
-          {booking.booking_reference || booking.booking_id}
+          {booking.booking_reference}
         </Text>
 
         <Text style={styles.label}>Booking ID</Text>
-        <Text style={styles.value}>{booking.booking_id}</Text>
-
-        <Text style={styles.label}>Amount Paid</Text>
-        <Text style={styles.amount}>
-          ₱
-          {Number(booking.total_amount).toLocaleString("en-PH", {
-            minimumFractionDigits: 2,
-          })}
-        </Text>
-
-        <Text style={styles.label}>Payment Date</Text>
         <Text style={styles.value}>
-          {booking.paid_at
-            ? new Date(booking.paid_at).toLocaleString()
-            : "Not available"}
+          {booking.booking_id}
         </Text>
+
+        <Text style={styles.label}>Total Amount</Text>
+        <Text style={styles.amount}>
+          ₱{Number(booking.total_amount || 0).toFixed(2)}
+        </Text>
+
+        <Text style={styles.label}>Payment Status</Text>
+        <Text style={styles.status}>Paid</Text>
 
         <View style={styles.divider} />
 
-        <Text style={styles.note}>
-          Keep this QR code available. Present it to the boarding personnel
-          when boarding your bus.
+        <Text style={styles.qrTitle}>Your Ticket QR Code</Text>
+
+        <View style={styles.qrContainer}>
+          <QRCode
+            value={`ROUTEX-TICKET:${booking.ticket_code}`}
+            size={210}
+            backgroundColor="#FFFFFF"
+            color="#000000"
+          />
+        </View>
+
+        <Text style={styles.qrInstruction}>
+          Present this QR code to the bus operator when boarding.
+        </Text>
+
+        <Text style={styles.label}>Ticket Code</Text>
+        <Text style={styles.ticketCode}>
+          {booking.ticket_code}
         </Text>
       </View>
 
       <TouchableOpacity
         style={styles.button}
-        onPress={() => navigation.navigate("MainTabs")}
+        onPress={goBackHome}
       >
+        <Ionicons
+          name="home-outline"
+          size={20}
+          color="#FFFFFF"
+        />
+
         <Text style={styles.buttonText}>Back to Home</Text>
       </TouchableOpacity>
     </ScrollView>
@@ -184,111 +251,179 @@ export default function TicketScreen({ route, navigation }) {
 
 const styles = StyleSheet.create({
   container: {
-    flexGrow: 1,
-    backgroundColor: "#F3F6FB",
-    padding: 18,
-    justifyContent: "center",
-  },
-  center: {
     flex: 1,
-    backgroundColor: "#F3F6FB",
+    backgroundColor: "#F8FAFC",
+  },
+
+  scrollContent: {
+    padding: 20,
+    paddingBottom: 35,
+  },
+
+  centerContainer: {
+    flex: 1,
+    backgroundColor: "#F8FAFC",
     justifyContent: "center",
     alignItems: "center",
     padding: 25,
   },
-  ticket: {
+
+  loadingText: {
+    marginTop: 15,
+    fontSize: 15,
+    color: "#64748B",
+  },
+
+  header: {
+    alignItems: "center",
+    marginTop: 25,
+    marginBottom: 25,
+  },
+
+  headerTitle: {
+    fontSize: 23,
+    fontWeight: "bold",
+    color: "#1E293B",
+    marginTop: 12,
+  },
+
+  headerSubtitle: {
+    fontSize: 14,
+    color: "#64748B",
+    marginTop: 5,
+  },
+
+  ticketCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 18,
     padding: 22,
-    borderWidth: 1,
-    borderColor: "#DCE3EF",
+    elevation: 3,
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: {
+      width: 0,
+      height: 3,
+    },
   },
-  success: {
+
+  ticketHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 18,
   },
-  successText: {
-    color: "#16A34A",
+
+  ticketTitle: {
+    fontSize: 19,
     fontWeight: "bold",
-    marginTop: 6,
+    color: "#1E293B",
   },
-  heading: {
-    fontSize: 23,
+
+  paidBadge: {
+    backgroundColor: "#DCFCE7",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+
+  paidText: {
+    color: "#15803D",
     fontWeight: "bold",
-    color: "#172B4D",
-    textAlign: "center",
+    fontSize: 12,
   },
-  label: {
-    color: "#64748B",
-    fontSize: 13,
-    marginTop: 16,
-  },
-  qrContainer: {
-    alignSelf: "center",
-    backgroundColor: "#FFFFFF",
-    padding: 15,
-    marginTop: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-  },
-  qrNote: {
-    color: "#64748B",
-    textAlign: "center",
-    marginTop: 12,
-    lineHeight: 20,
-  },
-  code: {
-    fontSize: 22,
-    fontWeight: "bold",
-    color: "#0891B2",
-    marginTop: 5,
-    textAlign: "center",
-  },
-  value: {
-    color: "#172B4D",
-    fontSize: 16,
-    fontWeight: "600",
-    marginTop: 4,
-  },
-  amount: {
-    fontSize: 25,
-    color: "#16A34A",
-    fontWeight: "bold",
-    marginTop: 4,
-  },
+
   divider: {
     height: 1,
     backgroundColor: "#E2E8F0",
     marginVertical: 18,
   },
-  note: {
+
+  label: {
+    fontSize: 12,
+    color: "#64748B",
+    marginTop: 14,
+  },
+
+  value: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1E293B",
+    marginTop: 4,
+  },
+
+  amount: {
+    fontSize: 23,
+    fontWeight: "bold",
+    color: "#2563EB",
+    marginTop: 4,
+  },
+
+  status: {
+    fontSize: 15,
+    fontWeight: "bold",
+    color: "#16A34A",
+    marginTop: 4,
+  },
+
+  qrTitle: {
+    fontSize: 17,
+    fontWeight: "bold",
+    color: "#1E293B",
+    textAlign: "center",
+    marginBottom: 20,
+  },
+
+  qrContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 15,
+    backgroundColor: "#FFFFFF",
+  },
+
+  qrInstruction: {
+    fontSize: 12,
     color: "#64748B",
     textAlign: "center",
-    lineHeight: 21,
+    marginTop: 15,
+    lineHeight: 19,
   },
-  title: {
-    color: "#172B4D",
+
+  ticketCode: {
+    fontSize: 11,
+    color: "#334155",
+    textAlign: "center",
+    marginTop: 5,
+  },
+
+  button: {
+    backgroundColor: "#2563EB",
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 16,
+    borderRadius: 12,
+    marginTop: 25,
+    gap: 9,
+  },
+
+  buttonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+
+  errorTitle: {
     fontSize: 21,
     fontWeight: "bold",
-    textAlign: "center",
+    color: "#1E293B",
     marginTop: 15,
   },
-  subtitle: {
+
+  errorText: {
+    fontSize: 14,
     color: "#64748B",
     textAlign: "center",
     marginTop: 8,
     lineHeight: 21,
-  },
-  button: {
-    backgroundColor: "#0891B2",
-    padding: 15,
-    borderRadius: 12,
-    alignItems: "center",
-    marginTop: 20,
-  },
-  buttonText: {
-    color: "#FFFFFF",
-    fontWeight: "bold",
   },
 });

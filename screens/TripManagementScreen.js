@@ -54,6 +54,7 @@ export default function TripManagementScreen({
 
   const selectedBusRef = useRef(null);
   const loadDataRef = useRef(null);
+  const [scrollEnabled, setScrollEnabled] = useState(true);
 
   selectedBusRef.current = selectedBus;
 
@@ -1171,19 +1172,22 @@ export default function TripManagementScreen({
 
   return (
     <>
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor="#1677D2"
-            colors={["#1677D2"]}
-          />
-        }
-      >
+        <ScrollView
+          style={styles.container}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+          scrollEnabled={scrollEnabled}
+          nestedScrollEnabled={true}
+          keyboardShouldPersistTaps="handled"
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor="#1677D2"
+              colors={["#1677D2"]}
+            />
+          }
+        >
         {/* HEADER */}
 
         <View style={styles.header}>
@@ -1793,11 +1797,12 @@ export default function TripManagementScreen({
                               styles.destinationDropdownOpen,
                           ]}
                           activeOpacity={0.8}
-                          onPress={() =>
-                            setDestinationOpen(!destinationOpen)
-                          }
-                          disabled={saving}
-                        >
+                              onPress={() => {
+                                setDestinationOpen(!destinationOpen);
+                                setScrollEnabled(true);
+                              }}
+                              disabled={saving}
+                              >
                           <View style={styles.destinationLeft}>
                             <Ionicons
                               name="location-outline"
@@ -1830,12 +1835,17 @@ export default function TripManagementScreen({
 
                         {destinationOpen && (
                           <View style={styles.destinationOptions}>
-                            <ScrollView
-                              nestedScrollEnabled
-                              style={styles.destinationOptionsScroll}
-                              keyboardShouldPersistTaps="handled"
-                              showsVerticalScrollIndicator={false}
-                            >
+                              <ScrollView
+                                nestedScrollEnabled={true}
+                                style={styles.destinationOptionsScroll}
+                                keyboardShouldPersistTaps="handled"
+                                showsVerticalScrollIndicator={true}
+                                scrollEventThrottle={16}
+                                onTouchStart={() => setScrollEnabled(false)}
+                                onTouchEnd={() => setScrollEnabled(true)}
+                                onScrollEndDrag={() => setScrollEnabled(true)}
+                                onMomentumScrollEnd={() => setScrollEnabled(true)}
+                              >
                               {routeStops.map((item) => (
                                 <TouchableOpacity
                                   key={String(item.stop_id)}
@@ -1844,10 +1854,11 @@ export default function TripManagementScreen({
                                     destination === item.stop_name &&
                                       styles.destinationOptionSelected,
                                   ]}
-                                  onPress={() => {
-                                    setDestination(item.stop_name);
-                                    setDestinationOpen(false);
-                                  }}
+                                    onPress={() => {
+                                      setDestination(item.stop_name);
+                                      setDestinationOpen(false);
+                                      setScrollEnabled(true);
+                                    }}
                                 >
                                   <View
                                     style={styles.destinationOptionLeft}

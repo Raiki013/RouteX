@@ -156,10 +156,23 @@ export default function ProfileScreen({ navigation }) {
 
   // ACCOUNT ROLE
   const getUserRole = () => {
-    return user?.userLevel === "operator"
-      ? "Bus Operator"
-      : "Passenger";
-  };
+  switch (user?.userLevel?.toLowerCase()) {
+    case "admin":
+      return "Administrator";
+
+    case "cashier":
+      return "Cashier";
+
+    case "operator":
+      return "Bus Operator";
+
+    case "user":
+      return "Passenger";
+
+    default:
+      return "Unknown Role";
+  }
+};
 
   // UPLOAD PROFILE PICTURE
   const handleChangePhoto = async () => {

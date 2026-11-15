@@ -40,14 +40,15 @@ export default function CashierPaymentScreen({ route, navigation }) {
     scannedReference || ""
   );
 
-  const [paymentMethod, setPaymentMethod] = useState("cash");
   const [booking, setBooking] = useState(null);
   const [ticket, setTicket] = useState(null);
 
   const [loading, setLoading] = useState(false);
   const [processing, setProcessing] = useState(false);
 
-  // SWEET ALERT MODAL STATE
+  // ------------------------------------------
+  // CUSTOM ALERT STATE
+  // ------------------------------------------
   const [alertConfig, setAlertConfig] = useState({
     visible: false,
     title: "",
@@ -102,13 +103,10 @@ export default function CashierPaymentScreen({ route, navigation }) {
     switch (alertConfig.type) {
       case "success":
         return "checkmark-circle";
-
       case "error":
         return "close-circle";
-
       case "warning":
         return "alert-circle";
-
       default:
         return "information-circle";
     }
@@ -118,13 +116,10 @@ export default function CashierPaymentScreen({ route, navigation }) {
     switch (alertConfig.type) {
       case "success":
         return COLORS.green;
-
       case "error":
         return COLORS.red;
-
       case "warning":
         return COLORS.orange;
-
       default:
         return COLORS.primary;
     }
@@ -134,16 +129,83 @@ export default function CashierPaymentScreen({ route, navigation }) {
     switch (alertConfig.type) {
       case "success":
         return "#F0FDF4";
-
       case "error":
         return "#FEF2F2";
-
       case "warning":
         return "#FFFBEB";
-
       default:
         return "#EFF6FF";
     }
+  };
+
+  // ------------------------------------------
+  // PASSENGER TYPE FORMAT
+  // ------------------------------------------
+  const formatPassengerType = (type) => {
+    const normalized = String(type || "regular")
+      .toLowerCase()
+      .trim();
+
+    switch (normalized) {
+      case "student":
+        return "Student";
+
+      case "pwd":
+        return "PWD";
+
+      case "senior":
+      case "senior citizen":
+      case "senior_citizen":
+        return "Senior Citizen";
+
+      case "regular":
+        return "Regular";
+
+      default:
+        return type || "Regular";
+    }
+  };
+
+  // ------------------------------------------
+  // DISCOUNT RATE FORMAT
+  // Supports 0.20 or 20
+  // ------------------------------------------
+  const formatDiscountRate = (rate) => {
+    const value = Number(rate || 0);
+
+    const percentage =
+      value > 0 && value <= 1
+        ? value * 100
+        : value;
+
+    return `${percentage.toFixed(0)}%`;
+  };
+
+  // ------------------------------------------
+  // PASSENGER TYPE COLORS
+  // ------------------------------------------
+  const getPassengerTypeColor = (type) => {
+    const normalized = String(type || "")
+      .toLowerCase()
+      .trim();
+
+    if (normalized === "student") {
+      return "#2563EB";
+    }
+
+    if (normalized === "pwd") {
+      return "#7C3AED";
+    }
+
+    if (
+      normalized === "senior" ||
+      normalized === "senior citizen" ||
+      normalized === "senior_citizen"
+    ) {
+      return "#D97706";
+    }
+
+    return COLORS.muted;
   };
 
   // ------------------------------------------
@@ -158,9 +220,17 @@ export default function CashierPaymentScreen({ route, navigation }) {
 
         let query = supabase
           .from("bookings")
-          .select(
-            "booking_id, booking_reference, bus_id, docking_id, seat_number, total_amount, booking_status, payment_status, expires_at"
-          );
+          .select(`
+            booking_id,
+            booking_reference,
+            bus_id,
+            docking_id,
+            total_amount,
+            booking_status,
+            payment_status,
+            expires_at,
+            passenger_count
+          `);
 
         if (id) {
           query = query.eq("booking_id", id);
@@ -181,8 +251,38 @@ export default function CashierPaymentScreen({ route, navigation }) {
           throw new Error("Booking not found.");
         }
 
-        setBooking(data);
+        // Get passenger records separately
+        const {
+          data: passengerRows,
+          error: passengerError,
+        } = await supabase
+          .from("booking_passengers")
+          .select(`
+            booking_passenger_id,
+            passenger_number,
+            passenger_type,
+            regular_fare,
+            discount_rate,
+            discount_amount,
+            final_fare
+          `)
+          .eq("booking_id", data.booking_id)
+          .order("passenger_number", {
+            ascending: true,
+          });
+
+        if (passengerError) throw passengerError;
+
+        setBooking({
+          ...data,
+          booking_passengers: passengerRows || [],
+        });
+
         setReference(data.booking_reference || "");
+
+        console.log("BOOKING ID:", data.booking_id);
+        console.log("PASSENGER QUERY ERROR:", passengerError);
+        console.log("PASSENGER RECORDS:", passengerRows);
 
       } catch (error) {
         console.log("LOAD BOOKING ERROR:", error);
@@ -263,10 +363,10 @@ export default function CashierPaymentScreen({ route, navigation }) {
     }
 
     showAlert(
-      "Confirm Fare Payment",
+      "Confirm Cash Payment",
       `Have you received ₱${Number(
         booking.total_amount
-      ).toFixed(2)} through ${paymentMethod.toUpperCase()}?`,
+      ).toFixed(2)} in cash?`,
       "warning",
       processPayment,
       "Yes, Payment Received",
@@ -287,7 +387,7 @@ export default function CashierPaymentScreen({ route, navigation }) {
         "confirm_terminal_payment",
         {
           p_booking_id: booking.booking_id,
-          p_payment_method: paymentMethod,
+          p_payment_method: "cash",
         }
       );
 
@@ -299,10 +399,8 @@ export default function CashierPaymentScreen({ route, navigation }) {
         );
       }
 
-      // Save generated ticket information.
       setTicket(data);
 
-      // Update the displayed booking status.
       setBooking((previous) => ({
         ...previous,
         booking_status: "confirmed",
@@ -311,7 +409,7 @@ export default function CashierPaymentScreen({ route, navigation }) {
 
       showAlert(
         "Payment Successful",
-        `Fare received successfully!\n\nTicket Code:\n${data.ticket_code}`,
+        `Cash received successfully!\n\nTicket Code:\n${data.ticket_code}`,
         "success"
       );
 
@@ -343,6 +441,17 @@ export default function CashierPaymentScreen({ route, navigation }) {
 
     return COLORS.red;
   };
+
+  // ------------------------------------------
+  // SORT PASSENGERS
+  // ------------------------------------------
+  const passengers = [
+    ...(booking?.booking_passengers || []),
+  ].sort(
+    (a, b) =>
+      Number(a.passenger_number || 0) -
+      Number(b.passenger_number || 0)
+  );
 
   // ------------------------------------------
   // MAIN SCREEN
@@ -486,14 +595,122 @@ export default function CashierPaymentScreen({ route, navigation }) {
               {booking.bus_id ?? "Not available"}
             </Text>
 
-            {/* SEAT */}
-            <Text style={styles.detailLabel}>
-              Seat Number
-            </Text>
+            {/* PASSENGER FARE BREAKDOWN */}
+            <View style={styles.passengerSection}>
+              <View style={styles.passengerHeader}>
+                <View>
+                  <Text style={styles.passengerTitle}>
+                    Passenger Fare Breakdown
+                  </Text>
 
-            <Text style={styles.detailValue}>
-              {booking.seat_number ?? "Not assigned"}
-            </Text>
+                  <Text style={styles.passengerSubtitle}>
+                    Passenger types and applied discounts
+                  </Text>
+                </View>
+
+                <Ionicons
+                  name="people-outline"
+                  size={25}
+                  color={COLORS.primary}
+                />
+              </View>
+
+              {passengers.length > 0 ? (
+                passengers.map((passenger) => (
+                  <View
+                    key={passenger.booking_passenger_id}
+                    style={styles.passengerCard}
+                  >
+                    <View style={styles.passengerTop}>
+                      <Text style={styles.passengerName}>
+                        Passenger {passenger.passenger_number}
+                      </Text>
+
+                      <View
+                        style={[
+                          styles.passengerBadge,
+                          {
+                            backgroundColor:
+                              getPassengerTypeColor(
+                                passenger.passenger_type
+                              ) + "15",
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.passengerBadgeText,
+                            {
+                              color: getPassengerTypeColor(
+                                passenger.passenger_type
+                              ),
+                            },
+                          ]}
+                        >
+                          {formatPassengerType(
+                            passenger.passenger_type
+                          )}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.passengerFareRow}>
+                      <Text style={styles.passengerLabel}>
+                        Regular Fare
+                      </Text>
+
+                      <Text style={styles.passengerValue}>
+                        ₱{Number(
+                          passenger.regular_fare || 0
+                        ).toFixed(2)}
+                      </Text>
+                    </View>
+
+                    <View style={styles.passengerFareRow}>
+                      <Text style={styles.passengerLabel}>
+                        Discount (
+                        {formatDiscountRate(
+                          passenger.discount_rate
+                        )}
+                        )
+                      </Text>
+
+                      <Text style={styles.discountValue}>
+                        -₱{Number(
+                          passenger.discount_amount || 0
+                        ).toFixed(2)}
+                      </Text>
+                    </View>
+
+                    <View style={styles.passengerDivider} />
+
+                    <View style={styles.passengerFareRow}>
+                      <Text style={styles.passengerFinalLabel}>
+                        Final Fare
+                      </Text>
+
+                      <Text style={styles.passengerFinalValue}>
+                        ₱{Number(
+                          passenger.final_fare || 0
+                        ).toFixed(2)}
+                      </Text>
+                    </View>
+                  </View>
+                ))
+              ) : (
+                <View style={styles.noPassengerBox}>
+                  <Ionicons
+                    name="information-circle-outline"
+                    size={20}
+                    color={COLORS.orange}
+                  />
+
+                  <Text style={styles.noPassengerText}>
+                    No individual passenger discount records were found.
+                  </Text>
+                </View>
+              )}
+            </View>
 
             {/* BOOKING STATUS */}
             <Text style={styles.detailLabel}>
@@ -531,7 +748,7 @@ export default function CashierPaymentScreen({ route, navigation }) {
               {String(booking.payment_status).toUpperCase()}
             </Text>
 
-            {/* AMOUNT */}
+            {/* TOTAL AMOUNT */}
             <View style={styles.amountCard}>
               <Text style={styles.amountLabel}>
                 TOTAL FARE TO COLLECT
@@ -562,92 +779,20 @@ export default function CashierPaymentScreen({ route, navigation }) {
               <View style={styles.paymentSection}>
                 <View style={styles.pendingNotice}>
                   <Ionicons
-                    name="time-outline"
+                    name="cash-outline"
                     size={22}
                     color={COLORS.orange}
                   />
 
                   <View style={{ flex: 1 }}>
                     <Text style={styles.pendingTitle}>
-                      Payment Pending
+                      Cash Payment Pending
                     </Text>
 
                     <Text style={styles.pendingDescription}>
-                      Collect the fare before confirming this payment.
+                      Collect the cash fare before confirming this payment.
                     </Text>
                   </View>
-                </View>
-
-                <Text style={styles.label}>
-                  Select Payment Method
-                </Text>
-
-                <View style={styles.methodRow}>
-                  {/* CASH */}
-                  <TouchableOpacity
-                    style={[
-                      styles.methodButton,
-                      paymentMethod === "cash" &&
-                        styles.methodSelected,
-                    ]}
-                    onPress={() =>
-                      setPaymentMethod("cash")
-                    }
-                    disabled={processing}
-                  >
-                    <Ionicons
-                      name="cash-outline"
-                      size={23}
-                      color={
-                        paymentMethod === "cash"
-                          ? COLORS.white
-                          : COLORS.primary
-                      }
-                    />
-
-                    <Text
-                      style={[
-                        styles.methodText,
-                        paymentMethod === "cash" &&
-                          styles.methodTextSelected,
-                      ]}
-                    >
-                      Cash
-                    </Text>
-                  </TouchableOpacity>
-
-                  {/* GCASH */}
-                  <TouchableOpacity
-                    style={[
-                      styles.methodButton,
-                      paymentMethod === "gcash" &&
-                        styles.methodSelected,
-                    ]}
-                    onPress={() =>
-                      setPaymentMethod("gcash")
-                    }
-                    disabled={processing}
-                  >
-                    <Ionicons
-                      name="phone-portrait-outline"
-                      size={23}
-                      color={
-                        paymentMethod === "gcash"
-                          ? COLORS.white
-                          : COLORS.primary
-                      }
-                    />
-
-                    <Text
-                      style={[
-                        styles.methodText,
-                        paymentMethod === "gcash" &&
-                          styles.methodTextSelected,
-                      ]}
-                    >
-                      GCash
-                    </Text>
-                  </TouchableOpacity>
                 </View>
 
                 <TouchableOpacity
@@ -669,7 +814,7 @@ export default function CashierPaymentScreen({ route, navigation }) {
                       />
 
                       <Text style={styles.confirmText}>
-                        Confirm Payment
+                        Confirm Cash Payment
                       </Text>
                     </>
                   )}
@@ -739,13 +884,7 @@ export default function CashierPaymentScreen({ route, navigation }) {
                 </Text>
 
                 <Text style={styles.ticketDetail}>
-                  Seat: {booking.seat_number}
-                </Text>
-
-                <Text style={styles.ticketDetail}>
-                  Payment: {(
-                    ticket.payment_method || paymentMethod
-                  ).toUpperCase()}
+                  Payment: CASH
                 </Text>
 
                 <Text style={styles.ticketDetail}>
@@ -780,7 +919,7 @@ export default function CashierPaymentScreen({ route, navigation }) {
         )}
       </ScrollView>
 
-      {/* SWEET ALERT STYLE MODAL */}
+      {/* CUSTOM ALERT MODAL */}
       <Modal
         visible={alertConfig.visible}
         transparent
@@ -832,6 +971,7 @@ export default function CashierPaymentScreen({ route, navigation }) {
                   {
                     backgroundColor: getAlertColor(),
                     flex: alertConfig.cancelText ? 1 : undefined,
+                    alignSelf: "center",
                   },
                 ]}
                 onPress={confirmAlert}
@@ -1011,6 +1151,121 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 
+  // PASSENGER FARE BREAKDOWN
+  passengerSection: {
+    marginTop: 23,
+  },
+
+  passengerHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 13,
+  },
+
+  passengerTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: COLORS.dark,
+  },
+
+  passengerSubtitle: {
+    fontSize: 11,
+    color: COLORS.muted,
+    marginTop: 4,
+  },
+
+  passengerCard: {
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 13,
+    padding: 14,
+    marginBottom: 12,
+  },
+
+  passengerTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 13,
+  },
+
+  passengerName: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: COLORS.dark,
+  },
+
+  passengerBadge: {
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+
+  passengerBadgeText: {
+    fontSize: 11,
+    fontWeight: "800",
+  },
+
+  passengerFareRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 8,
+  },
+
+  passengerLabel: {
+    fontSize: 12,
+    color: COLORS.muted,
+  },
+
+  passengerValue: {
+    fontSize: 13,
+    color: COLORS.dark,
+    fontWeight: "600",
+  },
+
+  discountValue: {
+    fontSize: 13,
+    color: COLORS.green,
+    fontWeight: "800",
+  },
+
+  passengerDivider: {
+    height: 1,
+    backgroundColor: COLORS.border,
+    marginTop: 12,
+    marginBottom: 4,
+  },
+
+  passengerFinalLabel: {
+    fontSize: 13,
+    color: COLORS.dark,
+    fontWeight: "800",
+  },
+
+  passengerFinalValue: {
+    fontSize: 16,
+    color: COLORS.primary,
+    fontWeight: "900",
+  },
+
+  noPassengerBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+    backgroundColor: "#FFFBEB",
+    borderRadius: 10,
+    padding: 13,
+  },
+
+  noPassengerText: {
+    flex: 1,
+    color: "#92400E",
+    fontSize: 12,
+  },
+
   amountCard: {
     backgroundColor: "#EFF6FF",
     borderRadius: 12,
@@ -1056,37 +1311,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
     marginTop: 3,
-  },
-
-  methodRow: {
-    flexDirection: "row",
-    gap: 10,
-  },
-
-  methodButton: {
-    flex: 1,
-    padding: 14,
-    borderRadius: 11,
-    borderWidth: 1,
-    borderColor: "#BFDBFE",
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 8,
-  },
-
-  methodSelected: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
-  },
-
-  methodText: {
-    color: COLORS.primary,
-    fontWeight: "700",
-  },
-
-  methodTextSelected: {
-    color: COLORS.white,
   },
 
   confirmButton: {
@@ -1205,7 +1429,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
 
-  // SWEET ALERT MODAL STYLES
+  // CUSTOM ALERT MODAL
   alertOverlay: {
     flex: 1,
     backgroundColor: "rgba(15, 23, 42, 0.55)",
@@ -1252,10 +1476,13 @@ const styles = StyleSheet.create({
   alertButtonRow: {
     width: "100%",
     flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
     gap: 10,
   },
 
   alertConfirmButton: {
+    flex: 1,
     minHeight: 47,
     paddingHorizontal: 18,
     borderRadius: 11,
