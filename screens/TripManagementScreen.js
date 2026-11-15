@@ -28,22 +28,6 @@ import {
   stopOperatorBackgroundGPS,
 } from "../tasks/backgroundLocation";
 
-// ==========================================
-// DESTINATIONS
-// ==========================================
-
-const DESTINATIONS = [
-  "Cubao",
-  "TPLEX",
-  "Vigan",
-  "Laoag",
-  "San Fernando City",
-  "Baguio",
-  "Rosario",
-  "Agoo",
-  "Aringay",
-];
-
 export default function TripManagementScreen({
   navigation,
   route,
@@ -53,8 +37,16 @@ export default function TripManagementScreen({
   const [trips, setTrips] = useState([]);
   const [selectedBus, setSelectedBus] = useState(null);
 
+  // DYNAMIC ROUTES
+  const [routes, setRoutes] = useState([]);
+  const [selectedRoute, setSelectedRoute] = useState(null);
+  const [routeStops, setRouteStops] = useState([]);
+
+  const [routeOpen, setRouteOpen] = useState(false);
   const [destination, setDestination] = useState("");
   const [destinationOpen, setDestinationOpen] = useState(false);
+
+  const [routeLoading, setRouteLoading] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -107,9 +99,7 @@ export default function TripManagementScreen({
 
     setAlertAction(null);
 
-    if (action) {
-      action();
-    }
+    if (action) action();
   };
 
   // ==========================================
@@ -147,17 +137,18 @@ export default function TripManagementScreen({
   const loadBuses = async (operatorId) => {
     const { data, error } = await supabase
       .from("buses")
-      .select(`
-        bus_id,
-        operator_id,
-        bus_name,
-        plate_number,
-        bus_type,
-        capacity,
-        bus_status,
-        company,
-        availability_status
-      `)
+        .select(`
+          bus_id,
+          operator_id,
+          bus_name,
+          plate_number,
+          bus_type,
+          capacity,
+          bus_status,
+          company,
+          company_id,
+          availability_status
+        `)
       .eq("operator_id", operatorId)
       .order("bus_id", { ascending: true });
 
@@ -171,27 +162,249 @@ export default function TripManagementScreen({
   // ==========================================
 
   const loadTrips = async (operatorId) => {
-    const { data, error } = await supabase
-      .from("bus_trips")
-      .select(`
-        trip_id,
-        bus_id,
-        operator_id,
-        destination,
-        status,
-        started_at,
-        ended_at
-      `)
-      .eq("operator_id", operatorId)
-      .in("status", ["planned", "active"])
-      .order("started_at", {
-        ascending: false,
-        nullsFirst: false,
+  const { data, error } = await supabase
+    .from("bus_trips")
+    .select(`
+      trip_id,
+      bus_id,
+      operator_id,
+      route_id,
+      destination,
+      status,
+      started_at,
+      ended_at
+    `)
+    .eq("operator_id", operatorId)
+    .order("started_at", { ascending: false });
+
+  if (error) throw error;
+
+  return data || [];
+};
+
+  // ==========================================
+  // LOAD ROUTES FOR SELECTED BUS
+  // ==========================================
+
+  const loadRoutesForBus = async (bus) => {
+    setRouteLoading(true);
+
+    setRoutes([]);
+    setSelectedRoute(null);
+    setRouteStops([]);
+    setDestination("");
+    setRouteOpen(false);
+    setDestinationOpen(false);
+
+    try {
+      if (!bus?.company_id) {
+        throw new Error(
+          "This bus has no company_id assigned. Please check its record in the buses table."
+        );
+      }
+
+      // STEP 1: Find the active terminal belonging to this company.
+
+      const {
+        data: terminals,
+        error: terminalError,
+      } = await supabase
+        .from("terminals")
+        .select(`
+          terminal_id,
+          terminal_name,
+          company_id
+        `)
+        .eq("company_id", bus.company_id)
+        .eq("is_active", true);
+
+      if (terminalError) throw terminalError;
+
+      if (!terminals || terminals.length === 0) {
+        throw new Error(
+          "No active terminal was found for this bus company."
+        );
+      }
+
+      const terminalIds = terminals.map(
+        (terminal) => terminal.terminal_id
+      );
+
+      // STEP 2: Find routes shared with the company's terminals.
+
+      const {
+        data: accessRecords,
+        error: accessError,
+      } = await supabase
+        .from("route_terminal_access")
+        .select("route_id, terminal_id")
+        .in("terminal_id", terminalIds);
+
+      if (accessError) throw accessError;
+
+      if (!accessRecords || accessRecords.length === 0) {
+        throw new Error(
+          "No shared routes are assigned to this company's terminal yet."
+        );
+      }
+
+      const routeIds = [
+        ...new Set(
+          accessRecords.map((item) => item.route_id)
+        ),
+      ];
+
+      // STEP 3: Get active routes.
+
+      const {
+        data: routeData,
+        error: routeError,
+      } = await supabase
+        .from("bus_routes")
+        .select(`
+          route_id,
+          origin_terminal_id,
+          route_name,
+          destination_location,
+          is_active
+        `)
+        .in("route_id", routeIds)
+        .eq("is_active", true)
+        .order("route_id", { ascending: true });
+
+      if (routeError) throw routeError;
+
+      if (!routeData || routeData.length === 0) {
+        throw new Error(
+          "No active routes are available for this terminal."
+        );
+      }
+
+      // Associate each route with the terminal that grants access.
+
+      const routesWithTerminal = routeData.map((item) => {
+        const access = accessRecords.find(
+          (record) =>
+            String(record.route_id) === String(item.route_id)
+        );
+
+        const terminal = terminals.find(
+          (record) =>
+            String(record.terminal_id) ===
+            String(access?.terminal_id)
+        );
+
+        return {
+          ...item,
+          terminal_name: terminal?.terminal_name || "",
+          terminal_id: terminal?.terminal_id || null,
+        };
       });
+
+      setRoutes(routesWithTerminal);
+
+      // Automatically select the first available route.
+
+      const firstRoute = routesWithTerminal[0];
+
+      setSelectedRoute(firstRoute);
+
+      await loadStopsForRoute(
+        firstRoute.route_id,
+        firstRoute.terminal_name
+      );
+
+    } catch (error) {
+      console.log("LOAD ROUTES ERROR:", error);
+
+      setRoutes([]);
+      setSelectedRoute(null);
+      setRouteStops([]);
+
+      showAlert(
+        "Route Loading Error",
+        error.message || "Unable to load routes for this bus.",
+        "error"
+      );
+    } finally {
+      setRouteLoading(false);
+    }
+  };
+
+  // ==========================================
+  // LOAD STOPS FOR SELECTED ROUTE
+  // ==========================================
+
+  const loadStopsForRoute = async (
+    routeId,
+    terminalName = ""
+  ) => {
+    setRouteStops([]);
+    setDestination("");
+
+    const {
+      data,
+      error,
+    } = await supabase
+      .from("route_stops")
+      .select(`
+        stop_id,
+        route_id,
+        stop_name,
+        stop_order
+      `)
+      .eq("route_id", routeId)
+      .order("stop_order", { ascending: true });
 
     if (error) throw error;
 
-    return data || [];
+    // Remove the starting terminal if it is also stored
+    // as the first route stop.
+
+    const normalizedTerminal = terminalName
+      .trim()
+      .toLowerCase();
+
+    const filteredStops = (data || []).filter((stop) => {
+      return (
+        stop.stop_name?.trim().toLowerCase() !==
+        normalizedTerminal
+      );
+    });
+
+    setRouteStops(filteredStops);
+  };
+
+  // ==========================================
+  // SELECT ROUTE
+  // ==========================================
+
+  const handleSelectRoute = async (item) => {
+    if (saving) return;
+
+    try {
+      setRouteOpen(false);
+      setSelectedRoute(item);
+      setDestination("");
+      setDestinationOpen(false);
+      setRouteLoading(true);
+
+      await loadStopsForRoute(
+        item.route_id,
+        item.terminal_name
+      );
+
+    } catch (error) {
+      console.log("SELECT ROUTE ERROR:", error);
+
+      showAlert(
+        "Unable to Load Stops",
+        error.message || "Unable to load destinations for this route.",
+        "error"
+      );
+    } finally {
+      setRouteLoading(false);
+    }
   };
 
   // ==========================================
@@ -199,16 +412,20 @@ export default function TripManagementScreen({
   // ==========================================
 
   const getBusTrip = (busId, tripList = trips) => {
-    const busTrips = tripList.filter(
-      (item) => String(item.bus_id) === String(busId)
-    );
+  const safeTrips = Array.isArray(tripList)
+    ? tripList
+    : [];
 
-    return (
-      busTrips.find((item) => item.status === "active") ||
-      busTrips.find((item) => item.status === "planned") ||
-      null
-    );
-  };
+  const busTrips = safeTrips.filter(
+    (item) => String(item.bus_id) === String(busId)
+  );
+
+  return (
+    busTrips.find((item) => item.status === "active") ||
+    busTrips.find((item) => item.status === "planned") ||
+    null
+  );
+};
 
   // ==========================================
   // LOAD SCREEN DATA
@@ -259,6 +476,15 @@ export default function TripManagementScreen({
       }
 
       setSelectedBus(currentSelectedBus || null);
+
+      if (currentSelectedBus) {
+        await loadRoutesForBus(currentSelectedBus);
+      } else {
+        setRoutes([]);
+        setSelectedRoute(null);
+        setRouteStops([]);
+      }
+
     } catch (error) {
       console.log("TRIP MANAGEMENT LOAD ERROR:", error);
 
@@ -357,6 +583,7 @@ export default function TripManagementScreen({
                 status
               );
             });
+
         } catch (error) {
           console.log("REALTIME SETUP ERROR:", error);
         }
@@ -378,10 +605,13 @@ export default function TripManagementScreen({
   // SELECT BUS
   // ==========================================
 
-  const handleSelectBus = (bus) => {
+  const handleSelectBus = async (bus) => {
     setSelectedBus(bus);
     setDestination("");
+    setRouteOpen(false);
     setDestinationOpen(false);
+
+    await loadRoutesForBus(bus);
   };
 
   // ==========================================
@@ -425,9 +655,7 @@ export default function TripManagementScreen({
       if (error) throw error;
 
       if (!data) {
-        throw new Error(
-          "Unable to update bus availability."
-        );
+        throw new Error("Unable to update bus availability.");
       }
 
       setSelectedBus(data);
@@ -447,6 +675,7 @@ export default function TripManagementScreen({
         config.message,
         config.type
       );
+
     } catch (error) {
       console.log("AVAILABILITY UPDATE ERROR:", error);
 
@@ -615,6 +844,7 @@ export default function TripManagementScreen({
         "Your bus is now in transit. GPS tracking is active.",
         "success"
       );
+
     } catch (error) {
       console.log("START TRANSIT ERROR:", error);
 
@@ -652,6 +882,7 @@ export default function TripManagementScreen({
       );
 
       await loadData({ silent: true });
+
     }
   };
 
@@ -663,18 +894,19 @@ export default function TripManagementScreen({
     if (saving) return;
 
     if (!user) {
-      showAlert(
-        "Error",
-        "User information is not available.",
-        "error"
-      );
+      showAlert("Error", "User information is not available.", "error");
       return;
     }
 
     if (!selectedBus) {
+      showAlert("No Bus Selected", "Please select a bus first.", "warning");
+      return;
+    }
+
+    if (!selectedRoute) {
       showAlert(
-        "No Bus Selected",
-        "Please select a bus first.",
+        "No Route Selected",
+        "Please select an available route first.",
         "warning"
       );
       return;
@@ -703,12 +935,13 @@ export default function TripManagementScreen({
     try {
       setSaving(true);
 
-      const { data, error } = await supabase
+      const { data: newTrip, error } = await supabase
         .from("bus_trips")
         .insert({
           bus_id: selectedBus.bus_id,
           operator_id: user.id,
-          destination,
+          route_id: selectedRoute.route_id,
+          destination: destination,
           status: "planned",
         })
         .select()
@@ -720,7 +953,7 @@ export default function TripManagementScreen({
       setDestinationOpen(false);
 
       if (mode === "instant") {
-        await startTransitImmediately(selectedBus, data);
+        await startTransitImmediately(selectedBus,newTrip);
       } else {
         await loadData({ silent: true });
 
@@ -731,12 +964,13 @@ export default function TripManagementScreen({
           "Continue",
           () => {
             navigation.navigate("OperatorDocking", {
-              tripId: data.trip_id,
+              tripId: newTrip.trip_id,
               busId: selectedBus.bus_id,
             });
           }
         );
       }
+
     } catch (error) {
       console.log("CREATE TRIP ERROR:", error);
 
@@ -822,10 +1056,7 @@ export default function TripManagementScreen({
         .eq("status", "active");
 
       if (remainingError) {
-        console.log(
-          "ACTIVE TRIPS CHECK ERROR:",
-          remainingError
-        );
+        console.log("ACTIVE TRIPS CHECK ERROR:", remainingError);
       } else if (
         !remainingTrips ||
         remainingTrips.length === 0
@@ -840,6 +1071,7 @@ export default function TripManagementScreen({
       );
 
       await loadData({ silent: true });
+
     } catch (error) {
       console.log("END TRIP ERROR:", error);
 
@@ -898,13 +1130,10 @@ export default function TripManagementScreen({
     switch (status) {
       case "available":
         return "Available";
-
       case "standing":
         return "Standing";
-
       case "not_available":
         return "Not Available";
-
       default:
         return "Not Set";
     }
@@ -918,11 +1147,7 @@ export default function TripManagementScreen({
     return (
       <>
         <View style={styles.center}>
-          <ActivityIndicator
-            size="large"
-            color="#1677D2"
-          />
-
+          <ActivityIndicator size="large" color="#1677D2" />
           <Text style={styles.loadingText}>
             Loading your buses...
           </Text>
@@ -981,24 +1206,16 @@ export default function TripManagementScreen({
             onPress={onRefresh}
             activeOpacity={0.8}
           >
-            <Ionicons
-              name="refresh"
-              size={21}
-              color="#1677D2"
-            />
+            <Ionicons name="refresh" size={21} color="#1677D2" />
           </TouchableOpacity>
         </View>
 
-        {/* SUMMARY CARD */}
+        {/* SUMMARY */}
 
         <View style={styles.summaryCard}>
           <View style={styles.summaryContent}>
             <View style={styles.summaryIcon}>
-              <Ionicons
-                name="bus"
-                size={27}
-                color="#FFFFFF"
-              />
+              <Ionicons name="bus" size={27} color="#FFFFFF" />
             </View>
 
             <View>
@@ -1011,18 +1228,13 @@ export default function TripManagementScreen({
               </Text>
             </View>
           </View>
-
-         
         </View>
 
         {/* BUS SECTION */}
 
         <View style={styles.sectionHeader}>
           <View>
-            <Text style={styles.sectionTitle}>
-              My Buses
-            </Text>
-
+            <Text style={styles.sectionTitle}>My Buses</Text>
             <Text style={styles.sectionSubtitle}>
               Select a bus to manage its operations
             </Text>
@@ -1045,9 +1257,7 @@ export default function TripManagementScreen({
               />
             </View>
 
-            <Text style={styles.emptyTitle}>
-              No Buses Found
-            </Text>
+            <Text style={styles.emptyTitle}>No Buses Found</Text>
 
             <Text style={styles.emptyText}>
               No buses are currently assigned to your account.
@@ -1059,8 +1269,7 @@ export default function TripManagementScreen({
             const trip = getBusTrip(bus.bus_id);
 
             const isSelected =
-              String(selectedBus?.bus_id) ===
-              String(bus.bus_id);
+              String(selectedBus?.bus_id) === String(bus.bus_id);
 
             const busStatus = (
               bus.bus_status || "offline"
@@ -1076,8 +1285,6 @@ export default function TripManagementScreen({
                 ]}
                 onPress={() => handleSelectBus(bus)}
               >
-                {/* BUS INFORMATION */}
-
                 <View style={styles.busTopRow}>
                   <View
                     style={[
@@ -1129,8 +1336,6 @@ export default function TripManagementScreen({
                   </View>
                 </View>
 
-                {/* BUS DETAILS */}
-
                 <View style={styles.busDetails}>
                   <View style={styles.detailItem}>
                     <Ionicons
@@ -1138,7 +1343,6 @@ export default function TripManagementScreen({
                       size={16}
                       color="#64748B"
                     />
-
                     <Text style={styles.detailText}>
                       {bus.bus_type || "Bus"}
                     </Text>
@@ -1150,7 +1354,6 @@ export default function TripManagementScreen({
                       size={16}
                       color="#64748B"
                     />
-
                     <Text style={styles.detailText}>
                       {bus.capacity ?? "N/A"} seats
                     </Text>
@@ -1158,8 +1361,6 @@ export default function TripManagementScreen({
                 </View>
 
                 <View style={styles.tripDivider} />
-
-                {/* TRIP INFORMATION */}
 
                 {trip ? (
                   <View style={styles.tripInfo}>
@@ -1217,8 +1418,6 @@ export default function TripManagementScreen({
                     </Text>
                   </View>
                 )}
-
-                {/* SELECTED INDICATOR */}
 
                 {isSelected && (
                   <View style={styles.selectedIndicator}>
@@ -1282,134 +1481,79 @@ export default function TripManagementScreen({
               Choose the current passenger availability of this bus.
             </Text>
 
-            {/* AVAILABILITY OPTIONS */}
-
             <View style={styles.availabilityOptions}>
-              <TouchableOpacity
-                style={[
-                  styles.availabilityOption,
-                  styles.availableOption,
-                  selectedBus.availability_status === "available" &&
-                    styles.selectedAvailableOption,
-                ]}
-                disabled={saving}
-                onPress={() => updateAvailability("available")}
-                activeOpacity={0.8}
-              >
-                <Ionicons
-                  name="checkmark-circle"
-                  size={25}
-                  color={
-                    selectedBus.availability_status === "available"
-                      ? "#FFFFFF"
-                      : "#16A34A"
-                  }
-                />
+              {[
+                {
+                  value: "available",
+                  title: "Available",
+                  subtitle: "Seats available",
+                  icon: "checkmark-circle",
+                  normal: "#16A34A",
+                  selected: styles.selectedAvailableOption,
+                  normalStyle: styles.availableOption,
+                },
+                {
+                  value: "standing",
+                  title: "Standing",
+                  subtitle: "Full bus",
+                  icon: "people",
+                  normal: "#D97706",
+                  selected: styles.selectedStandingOption,
+                  normalStyle: styles.standingOption,
+                },
+                {
+                  value: "not_available",
+                  title: "Unavailable",
+                  subtitle: "Not accepting",
+                  icon: "close-circle",
+                  normal: "#DC2626",
+                  selected: styles.selectedUnavailableOption,
+                  normalStyle: styles.unavailableOption,
+                },
+              ].map((option) => {
+                const active =
+                  selectedBus.availability_status === option.value;
 
-                <Text
-                  style={[
-                    styles.optionTitle,
-                    selectedBus.availability_status === "available" &&
-                      styles.selectedOptionText,
-                  ]}
-                >
-                  Available
-                </Text>
+                return (
+                  <TouchableOpacity
+                    key={option.value}
+                    style={[
+                      styles.availabilityOption,
+                      option.normalStyle,
+                      active && option.selected,
+                    ]}
+                    disabled={saving}
+                    onPress={() =>
+                      updateAvailability(option.value)
+                    }
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons
+                      name={option.icon}
+                      size={25}
+                      color={active ? "#FFFFFF" : option.normal}
+                    />
 
-                <Text
-                  style={[
-                    styles.optionSubtitle,
-                    selectedBus.availability_status === "available" &&
-                      styles.selectedOptionText,
-                  ]}
-                >
-                  Seats available
-                </Text>
-              </TouchableOpacity>
+                    <Text
+                      style={[
+                        styles.optionTitle,
+                        active && styles.selectedOptionText,
+                      ]}
+                    >
+                      {option.title}
+                    </Text>
 
-              <TouchableOpacity
-                style={[
-                  styles.availabilityOption,
-                  styles.standingOption,
-                  selectedBus.availability_status === "standing" &&
-                    styles.selectedStandingOption,
-                ]}
-                disabled={saving}
-                onPress={() => updateAvailability("standing")}
-                activeOpacity={0.8}
-              >
-                <Ionicons
-                  name="people"
-                  size={25}
-                  color={
-                    selectedBus.availability_status === "standing"
-                      ? "#FFFFFF"
-                      : "#D97706"
-                  }
-                />
-
-                <Text
-                  style={[
-                    styles.optionTitle,
-                    selectedBus.availability_status === "standing" &&
-                      styles.selectedOptionText,
-                  ]}
-                >
-                  Standing
-                </Text>
-
-                <Text
-                  style={[
-                    styles.optionSubtitle,
-                    selectedBus.availability_status === "standing" &&
-                      styles.selectedOptionText,
-                  ]}
-                >
-                  Full bus
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.availabilityOption,
-                  styles.unavailableOption,
-                  selectedBus.availability_status === "not_available" &&
-                    styles.selectedUnavailableOption,
-                ]}
-                disabled={saving}
-                onPress={() => updateAvailability("not_available")}
-                activeOpacity={0.8}
-              >
-                <Ionicons
-                  name="close-circle"
-                  size={25}
-                  color={
-                    selectedBus.availability_status === "not_available"
-                      ? "#FFFFFF"
-                      : "#DC2626"
-                  }
-                />
-
-                <Text
-                  style={[
-                    styles.optionTitle,
-                    selectedBus.availability_status === "not_available" &&
-                      styles.selectedOptionText,
-                  ]}
-                >
-                  Unavailable
-                </Text>
-
-                <Text
-                  style={[
-                    styles.optionSubtitle,
-                    selectedBus.availability_status === "not_available" &&
-                      styles.selectedOptionText,
-                  ]}
-                >
-                  Not accepting
-                </Text>
-              </TouchableOpacity>
+                    <Text
+                      style={[
+                        styles.optionSubtitle,
+                        active && styles.selectedOptionText,
+                      ]}
+                    >
+                      {option.subtitle}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
 
             {saving && (
@@ -1424,8 +1568,6 @@ export default function TripManagementScreen({
                 </Text>
               </View>
             )}
-
-            {/* CURRENT AVAILABILITY */}
 
             <View style={styles.currentAvailability}>
               <Text style={styles.currentAvailabilityLabel}>
@@ -1496,105 +1638,256 @@ export default function TripManagementScreen({
               </View>
             ) : (
               <>
+                {/* ROUTE SELECTOR */}
+
                 <Text style={styles.inputLabel}>
-                  Select Destination
+                  Select Route
                 </Text>
 
-                {/* DESTINATION DROPDOWN */}
-
-                <TouchableOpacity
-                  style={[
-                    styles.destinationDropdown,
-                    destinationOpen && styles.destinationDropdownOpen,
-                  ]}
-                  activeOpacity={0.8}
-                  onPress={() =>
-                    setDestinationOpen(!destinationOpen)
-                  }
-                  disabled={saving}
-                >
-                  <View style={styles.destinationLeft}>
-                    <Ionicons
-                      name="location-outline"
-                      size={19}
+                {routeLoading ? (
+                  <View style={styles.routeLoadingBox}>
+                    <ActivityIndicator
+                      size="small"
                       color="#1677D2"
                     />
 
-                    <Text
-                      style={[
-                        styles.destinationPlaceholder,
-                        destination && styles.destinationSelected,
-                      ]}
-                    >
-                      {destination || "Choose a destination"}
+                    <Text style={styles.routeLoadingText}>
+                      Loading company routes...
                     </Text>
                   </View>
+                ) : routes.length === 0 ? (
+                  <View style={styles.noRoutesBox}>
+                    <Ionicons
+                      name="alert-circle-outline"
+                      size={20}
+                      color="#D97706"
+                    />
 
-                  <Ionicons
-                    name={
-                      destinationOpen
-                        ? "chevron-up"
-                        : "chevron-down"
-                    }
-                    size={20}
-                    color="#64748B"
-                  />
-                </TouchableOpacity>
-
-                {destinationOpen && (
-                  <View style={styles.destinationOptions}>
-                    <ScrollView
-                      nestedScrollEnabled
-                      style={styles.destinationOptionsScroll}
-                      keyboardShouldPersistTaps="handled"
-                      showsVerticalScrollIndicator={false}
+                    <Text style={styles.noRoutesText}>
+                      No routes are available for this bus company.
+                      Check its company_id, active terminal, and
+                      route_terminal_access records.
+                    </Text>
+                  </View>
+                ) : (
+                  <>
+                    <TouchableOpacity
+                      style={[
+                        styles.destinationDropdown,
+                        routeOpen && styles.destinationDropdownOpen,
+                      ]}
+                      activeOpacity={0.8}
+                      onPress={() => setRouteOpen(!routeOpen)}
+                      disabled={saving}
                     >
-                      {DESTINATIONS.map((item) => (
-                        <TouchableOpacity
-                          key={item}
+                      <View style={styles.destinationLeft}>
+                        <Ionicons
+                          name="map-outline"
+                          size={19}
+                          color="#1677D2"
+                        />
+
+                        <Text
                           style={[
-                            styles.destinationOption,
-                            destination === item &&
-                              styles.destinationOptionSelected,
+                            styles.destinationPlaceholder,
+                            selectedRoute &&
+                              styles.destinationSelected,
                           ]}
-                          onPress={() => {
-                            setDestination(item);
-                            setDestinationOpen(false);
-                          }}
                         >
-                          <View style={styles.destinationOptionLeft}>
+                          {selectedRoute?.route_name ||
+                            "Choose a route"}
+                        </Text>
+                      </View>
+
+                      <Ionicons
+                        name={
+                          routeOpen
+                            ? "chevron-up"
+                            : "chevron-down"
+                        }
+                        size={20}
+                        color="#64748B"
+                      />
+                    </TouchableOpacity>
+
+                    {routeOpen && (
+                      <View style={styles.destinationOptions}>
+                        {routes.map((item) => (
+                          <TouchableOpacity
+                            key={String(item.route_id)}
+                            style={[
+                              styles.destinationOption,
+                              String(selectedRoute?.route_id) ===
+                                String(item.route_id) &&
+                                styles.destinationOptionSelected,
+                            ]}
+                            onPress={() =>
+                              handleSelectRoute(item)
+                            }
+                          >
+                            <View
+                              style={styles.destinationOptionLeft}
+                            >
+                              <Ionicons
+                                name="map-outline"
+                                size={17}
+                                color="#1677D2"
+                              />
+
+                              <View style={{ flex: 1 }}>
+                                <Text
+                                  style={[
+                                    styles.destinationOptionText,
+                                    String(selectedRoute?.route_id) ===
+                                      String(item.route_id) &&
+                                      styles.destinationOptionTextSelected,
+                                  ]}
+                                >
+                                  {item.route_name}
+                                </Text>
+
+                                <Text style={styles.routeTerminalText}>
+                                  From {item.terminal_name}
+                                </Text>
+                              </View>
+                            </View>
+
+                            {String(selectedRoute?.route_id) ===
+                              String(item.route_id) && (
+                              <Ionicons
+                                name="checkmark-circle"
+                                size={19}
+                                color="#1677D2"
+                              />
+                            )}
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    )}
+
+                    {/* DESTINATION SELECTOR */}
+
+                    <Text style={[styles.inputLabel, { marginTop: 13 }]}>
+                      Select Destination
+                    </Text>
+
+                    {routeStops.length === 0 ? (
+                      <View style={styles.noRoutesBox}>
+                        <Ionicons
+                          name="information-circle-outline"
+                          size={20}
+                          color="#D97706"
+                        />
+
+                        <Text style={styles.noRoutesText}>
+                          This route has no destination stops yet.
+                          Add stops to the route_stops table first.
+                        </Text>
+                      </View>
+                    ) : (
+                      <>
+                        <TouchableOpacity
+                          style={[
+                            styles.destinationDropdown,
+                            destinationOpen &&
+                              styles.destinationDropdownOpen,
+                          ]}
+                          activeOpacity={0.8}
+                          onPress={() =>
+                            setDestinationOpen(!destinationOpen)
+                          }
+                          disabled={saving}
+                        >
+                          <View style={styles.destinationLeft}>
                             <Ionicons
                               name="location-outline"
-                              size={17}
-                              color={
-                                destination === item
-                                  ? "#1677D2"
-                                  : "#94A3B8"
-                              }
+                              size={19}
+                              color="#1677D2"
                             />
 
                             <Text
                               style={[
-                                styles.destinationOptionText,
-                                destination === item &&
-                                  styles.destinationOptionTextSelected,
+                                styles.destinationPlaceholder,
+                                destination &&
+                                  styles.destinationSelected,
                               ]}
                             >
-                              {item}
+                              {destination ||
+                                "Choose a destination"}
                             </Text>
                           </View>
 
-                          {destination === item && (
-                            <Ionicons
-                              name="checkmark-circle"
-                              size={19}
-                              color="#1677D2"
-                            />
-                          )}
+                          <Ionicons
+                            name={
+                              destinationOpen
+                                ? "chevron-up"
+                                : "chevron-down"
+                            }
+                            size={20}
+                            color="#64748B"
+                          />
                         </TouchableOpacity>
-                      ))}
-                    </ScrollView>
-                  </View>
+
+                        {destinationOpen && (
+                          <View style={styles.destinationOptions}>
+                            <ScrollView
+                              nestedScrollEnabled
+                              style={styles.destinationOptionsScroll}
+                              keyboardShouldPersistTaps="handled"
+                              showsVerticalScrollIndicator={false}
+                            >
+                              {routeStops.map((item) => (
+                                <TouchableOpacity
+                                  key={String(item.stop_id)}
+                                  style={[
+                                    styles.destinationOption,
+                                    destination === item.stop_name &&
+                                      styles.destinationOptionSelected,
+                                  ]}
+                                  onPress={() => {
+                                    setDestination(item.stop_name);
+                                    setDestinationOpen(false);
+                                  }}
+                                >
+                                  <View
+                                    style={styles.destinationOptionLeft}
+                                  >
+                                    <Ionicons
+                                      name="location-outline"
+                                      size={17}
+                                      color={
+                                        destination === item.stop_name
+                                          ? "#1677D2"
+                                          : "#94A3B8"
+                                      }
+                                    />
+
+                                    <Text
+                                      style={[
+                                        styles.destinationOptionText,
+                                        destination === item.stop_name &&
+                                          styles.destinationOptionTextSelected,
+                                      ]}
+                                    >
+                                      {item.stop_name}
+                                    </Text>
+                                  </View>
+
+                                  {destination === item.stop_name && (
+                                    <Ionicons
+                                      name="checkmark-circle"
+                                      size={19}
+                                      color="#1677D2"
+                                    />
+                                  )}
+                                </TouchableOpacity>
+                              ))}
+                            </ScrollView>
+                          </View>
+                        )}
+                      </>
+                    )}
+                  </>
                 )}
 
                 {/* START TRANSIT */}
@@ -1602,11 +1895,19 @@ export default function TripManagementScreen({
                 <TouchableOpacity
                   style={[
                     styles.startTransitButton,
-                    (saving || !destination) &&
+                    (saving ||
+                      !destination ||
+                      !selectedRoute ||
+                      routeStops.length === 0) &&
                       styles.disabledButton,
                   ]}
                   onPress={() => createTrip("instant")}
-                  disabled={saving || !destination}
+                  disabled={
+                    saving ||
+                    !destination ||
+                    !selectedRoute ||
+                    routeStops.length === 0
+                  }
                   activeOpacity={0.85}
                 >
                   {saving ? (
@@ -1637,11 +1938,19 @@ export default function TripManagementScreen({
                 <TouchableOpacity
                   style={[
                     styles.dockingButton,
-                    (saving || !destination) &&
+                    (saving ||
+                      !destination ||
+                      !selectedRoute ||
+                      routeStops.length === 0) &&
                       styles.disabledButton,
                   ]}
                   onPress={() => createTrip("docking")}
-                  disabled={saving || !destination}
+                  disabled={
+                    saving ||
+                    !destination ||
+                    !selectedRoute ||
+                    routeStops.length === 0
+                  }
                   activeOpacity={0.85}
                 >
                   <Ionicons
@@ -1712,9 +2021,7 @@ export default function TripManagementScreen({
         <View style={{ height: 30 }} />
       </ScrollView>
 
-      {/* ======================================
-          END TRIP CONFIRMATION MODAL
-      ====================================== */}
+      {/* END TRIP CONFIRMATION MODAL */}
 
       <Modal
         visible={endTripModalVisible}
@@ -1801,7 +2108,6 @@ export default function TripManagementScreen({
 // ==========================================
 
 const styles = StyleSheet.create({
-  // MAIN
   container: {
     flex: 1,
     backgroundColor: "#F4F7FB",
@@ -1824,7 +2130,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
-  // HEADER
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1859,7 +2164,6 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
 
-  // SUMMARY
   summaryCard: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1893,12 +2197,7 @@ const styles = StyleSheet.create({
     color: "#E1F1FF",
     marginTop: 3,
   },
-  summaryRight: {
-    justifyContent: "center",
-    alignItems: "center",
-  },
 
-  // SECTION HEADERS
   sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1930,7 +2229,6 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
 
-  // EMPTY STATE
   emptyCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 19,
@@ -1961,7 +2259,6 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
 
-  // BUS CARD
   busCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 19,
@@ -2005,7 +2302,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 
-  // BUS STATUS
   statusBadge: {
     flexDirection: "row",
     alignItems: "center",
@@ -2044,7 +2340,6 @@ const styles = StyleSheet.create({
     textTransform: "capitalize",
   },
 
-  // BUS DETAILS
   busDetails: {
     flexDirection: "row",
     marginTop: 17,
@@ -2066,7 +2361,6 @@ const styles = StyleSheet.create({
     marginVertical: 15,
   },
 
-  // TRIP INFORMATION
   tripInfo: {
     flexDirection: "row",
     alignItems: "center",
@@ -2139,7 +2433,6 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
 
-  // CARD HEADING
   cardHeadingRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -2158,7 +2451,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  // SELECTED BUS NOTICE
   selectedBusNotice: {
     flexDirection: "row",
     alignItems: "center",
@@ -2178,7 +2470,6 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
 
-  // AVAILABILITY CARD
   availabilityCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 19,
@@ -2278,7 +2569,6 @@ const styles = StyleSheet.create({
     textTransform: "capitalize",
   },
 
-  // CREATE TRIP CARD
   createCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 19,
@@ -2294,7 +2584,6 @@ const styles = StyleSheet.create({
     marginBottom: 9,
   },
 
-  // DESTINATION DROPDOWN
   destinationDropdown: {
     minHeight: 51,
     borderRadius: 12,
@@ -2314,10 +2603,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
+    flex: 1,
   },
   destinationPlaceholder: {
     fontSize: 12,
     color: "#94A3B8",
+    flex: 1,
   },
   destinationSelected: {
     color: "#172B45",
@@ -2350,6 +2641,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 9,
+    flex: 1,
   },
   destinationOptionText: {
     fontSize: 12,
@@ -2360,7 +2652,46 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
 
-  // TRIP ACTION BUTTONS
+  // NEW ROUTE LOADING AND EMPTY STATES
+
+  routeLoadingBox: {
+    minHeight: 51,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    backgroundColor: "#F8FAFC",
+    borderRadius: 12,
+    marginBottom: 13,
+  },
+  routeLoadingText: {
+    fontSize: 11,
+    color: "#64748B",
+    fontWeight: "600",
+  },
+  noRoutesBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+    padding: 13,
+    backgroundColor: "#FFFBEB",
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+    marginBottom: 13,
+  },
+  noRoutesText: {
+    flex: 1,
+    fontSize: 11,
+    lineHeight: 17,
+    color: "#92400E",
+  },
+  routeTerminalText: {
+    color: "#94A3B8",
+    fontSize: 10,
+    marginTop: 3,
+  },
+
   startTransitButton: {
     height: 51,
     borderRadius: 13,
@@ -2410,7 +2741,6 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
 
-  // NOTICE
   noticeBox: {
     flexDirection: "row",
     alignItems: "center",
@@ -2428,12 +2758,10 @@ const styles = StyleSheet.create({
     color: "#92400E",
   },
 
-  // DISABLED
   disabledButton: {
     opacity: 0.55,
   },
 
-  // END TRIP
   endTripButton: {
     height: 53,
     borderRadius: 14,
@@ -2451,7 +2779,6 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
 
-  // END TRIP MODAL
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(15, 23, 42, 0.60)",

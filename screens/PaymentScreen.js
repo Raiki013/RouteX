@@ -597,7 +597,13 @@ export default function PaymentScreen({ route, navigation }) {
         {/* BACK TO HOME */}
         <TouchableOpacity
           style={styles.homeButton}
-          onPress={() => navigation.navigate("MainTabs")}
+          onPress={() => {
+            if (navigation.canGoBack()) {
+              navigation.goBack();
+            } else {
+              navigation.replace("MainTabs");
+            }
+          }}
           activeOpacity={0.8}
         >
           <Ionicons

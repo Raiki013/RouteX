@@ -26,24 +26,21 @@ export default function CashierDashboardScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
 
   const [cashierName, setCashierName] = useState("Cashier");
+  const [companyName, setCompanyName] = useState("Company unavailable");
 
+  const [assignedBuses, setAssignedBuses] = useState(0);
   const [pendingBookings, setPendingBookings] = useState(0);
   const [paidBookings, setPaidBookings] = useState(0);
   const [recentBookings, setRecentBookings] = useState([]);
 
-  // CUSTOM ALERT STATES
+  // CUSTOM ALERT
   const [alertVisible, setAlertVisible] = useState(false);
   const [alertTitle, setAlertTitle] = useState("");
   const [alertMessage, setAlertMessage] = useState("");
   const [alertType, setAlertType] = useState("error");
   const [alertAction, setAlertAction] = useState(null);
 
-  const showAlert = (
-    title,
-    message,
-    type = "error",
-    action = null
-  ) => {
+  const showAlert = (title, message, type = "error", action = null) => {
     setAlertTitle(title);
     setAlertMessage(message);
     setAlertType(type);
@@ -61,6 +58,7 @@ export default function CashierDashboardScreen({ navigation }) {
     }
   };
 
+  // FORMAT CURRENCY
   const formatAmount = (amount) => {
     return `₱${Number(amount || 0).toLocaleString("en-PH", {
       minimumFractionDigits: 2,
@@ -68,6 +66,7 @@ export default function CashierDashboardScreen({ navigation }) {
     })}`;
   };
 
+  // FORMAT DATE
   const formatDate = (date) => {
     if (!date) return "Date unavailable";
 
@@ -80,6 +79,7 @@ export default function CashierDashboardScreen({ navigation }) {
     });
   };
 
+  // LOAD DASHBOARD
   const loadDashboard = useCallback(async (isRefresh = false) => {
     if (isRefresh) {
       setRefreshing(true);
@@ -88,7 +88,7 @@ export default function CashierDashboardScreen({ navigation }) {
     }
 
     try {
-      // CHECK LOGGED-IN USER
+      // 1. CHECK LOGGED-IN USER
       const {
         data: { user },
         error: authError,
@@ -101,16 +101,17 @@ export default function CashierDashboardScreen({ navigation }) {
         return;
       }
 
-      // CHECK CASHIER/ADMIN ACCESS
+      // 2. GET USER PROFILE
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
-        .select("user_level")
+        .select("full_name, user_level, company_id")
         .eq("id", user.id)
         .single();
 
       if (profileError) throw profileError;
 
-      if (!["cashier", "admin"].includes(profile?.user_level)) {
+      // 3. CHECK ROLE
+      if (!["cashier", "admin"].includes(profile.user_level)) {
         showAlert(
           "Access Denied",
           "Only cashiers and administrators can access this dashboard.",
@@ -121,17 +122,57 @@ export default function CashierDashboardScreen({ navigation }) {
         return;
       }
 
-      // DISPLAY USER EMAIL
+      // 4. DISPLAY CASHIER NAME
       setCashierName(
-        user.email ? user.email.split("@")[0] : "Cashier"
+        profile.full_name ||
+        (user.email ? user.email.split("@")[0] : "Cashier")
       );
 
-      // LOAD DASHBOARD STATISTICS AND RECENT BOOKINGS
+      // 5. GET ASSIGNED COMPANY
+      if (profile.user_level === "cashier") {
+        if (!profile.company_id) {
+          showAlert(
+            "No Company Assigned",
+            "Your cashier account has no assigned company. Please contact the RouteX administrator.",
+            "warning"
+          );
+
+          return;
+        }
+
+        const { data: company, error: companyError } = await supabase
+          .from("companies")
+          .select("company_name")
+          .eq("company_id", profile.company_id)
+          .single();
+
+        if (companyError) throw companyError;
+
+        setCompanyName(company.company_name || "Company unavailable");
+      } else {
+        setCompanyName(
+          profile.company_id
+            ? "Administrator"
+            : "All companies"
+        );
+      }
+
+      // 6. LOAD DASHBOARD DATA
       const [
+        busResult,
         pendingResult,
         paidResult,
         recentResult,
       ] = await Promise.all([
+        // RLS automatically restricts cashier buses
+        supabase
+          .from("buses")
+          .select("bus_id", {
+            count: "exact",
+            head: true,
+          }),
+
+        // UNPAID BOOKINGS
         supabase
           .from("bookings")
           .select("booking_id", {
@@ -141,6 +182,7 @@ export default function CashierDashboardScreen({ navigation }) {
           .eq("booking_status", "pending")
           .eq("payment_status", "unpaid"),
 
+        // PAID BOOKINGS
         supabase
           .from("bookings")
           .select("booking_id", {
@@ -149,6 +191,7 @@ export default function CashierDashboardScreen({ navigation }) {
           })
           .eq("payment_status", "paid"),
 
+        // RECENT BOOKINGS
         supabase
           .from("bookings")
           .select(`
@@ -164,16 +207,19 @@ export default function CashierDashboardScreen({ navigation }) {
           .limit(5),
       ]);
 
+      if (busResult.error) throw busResult.error;
       if (pendingResult.error) throw pendingResult.error;
       if (paidResult.error) throw paidResult.error;
       if (recentResult.error) throw recentResult.error;
 
+      // 7. UPDATE DASHBOARD
+      setAssignedBuses(busResult.count || 0);
       setPendingBookings(pendingResult.count || 0);
       setPaidBookings(paidResult.count || 0);
       setRecentBookings(recentResult.data || []);
 
     } catch (error) {
-      console.log("Cashier Dashboard Error:", error.message);
+      console.log("Cashier Dashboard Error:", error);
 
       showAlert(
         "Dashboard Error",
@@ -190,14 +236,17 @@ export default function CashierDashboardScreen({ navigation }) {
     loadDashboard();
   }, [loadDashboard]);
 
+  // REFRESH
   const onRefresh = () => {
     loadDashboard(true);
   };
 
+  // NAVIGATION
   const openScreen = (screenName) => {
     navigation.navigate(screenName);
   };
 
+  // BOOKING ITEM
   const renderBooking = ({ item }) => {
     const isPaid = item.payment_status === "paid";
 
@@ -213,7 +262,8 @@ export default function CashierDashboardScreen({ navigation }) {
 
         <View style={styles.bookingInfo}>
           <Text style={styles.bookingReference}>
-            {item.booking_reference || `Booking #${item.booking_id}`}
+            {item.booking_reference ||
+              `Booking #${item.booking_id}`}
           </Text>
 
           <Text style={styles.bookingDate}>
@@ -252,6 +302,7 @@ export default function CashierDashboardScreen({ navigation }) {
     );
   };
 
+  // LOADING SCREEN
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -285,12 +336,26 @@ export default function CashierDashboardScreen({ navigation }) {
       >
         {/* HEADER */}
         <View style={styles.header}>
-          <View>
-            <Text style={styles.greeting}>Welcome back,</Text>
+          <View style={styles.headerInfo}>
+            <Text style={styles.greeting}>
+              Welcome back,
+            </Text>
 
             <Text style={styles.cashierName}>
               {cashierName}
             </Text>
+
+            <View style={styles.companyBadge}>
+              <Ionicons
+                name="business-outline"
+                size={13}
+                color="#0891B2"
+              />
+
+              <Text style={styles.companyText}>
+                {companyName}
+              </Text>
+            </View>
 
             <Text style={styles.headerSubtitle}>
               Cashier Dashboard
@@ -306,7 +371,32 @@ export default function CashierDashboardScreen({ navigation }) {
           </View>
         </View>
 
-        {/* OVERVIEW */}
+        {/* COMPANY BUS OVERVIEW */}
+        <View style={styles.busOverview}>
+          <View style={styles.busOverviewIcon}>
+            <MaterialCommunityIcons
+              name="bus-multiple"
+              size={25}
+              color="#0891B2"
+            />
+          </View>
+
+          <View style={styles.busOverviewInfo}>
+            <Text style={styles.busOverviewTitle}>
+              Assigned Buses
+            </Text>
+
+            <Text style={styles.busOverviewDescription}>
+              Buses accessible to your company
+            </Text>
+          </View>
+
+          <Text style={styles.busCount}>
+            {assignedBuses}
+          </Text>
+        </View>
+
+        {/* PAYMENT OVERVIEW */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>
             Payment Overview
@@ -325,6 +415,7 @@ export default function CashierDashboardScreen({ navigation }) {
         </View>
 
         <View style={styles.statsContainer}>
+          {/* PENDING */}
           <View style={styles.statCard}>
             <View style={[styles.statIcon, styles.pendingIcon]}>
               <Ionicons
@@ -343,10 +434,11 @@ export default function CashierDashboardScreen({ navigation }) {
             </Text>
 
             <Text style={styles.statDescription}>
-              Awaiting cashier payment
+              Awaiting payment
             </Text>
           </View>
 
+          {/* PAID */}
           <View style={styles.statCard}>
             <View style={[styles.statIcon, styles.paidIcon]}>
               <Ionicons
@@ -375,6 +467,7 @@ export default function CashierDashboardScreen({ navigation }) {
           Payment Management
         </Text>
 
+        {/* QR SCANNER */}
         <TouchableOpacity
           style={styles.mainAction}
           onPress={() => openScreen("CashierQRScanner")}
@@ -405,6 +498,7 @@ export default function CashierDashboardScreen({ navigation }) {
           />
         </TouchableOpacity>
 
+        {/* MANUAL PAYMENT */}
         <TouchableOpacity
           style={styles.secondaryAction}
           onPress={() => openScreen("CashierPayment")}
@@ -441,7 +535,10 @@ export default function CashierDashboardScreen({ navigation }) {
             Recent Bookings
           </Text>
 
-          <TouchableOpacity onPress={onRefresh}>
+          <TouchableOpacity
+            onPress={onRefresh}
+            disabled={refreshing}
+          >
             <Text style={styles.refreshText}>
               Refresh
             </Text>
@@ -473,7 +570,7 @@ export default function CashierDashboardScreen({ navigation }) {
             </Text>
 
             <Text style={styles.emptyDescription}>
-              Recent passenger bookings will appear here.
+              Recent passenger bookings for your company will appear here.
             </Text>
           </View>
         )}
@@ -492,7 +589,7 @@ export default function CashierDashboardScreen({ navigation }) {
         </View>
       </ScrollView>
 
-      {/* SWEETALERT-STYLE MODAL */}
+      {/* CUSTOM ALERT */}
       <Modal
         transparent
         visible={alertVisible}
@@ -516,7 +613,11 @@ export default function CashierDashboardScreen({ navigation }) {
                     : "close-circle-outline"
                 }
                 size={43}
-                color={alertType === "warning" ? "#D97706" : "#DC2626"}
+                color={
+                  alertType === "warning"
+                    ? "#D97706"
+                    : "#DC2626"
+                }
               />
             </View>
 
@@ -544,6 +645,7 @@ export default function CashierDashboardScreen({ navigation }) {
   );
 }
 
+// STYLES
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -573,7 +675,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     marginTop: 25,
-    marginBottom: 28,
+    marginBottom: 22,
+  },
+
+  headerInfo: {
+    flex: 1,
   },
 
   greeting: {
@@ -589,11 +695,29 @@ const styles = StyleSheet.create({
     textTransform: "capitalize",
   },
 
+  companyBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    backgroundColor: "#CFFAFE",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginTop: 9,
+    gap: 5,
+  },
+
+  companyText: {
+    color: "#0E7490",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+
   headerSubtitle: {
-    color: "#0891B2",
+    color: "#64748B",
     fontSize: 12,
     fontWeight: "700",
-    marginTop: 5,
+    marginTop: 7,
   },
 
   headerIcon: {
@@ -603,6 +727,50 @@ const styles = StyleSheet.create({
     backgroundColor: "#CFFAFE",
     justifyContent: "center",
     alignItems: "center",
+    marginLeft: 10,
+  },
+
+  busOverview: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 17,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    marginBottom: 25,
+  },
+
+  busOverviewIcon: {
+    width: 45,
+    height: 45,
+    borderRadius: 13,
+    backgroundColor: "#CFFAFE",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  busOverviewInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+
+  busOverviewTitle: {
+    color: "#0F172A",
+    fontSize: 14,
+    fontWeight: "900",
+  },
+
+  busOverviewDescription: {
+    color: "#94A3B8",
+    fontSize: 10,
+    marginTop: 4,
+  },
+
+  busCount: {
+    color: "#0891B2",
+    fontSize: 26,
+    fontWeight: "900",
   },
 
   sectionHeader: {

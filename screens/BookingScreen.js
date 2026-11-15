@@ -28,12 +28,6 @@ const COLORS = {
   text: "#142238",
   secondaryText: "#718096",
   border: "#E5EAF1",
-  green: "#16A34A",
-  greenLight: "#DCFCE7",
-  orange: "#D97706",
-  orangeLight: "#FEF3C7",
-  red: "#DC2626",
-  redLight: "#FEE2E2",
 };
 
 export default function BookingScreen({ navigation }) {
@@ -42,7 +36,6 @@ export default function BookingScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState("");
 
-  // CUSTOM ALERT STATE
   const [alertData, setAlertData] = useState({
     visible: false,
     title: "",
@@ -50,7 +43,6 @@ export default function BookingScreen({ navigation }) {
     type: "error",
   });
 
-  // SHOW CUSTOM ALERT
   const showAlert = (title, message, type = "error") => {
     setAlertData({
       visible: true,
@@ -60,7 +52,6 @@ export default function BookingScreen({ navigation }) {
     });
   };
 
-  // CLOSE CUSTOM ALERT
   const closeAlert = () => {
     setAlertData((previous) => ({
       ...previous,
@@ -68,11 +59,14 @@ export default function BookingScreen({ navigation }) {
     }));
   };
 
-  // LOAD COMPANIES AND BUSES
+  // LOAD ACTIVE COMPANIES AND DOCKED BUSES
   const loadCompanies = useCallback(async (showLoader = false) => {
     try {
-      if (showLoader) setLoading(true);
+      if (showLoader) {
+        setLoading(true);
+      }
 
+      // Get active companies
       const { data: companyData, error: companyError } = await supabase
         .from("companies")
         .select("company_id, company_name, is_active, logo_url")
@@ -81,43 +75,29 @@ export default function BookingScreen({ navigation }) {
 
       if (companyError) throw companyError;
 
+      // Get only currently docked buses
       const { data: busData, error: busError } = await supabase
         .from("buses")
-        .select("bus_id, company, availability_status");
+        .select("bus_id, company, bus_status")
+        .eq("bus_status", "docked");
 
       if (busError) throw busError;
 
+      // Count docked buses for each company
       const companyList = (companyData || []).map((company) => {
         const companyName = company.company_name?.trim() || "";
 
-        const companyBuses = (busData || []).filter(
+        const dockedBuses = (busData || []).filter(
           (bus) =>
             bus.company?.trim().toLowerCase() ===
             companyName.toLowerCase()
         );
 
-        const available = companyBuses.filter(
-          (bus) => bus.availability_status === "available"
-        ).length;
-
-        const standing = companyBuses.filter(
-          (bus) => bus.availability_status === "standing"
-        ).length;
-
-        const notAvailable = companyBuses.filter(
-          (bus) =>
-            bus.availability_status !== "available" &&
-            bus.availability_status !== "standing"
-        ).length;
-
         return {
           id: company.company_id,
           name: companyName,
           logoUrl: company.logo_url || null,
-          total: companyBuses.length,
-          available,
-          standing,
-          notAvailable,
+          dockedCount: dockedBuses.length,
         };
       });
 
@@ -148,7 +128,9 @@ export default function BookingScreen({ navigation }) {
     let isActive = true;
 
     const refreshCompanies = () => {
-      if (isActive) loadCompanies();
+      if (isActive) {
+        loadCompanies();
+      }
     };
 
     const channel = supabase
@@ -204,17 +186,6 @@ export default function BookingScreen({ navigation }) {
     company.name.toLowerCase().includes(search.trim().toLowerCase())
   );
 
-  // TOTAL COUNTS
-  const totalBuses = companies.reduce(
-    (sum, company) => sum + company.total,
-    0
-  );
-
-  const totalAvailable = companies.reduce(
-    (sum, company) => sum + company.available,
-    0
-  );
-
   return (
     <View style={styles.container}>
       <StatusBar
@@ -235,10 +206,11 @@ export default function BookingScreen({ navigation }) {
           />
         }
       >
-        {/* MINIMAL HEADER */}
+        {/* HEADER */}
         <View style={styles.pageHeader}>
           <View style={styles.headerTextContainer}>
             <Text style={styles.pageTitle}>Book a Bus</Text>
+
             <Text style={styles.pageSubtitle}>
               Choose a company for your next trip.
             </Text>
@@ -253,30 +225,6 @@ export default function BookingScreen({ navigation }) {
           </View>
         </View>
 
-        {/* COMPACT STATISTICS */}
-        <View style={styles.statsContainer}>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>
-              {companies.length}
-            </Text>
-            <Text style={styles.statLabel}>Companies</Text>
-          </View>
-
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>
-              {totalBuses}
-            </Text>
-            <Text style={styles.statLabel}>Registered Buses</Text>
-          </View>
-
-          <View style={styles.statCard}>
-            <Text style={[styles.statNumber, { color: COLORS.green }]}>
-              {totalAvailable}
-            </Text>
-            <Text style={styles.statLabel}>Available</Text>
-          </View>
-        </View>
-
         {/* SECTION HEADER */}
         <View style={styles.sectionHeader}>
           <View style={styles.sectionTitleContainer}>
@@ -285,7 +233,7 @@ export default function BookingScreen({ navigation }) {
             </Text>
 
             <Text style={styles.sectionSubtitle}>
-              Select a company to view its buses
+              Select a company to view its docked buses
             </Text>
           </View>
 
@@ -363,7 +311,9 @@ export default function BookingScreen({ navigation }) {
                 style={styles.retryButton}
                 onPress={() => setSearch("")}
               >
-                <Text style={styles.retryText}>Clear Search</Text>
+                <Text style={styles.retryText}>
+                  Clear Search
+                </Text>
               </TouchableOpacity>
             ) : (
               <TouchableOpacity
@@ -375,7 +325,10 @@ export default function BookingScreen({ navigation }) {
                   size={17}
                   color={COLORS.white}
                 />
-                <Text style={styles.retryText}>Try Again</Text>
+
+                <Text style={styles.retryText}>
+                  Try Again
+                </Text>
               </TouchableOpacity>
             )}
           </View>
@@ -430,33 +383,21 @@ export default function BookingScreen({ navigation }) {
                   />
                 </View>
 
-                <Text style={styles.busCount}>
-                  {company.total} registered{" "}
-                  {company.total === 1 ? "bus" : "buses"}
-                </Text>
-
-                {/* AVAILABILITY */}
-                <View style={styles.statusRow}>
-                  <AvailabilityBadge
-                    count={company.available}
-                    label="Available"
-                    color={COLORS.green}
-                    background={COLORS.greenLight}
+                {/* DOCKED BUS COUNT */}
+                <View style={styles.dockedInfo}>
+                  <MaterialCommunityIcons
+                    name="bus-stop"
+                    size={16}
+                    color={COLORS.primary}
                   />
 
-                  <AvailabilityBadge
-                    count={company.standing}
-                    label="Standing"
-                    color={COLORS.orange}
-                    background={COLORS.orangeLight}
-                  />
-
-                  <AvailabilityBadge
-                    count={company.notAvailable}
-                    label="Unavailable"
-                    color={COLORS.red}
-                    background={COLORS.redLight}
-                  />
+                  <Text style={styles.dockedText}>
+                    {company.dockedCount}{" "}
+                    {company.dockedCount === 1
+                      ? "bus"
+                      : "buses"}{" "}
+                    currently docked
+                  </Text>
                 </View>
               </View>
             </TouchableOpacity>
@@ -479,9 +420,9 @@ export default function BookingScreen({ navigation }) {
             </Text>
 
             <Text style={styles.infoText}>
-              Only buses marked as available can be booked.
-              Select a company to view its buses and continue
-              with your reservation.
+              Select a company to view its docked buses and
+              continue with your reservation. Only buses
+              available for booking can be selected.
             </Text>
           </View>
         </View>
@@ -491,7 +432,7 @@ export default function BookingScreen({ navigation }) {
         </Text>
       </ScrollView>
 
-      {/* CUSTOM SWEETALERT-STYLE MODAL */}
+      {/* CUSTOM ALERT */}
       <CustomAlert
         visible={alertData.visible}
         title={alertData.title}
@@ -499,34 +440,6 @@ export default function BookingScreen({ navigation }) {
         type={alertData.type}
         onClose={closeAlert}
       />
-    </View>
-  );
-}
-
-// AVAILABILITY BADGE
-function AvailabilityBadge({
-  count,
-  label,
-  color,
-  background,
-}) {
-  return (
-    <View
-      style={[
-        styles.availabilityBadge,
-        { backgroundColor: background },
-      ]}
-    >
-      <View
-        style={[
-          styles.availabilityDot,
-          { backgroundColor: color },
-        ]}
-      />
-
-      <Text style={[styles.availabilityText, { color }]}>
-        {count} {label}
-      </Text>
     </View>
   );
 }
@@ -544,12 +457,12 @@ const styles = StyleSheet.create({
     paddingBottom: 35,
   },
 
-  // MINIMAL HEADER
+  // HEADER
   pageHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 21,
+    marginBottom: 27,
   },
 
   headerTextContainer: {
@@ -576,47 +489,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginLeft: 12,
-  },
-
-  // COMPACT STATISTICS
-  statsContainer: {
-    width: "100%",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "stretch",
-    marginBottom: 27,
-  },
-
-  statCard: {
-    width: "31.5%",
-    height: 90,
-    flexGrow: 0,
-    flexShrink: 0,
-    backgroundColor: COLORS.white,
-    borderRadius: 15,
-    paddingHorizontal: 3,
-    paddingVertical: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-
-  statNumber: {
-    fontSize: 21,
-    fontWeight: "900",
-    color: COLORS.primary,
-  },
-
-  statLabel: {
-    width: "100%",
-    fontSize: 10,
-    color: COLORS.secondaryText,
-    marginTop: 5,
-    fontWeight: "600",
-    textAlign: "center",
-    minHeight: 24,
-    textAlignVertical: "center",
   },
 
   // SECTION HEADER
@@ -730,38 +602,18 @@ const styles = StyleSheet.create({
     marginRight: 5,
   },
 
-  busCount: {
+  // DOCKED BUS COUNT
+  dockedInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 9,
+  },
+
+  dockedText: {
     color: COLORS.secondaryText,
     fontSize: 12,
-    marginTop: 5,
-  },
-
-  statusRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    alignItems: "center",
-    gap: 6,
-    marginTop: 11,
-  },
-
-  availabilityBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 7,
-    paddingVertical: 5,
-    borderRadius: 7,
-  },
-
-  availabilityDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    marginRight: 4,
-  },
-
-  availabilityText: {
-    fontSize: 9,
-    fontWeight: "800",
+    fontWeight: "600",
+    marginLeft: 6,
   },
 
   // LOADING

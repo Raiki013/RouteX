@@ -73,35 +73,72 @@ export default function BusListScreen({ navigation, route }) {
     }));
   };
 
-  // GET ACTIVE TRIPS
+  // GET CURRENT TRIPS THROUGH DOCKING RECORDS
   const getActiveTrip = async (busIds) => {
     if (!busIds || busIds.length === 0) {
       return new Map();
     }
 
-    const { data, error } = await supabase
-      .from("bus_trips")
-      .select("trip_id,bus_id,destination,status,started_at")
-      .in("bus_id", busIds)
-      .eq("status", "active")
-      .order("started_at", { ascending: false });
+    try {
+      // Get current docking records
+      const { data: dockingData, error: dockingError } =
+        await supabase
+          .from("bus_docking")
+          .select("bus_id, trip_id, docked_at")
+          .in("bus_id", busIds)
+          .eq("docking_status", "docked")
+          .order("docked_at", { ascending: false });
 
-    if (error) {
-      console.log("Active trip error:", error.message);
+      if (dockingError) throw dockingError;
+
+      // Get unique trip IDs
+      const tripIds = [
+        ...new Set(
+          (dockingData || [])
+            .map((docking) => docking.trip_id)
+            .filter(Boolean)
+        ),
+      ];
+
+      if (tripIds.length === 0) {
+        return new Map();
+      }
+
+      // Retrieve corresponding trips
+      const { data: tripData, error: tripError } =
+        await supabase
+          .from("bus_trips")
+          .select(
+            "trip_id, bus_id, destination, status, started_at"
+          )
+          .in("trip_id", tripIds);
+
+      if (tripError) throw tripError;
+
+      const tripMap = new Map();
+
+      // Match each bus with its docking trip
+      (dockingData || []).forEach((docking) => {
+        const busKey = String(docking.bus_id);
+
+        // Keep the latest docking record for each bus
+        if (tripMap.has(busKey)) return;
+
+        const trip = (tripData || []).find(
+          (item) =>
+            String(item.trip_id) === String(docking.trip_id)
+        );
+
+        if (trip) {
+          tripMap.set(busKey, trip);
+        }
+      });
+
+      return tripMap;
+    } catch (error) {
+      console.log("Active trip loading error:", error.message);
       return new Map();
     }
-
-    const tripMap = new Map();
-
-    (data || []).forEach((trip) => {
-      const key = String(trip.bus_id);
-
-      if (!tripMap.has(key)) {
-        tripMap.set(key, trip);
-      }
-    });
-
-    return tripMap;
   };
 
   // LOAD BUSES
@@ -131,8 +168,10 @@ export default function BusListScreen({ navigation, route }) {
       if (error) throw error;
 
       const busData = data || [];
+
       const busIds = busData.map((bus) => bus.bus_id);
 
+      // Get destinations using current docking records
       const tripMap = await getActiveTrip(busIds);
 
       const updatedBuses = busData.map((bus) => ({
@@ -146,7 +185,7 @@ export default function BusListScreen({ navigation, route }) {
 
       showAlert(
         "Error",
-        "Unable to load buses. Please try again.",
+        error.message || "Unable to load buses. Please try again.",
         "error"
       );
     } finally {
@@ -162,6 +201,18 @@ export default function BusListScreen({ navigation, route }) {
 
     const channelId = ++busListChannelCounter;
 
+    const refreshBusList = () => {
+      if (mounted) {
+        clearTimeout(refreshTimeout);
+
+        refreshTimeout = setTimeout(() => {
+          if (mounted) {
+            loadBuses();
+          }
+        }, 300);
+      }
+    };
+
     const busesChannel = supabase
       .channel(`bus-list-${channelId}`)
       .on(
@@ -171,15 +222,7 @@ export default function BusListScreen({ navigation, route }) {
           schema: "public",
           table: "buses",
         },
-        () => {
-          if (mounted) {
-            clearTimeout(refreshTimeout);
-
-            refreshTimeout = setTimeout(() => {
-              if (mounted) loadBuses();
-            }, 300);
-          }
-        }
+        refreshBusList
       )
       .subscribe();
 
@@ -192,15 +235,20 @@ export default function BusListScreen({ navigation, route }) {
           schema: "public",
           table: "bus_trips",
         },
-        () => {
-          if (mounted) {
-            clearTimeout(refreshTimeout);
+        refreshBusList
+      )
+      .subscribe();
 
-            refreshTimeout = setTimeout(() => {
-              if (mounted) loadBuses();
-            }, 300);
-          }
-        }
+    const dockingChannel = supabase
+      .channel(`bus-docking-list-${channelId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "bus_docking",
+        },
+        refreshBusList
       )
       .subscribe();
 
@@ -212,6 +260,7 @@ export default function BusListScreen({ navigation, route }) {
 
       supabase.removeChannel(busesChannel);
       supabase.removeChannel(tripsChannel);
+      supabase.removeChannel(dockingChannel);
     };
   }, [loadBuses]);
 
@@ -333,7 +382,7 @@ export default function BusListScreen({ navigation, route }) {
 
       showAlert(
         "Error",
-        "Unable to select this bus. Please try again.",
+        error.message || "Unable to select this bus. Please try again.",
         "error"
       );
     } finally {
@@ -383,15 +432,6 @@ export default function BusListScreen({ navigation, route }) {
     );
   });
 
-  // BUS COUNTS
-  const availableCount = buses.filter(
-    (bus) => bus.availability_status === "available"
-  ).length;
-
-  const standingCount = buses.filter(
-    (bus) => bus.availability_status === "standing"
-  ).length;
-
   // BUS CARD
   const renderBus = ({ item }) => {
     const status = getStatus(item.availability_status);
@@ -403,6 +443,7 @@ export default function BusListScreen({ navigation, route }) {
 
     return (
       <View style={styles.busCard}>
+        {/* BUS HEADER */}
         <View style={styles.busTopRow}>
           <View style={styles.busIconContainer}>
             <MaterialCommunityIcons
@@ -458,6 +499,7 @@ export default function BusListScreen({ navigation, route }) {
 
             <View>
               <Text style={styles.detailLabel}>Bus Type</Text>
+
               <Text style={styles.detailValue}>
                 {item.bus_type || "Not specified"}
               </Text>
@@ -473,6 +515,7 @@ export default function BusListScreen({ navigation, route }) {
 
             <View>
               <Text style={styles.detailLabel}>Capacity</Text>
+
               <Text style={styles.detailValue}>
                 {item.capacity || "N/A"} seats
               </Text>
@@ -480,7 +523,7 @@ export default function BusListScreen({ navigation, route }) {
           </View>
         </View>
 
-        {/* CURRENT TRIP */}
+        {/* CURRENT DESTINATION */}
         <View style={styles.tripContainer}>
           <View style={styles.tripIcon}>
             <Ionicons
@@ -496,7 +539,9 @@ export default function BusListScreen({ navigation, route }) {
             </Text>
 
             <Text style={styles.tripDestination}>
-              {item.active_trip?.destination || "No active trip"}
+              {item.active_trip?.destination?.trim()
+                ? item.active_trip.destination
+                : "Destination not set"}
             </Text>
           </View>
         </View>
@@ -573,7 +618,7 @@ export default function BusListScreen({ navigation, route }) {
         barStyle="dark-content"
       />
 
-      {/* COMPANY HEADER WITH LOGO */}
+      {/* COMPANY HEADER */}
       <View style={styles.companyHeader}>
         <TouchableOpacity
           style={styles.backButton}
@@ -643,74 +688,6 @@ export default function BusListScreen({ navigation, route }) {
         }
         ListHeaderComponent={
           <View>
-            {/* BUS STATISTICS */}
-            <View style={styles.statsCard}>
-              <View style={styles.statsHeader}>
-                <View>
-                  <Text style={styles.statsTitle}>
-                    Bus Overview
-                  </Text>
-
-                  <Text style={styles.statsSubtitle}>
-                    {buses.length} docked buses
-                  </Text>
-                </View>
-
-                <View style={styles.statsIcon}>
-                  <MaterialCommunityIcons
-                    name="bus-multiple"
-                    size={23}
-                    color={COLORS.primary}
-                  />
-                </View>
-              </View>
-
-              <View style={styles.statsDivider} />
-
-              <View style={styles.statsRow}>
-                <View style={styles.statItem}>
-                  <Text style={styles.statNumber}>
-                    {buses.length}
-                  </Text>
-                  <Text style={styles.statLabel}>
-                    Total Buses
-                  </Text>
-                </View>
-
-                <View style={styles.statVerticalDivider} />
-
-                <View style={styles.statItem}>
-                  <Text
-                    style={[
-                      styles.statNumber,
-                      { color: COLORS.green },
-                    ]}
-                  >
-                    {availableCount}
-                  </Text>
-                  <Text style={styles.statLabel}>
-                    Available
-                  </Text>
-                </View>
-
-                <View style={styles.statVerticalDivider} />
-
-                <View style={styles.statItem}>
-                  <Text
-                    style={[
-                      styles.statNumber,
-                      { color: COLORS.orange },
-                    ]}
-                  >
-                    {standingCount}
-                  </Text>
-                  <Text style={styles.statLabel}>
-                    Standing
-                  </Text>
-                </View>
-              </View>
-            </View>
-
             {/* SEARCH */}
             <View style={styles.searchContainer}>
               <Ionicons
@@ -807,7 +784,7 @@ export default function BusListScreen({ navigation, route }) {
         }
       />
 
-      {/* CUSTOM SWEETALERT-STYLE MODAL */}
+      {/* CUSTOM ALERT */}
       <CustomAlert
         visible={alertData.visible}
         title={alertData.title}
@@ -819,6 +796,7 @@ export default function BusListScreen({ navigation, route }) {
   );
 }
 
+// STYLES
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -910,78 +888,6 @@ const styles = StyleSheet.create({
     paddingTop: 17,
     paddingBottom: 30,
     flexGrow: 1,
-  },
-
-  // STATISTICS
-  statsCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: 18,
-    padding: 17,
-    marginBottom: 17,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-
-  statsHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-
-  statsTitle: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: COLORS.text,
-  },
-
-  statsSubtitle: {
-    fontSize: 12,
-    color: COLORS.secondary,
-    marginTop: 4,
-  },
-
-  statsIcon: {
-    width: 43,
-    height: 43,
-    borderRadius: 13,
-    backgroundColor: COLORS.primaryLight,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  statsDivider: {
-    height: 1,
-    backgroundColor: COLORS.border,
-    marginVertical: 15,
-  },
-
-  statsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-
-  statItem: {
-    flex: 1,
-    alignItems: "center",
-  },
-
-  statNumber: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: COLORS.text,
-  },
-
-  statLabel: {
-    fontSize: 11,
-    color: COLORS.secondary,
-    marginTop: 4,
-    fontWeight: "500",
-  },
-
-  statVerticalDivider: {
-    width: 1,
-    height: 35,
-    backgroundColor: COLORS.border,
   },
 
   // SEARCH
@@ -1126,6 +1032,7 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
 
+  // CURRENT DESTINATION
   tripContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -1163,6 +1070,7 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
 
+  // BOOK BUTTON
   bookButton: {
     height: 45,
     backgroundColor: COLORS.primary,

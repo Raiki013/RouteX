@@ -8,6 +8,7 @@ import {
   Building2,
   Bus,
   MapPin,
+  Route,
   CalendarCheck,
   CreditCard,
   Settings as SettingsIcon,
@@ -31,6 +32,8 @@ import Bookings from "./Bookings";
 import Payments from "./Payments";
 import Settings from "./Settings";
 import LiveTracking from "./LiveTracking";
+import Fares from "./Fares";
+import RouteManagement from "./RouteManagement";
 
 // SIDEBAR NAVIGATION
 const navigation = [
@@ -38,9 +41,11 @@ const navigation = [
   { name: "Users", icon: Users },
   { name: "Companies", icon: Building2 },
   { name: "Buses", icon: Bus },
+  { name: "Routes", icon: Route },
   { name: "Trips", icon: MapPin },
   { name: "Live Tracking", icon: RadioTower },
   { name: "Bookings", icon: CalendarCheck },
+  { name: "Fares", icon: CircleDollarSign },
   { name: "Payments", icon: CreditCard },
   { name: "Settings", icon: SettingsIcon },
 ];
@@ -1211,6 +1216,9 @@ export default function Dashboard() {
       case "Buses":
         return <Buses />;
 
+      case "Routes":
+        return <RouteManagement />;
+
       case "Trips":
         return <Trips />;
 
@@ -1219,6 +1227,9 @@ export default function Dashboard() {
 
       case "Bookings":
         return <Bookings />;
+
+      case "Fares":
+        return <Fares />;
 
       case "Payments":
         return <Payments />;
