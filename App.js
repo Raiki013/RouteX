@@ -16,9 +16,6 @@ import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
-// Keep native splash visible while React loads
-SplashScreen.preventAutoHideAsync().catch(() => {});
-
 // AUTH
 import LoginScreen from "./screens/LoginScreen";
 import SignupScreen from "./screens/SignupScreen";
@@ -48,39 +45,45 @@ import TrackingScreen from "./screens/TrackingScreen";
 
 const Stack = createNativeStackNavigator();
 
+SplashScreen.preventAutoHideAsync().catch(() => {});
+
 export default function App() {
-  const [isLoading, setIsLoading] = useState(true);
+  const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    let timeout;
+    let mounted = true;
 
-    const prepareApp = async () => {
+    async function prepareApp() {
       try {
-        // Replace the native splash with our custom loading screen
-        await SplashScreen.hideAsync();
-
-        // Show logo and loading circle for at least 2 seconds
-        timeout = setTimeout(() => {
-          setIsLoading(false);
-        }, 2000);
-
+        // Allow React Native to prepare the application.
+        await new Promise(resolve =>
+          setTimeout(resolve, 1000)
+        );
       } catch (error) {
-        console.log("App loading error:", error);
-        setIsLoading(false);
+        console.log("APP STARTUP ERROR:", error);
+      } finally {
+        if (mounted) {
+          setIsReady(true);
+        }
       }
-    };
+    }
 
     prepareApp();
 
     return () => {
-      if (timeout) {
-        clearTimeout(timeout);
-      }
+      mounted = false;
     };
   }, []);
 
-  // CUSTOM LOADING SCREEN
-  if (isLoading) {
+  useEffect(() => {
+    if (isReady) {
+      SplashScreen.hideAsync().catch(error => {
+        console.log("SPLASH ERROR:", error);
+      });
+    }
+  }, [isReady]);
+
+  if (!isReady) {
     return (
       <View style={styles.loadingContainer}>
         <Image
@@ -102,24 +105,41 @@ export default function App() {
     <SafeAreaProvider>
       <NavigationContainer>
         <Stack.Navigator
+          initialRouteName="Login"
           screenOptions={{
             headerShown: false,
             animation: "slide_from_right",
           }}
-          initialRouteName="Login"
         >
-          <Stack.Screen name="Login" component={LoginScreen} />
-          <Stack.Screen name="Signup" component={SignupScreen} />
+          <Stack.Screen
+            name="Login"
+            component={LoginScreen}
+          />
 
-          <Stack.Screen name="MainTabs" component={BottomTabs} />
+          <Stack.Screen
+            name="Signup"
+            component={SignupScreen}
+          />
+
+          <Stack.Screen
+            name="MainTabs"
+            component={BottomTabs}
+          />
 
           {/* PASSENGER */}
-          <Stack.Screen name="Payment" component={PaymentScreen} />
-          <Stack.Screen name="Ticket" component={TicketScreen} />
+          <Stack.Screen
+            name="Payment"
+            component={PaymentScreen}
+          />
+
+          <Stack.Screen
+            name="Ticket"
+            component={TicketScreen}
+          />
+
           <Stack.Screen
             name="Notifications"
             component={NotificationsScreen}
-            options={{ headerShown: false }}
           />
 
           {/* CASHIER */}
@@ -127,14 +147,17 @@ export default function App() {
             name="CashierDashboard"
             component={CashierDashboardScreen}
           />
+
           <Stack.Screen
             name="CashierPayment"
             component={CashierPaymentScreen}
           />
+
           <Stack.Screen
             name="CashierVerification"
             component={CashierVerificationScreen}
           />
+
           <Stack.Screen
             name="CashierQRScanner"
             component={CashierQRScannerScreen}
@@ -145,21 +168,27 @@ export default function App() {
             name="OperatorDocking"
             component={OperatorDockingScreen}
           />
+
           <Stack.Screen
             name="TripManagement"
             component={TripManagementScreen}
           />
+
           <Stack.Screen
             name="OperatorGCash"
             component={OperatorGCashScreen}
           />
+
           <Stack.Screen
             name="OperatorTicketScanner"
             component={OperatorTicketScannerScreen}
           />
 
           {/* TRACKING */}
-          <Stack.Screen name="Tracking" component={TrackingScreen} />
+          <Stack.Screen
+            name="Tracking"
+            component={TrackingScreen}
+          />
         </Stack.Navigator>
       </NavigationContainer>
     </SafeAreaProvider>
