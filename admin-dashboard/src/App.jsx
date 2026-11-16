@@ -8,14 +8,28 @@ import {
 
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
+import SetPassword from "./pages/SetPassword";
+
 import ProtectedRoute from "./components/ProtectedRoute";
 
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/login" element={<Login />} />
 
+        {/* Public Login Page */}
+        <Route
+          path="/login"
+          element={<Login />}
+        />
+
+        {/* Public Invitation Password Page */}
+        <Route
+          path="/set-password"
+          element={<SetPassword />}
+        />
+
+        {/* Protected Admin Dashboard */}
         <Route
           path="/dashboard"
           element={
@@ -25,15 +39,18 @@ export default function App() {
           }
         />
 
+        {/* Default Route */}
         <Route
           path="/"
-          element={<Navigate to="/dashboard" replace />}
+          element={<Navigate to="/login" replace />}
         />
 
+        {/* Unknown Routes */}
         <Route
           path="*"
-          element={<Navigate to="/" replace />}
+          element={<Navigate to="/login" replace />}
         />
+
       </Routes>
     </BrowserRouter>
   );

@@ -10,31 +10,39 @@ export default function ProtectedRoute({ children }) {
     let mounted = true;
 
     async function checkAdmin() {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+      try {
+        const {
+          data: { session },
+          error: sessionError,
+        } = await supabase.auth.getSession();
 
-      if (!session) {
+        if (sessionError || !session) {
+          if (mounted) setStatus("denied");
+          return;
+        }
+
+        const { data: profile, error } = await supabase
+          .from("profiles")
+          .select("user_level")
+          .eq("id", session.user.id)
+          .maybeSingle();
+
+        if (!mounted) return;
+
+        if (error || profile?.user_level !== "admin") {
+          // Do not sign out automatically.
+          // Keep the session intact for other authentication flows.
+          setStatus("denied");
+          return;
+        }
+
+        setStatus("allowed");
+
+      } catch (error) {
+        console.error("Admin verification error:", error);
+
         if (mounted) setStatus("denied");
-        return;
       }
-
-      const { data: profile, error } = await supabase
-        .from("profiles")
-        .select("user_level")
-        .eq("id", session.user.id)
-        .maybeSingle();
-
-      if (!mounted) return;
-
-      if (error || profile?.user_level !== "admin") {
-        await supabase.auth.signOut();
-
-        if (mounted) setStatus("denied");
-        return;
-      }
-
-      setStatus("allowed");
     }
 
     checkAdmin();
@@ -45,7 +53,11 @@ export default function ProtectedRoute({ children }) {
   }, []);
 
   if (status === "loading") {
-    return <div className="loading-screen">Checking access...</div>;
+    return (
+      <div className="loading-screen">
+        Checking access...
+      </div>
+    );
   }
 
   if (status === "denied") {
