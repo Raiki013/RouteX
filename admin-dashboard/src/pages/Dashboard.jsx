@@ -20,6 +20,7 @@ import {
   Clock3,
   CircleDollarSign,
   RadioTower,
+  MessageSquare,
 } from "lucide-react";
 
 import { supabase } from "../config/supabase";
@@ -34,6 +35,7 @@ import Settings from "./Settings";
 import LiveTracking from "./LiveTracking";
 import Fares from "./Fares";
 import RouteManagement from "./RouteManagement";
+import SendNotification from "./SendNotification";
 
 // SIDEBAR NAVIGATION
 const navigation = [
@@ -47,6 +49,7 @@ const navigation = [
   { name: "Bookings", icon: CalendarCheck },
   { name: "Fares", icon: CircleDollarSign },
   { name: "Payments", icon: CreditCard },
+  { name: "Send Notification", icon: MessageSquare },
   { name: "Settings", icon: SettingsIcon },
 ];
 
@@ -1233,6 +1236,9 @@ export default function Dashboard() {
 
       case "Payments":
         return <Payments />;
+
+      case "Send Notification":
+        return <SendNotification />;
 
       case "Settings":
         return <Settings />;

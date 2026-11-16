@@ -69,28 +69,6 @@ const BUS_TYPE_OPTIONS = [
   "Airconditioned",
 ];
 
-const COMPANY_OPTIONS = [
-  "LUPA",
-  "PITCO",
-  "PARTAS",
-  "VIRON",
-  "BATAAN TRANSIT",
-  "FARINAS",
-  "FLORIDA",
-];
-
-const DESTINATION_OPTIONS = [
-  "Cubao",
-  "TPLEX",
-  "Vigan",
-  "Laoag",
-  "San Fernando City",
-  "Baguio",
-  "Rosario",
-  "Agoo",
-  "Aringay",
-];
-
 // ========================================
 // HELPERS
 // ========================================
@@ -564,6 +542,13 @@ export default function TrackingScreen() {
   const [busTypeFilter, setBusTypeFilter] = useState("");
   const [companyFilter, setCompanyFilter] = useState("");
   const [destinationFilter, setDestinationFilter] = useState("");
+  const [routeFilter, setRouteFilter] = useState("");
+
+  // These dropdown options are loaded from Supabase.
+  const [companies, setCompanies] = useState([]);
+  const [routeOptions, setRouteOptions] = useState([]);
+  const [destinationOptions, setDestinationOptions] = useState([]);
+  const [filterOptionsLoading, setFilterOptionsLoading] = useState(false);
 
   const [openDropdown, setOpenDropdown] = useState("");
 
@@ -639,16 +624,25 @@ export default function TrackingScreen() {
         !companyFilter ||
         normalizeText(bus.company) === normalizeText(companyFilter);
 
+      const selectedRoute = routeOptions.find(
+        route => normalizeText(route.route_name) === normalizeText(routeFilter)
+      );
+      const matchesRoute =
+        !routeFilter ||
+        String(bus.route_id || "") === String(selectedRoute?.route_id || "");
+
       const matchesDestination =
         !destinationFilter ||
         normalizeText(bus.destination) === normalizeText(destinationFilter);
 
-      return matchesType && matchesCompany && matchesDestination;
+      return matchesType && matchesCompany && matchesRoute && matchesDestination;
     });
   }, [
     buses,
     busTypeFilter,
     companyFilter,
+    routeFilter,
+    routeOptions,
     destinationFilter,
   ]);
 
@@ -676,8 +670,177 @@ export default function TrackingScreen() {
   const activeFilterCount = [
     busTypeFilter,
     companyFilter,
+    routeFilter,
     destinationFilter,
   ].filter(Boolean).length;
+
+  // ========================================
+  // LOAD COMPANIES, ROUTES AND ROUTE STOPS
+  // ========================================
+
+  const loadCompanies = useCallback(async () => {
+    const { data, error } = await supabase
+      .from("companies")
+      .select("company_id, company_name, logo_url")
+      .eq("is_active", true)
+      .order("company_name", { ascending: true });
+
+    if (error) throw error;
+    if (mountedRef.current) setCompanies(data || []);
+    return data || [];
+  }, []);
+
+  const loadCompanyRoutes = useCallback(async companyName => {
+    try {
+      setFilterOptionsLoading(true);
+
+      let routes = [];
+
+      if (companyName) {
+        const { data: company, error: companyError } = await supabase
+          .from("companies")
+          .select("company_id")
+          .eq("company_name", companyName)
+          .eq("is_active", true)
+          .maybeSingle();
+
+        if (companyError) throw companyError;
+
+        if (!company) {
+          setRouteOptions([]);
+          setDestinationOptions([]);
+          return;
+        }
+
+        // Company -> terminals -> route_terminal_access -> bus_routes.
+        const { data: terminals, error: terminalError } = await supabase
+          .from("terminals")
+          .select("terminal_id")
+          .eq("company_id", company.company_id)
+          .eq("is_active", true);
+
+        if (terminalError) throw terminalError;
+
+        const terminalIds = (terminals || []).map(item => item.terminal_id);
+
+        if (terminalIds.length) {
+          const { data: accessRows, error: accessError } = await supabase
+            .from("route_terminal_access")
+            .select("route_id")
+            .in("terminal_id", terminalIds);
+
+          if (accessError) throw accessError;
+
+          const routeIds = [...new Set((accessRows || []).map(item => item.route_id))];
+
+          if (routeIds.length) {
+            const { data: routeRows, error: routeError } = await supabase
+              .from("bus_routes")
+              .select("route_id, route_name, destination_location")
+              .in("route_id", routeIds)
+              .eq("is_active", true)
+              .order("route_name", { ascending: true });
+
+            if (routeError) throw routeError;
+            routes = routeRows || [];
+          }
+        }
+      } else {
+        const { data: routeRows, error: routeError } = await supabase
+          .from("bus_routes")
+          .select("route_id, route_name, destination_location")
+          .eq("is_active", true)
+          .order("route_name", { ascending: true });
+
+        if (routeError) throw routeError;
+        routes = routeRows || [];
+      }
+
+      const routeIds = routes.map(route => route.route_id);
+      let stops = [];
+
+      if (routeIds.length) {
+        const { data: stopRows, error: stopError } = await supabase
+          .from("route_stops")
+          .select("stop_id, route_id, stop_name, stop_order")
+          .in("route_id", routeIds)
+          .order("stop_order", { ascending: true });
+
+        if (stopError) throw stopError;
+        stops = stopRows || [];
+      }
+
+      if (mountedRef.current) {
+        setRouteOptions(routes);
+        setDestinationOptions([
+          ...new Set(stops.map(stop => stop.stop_name).filter(Boolean)),
+        ]);
+      }
+    } catch (error) {
+      console.log("LOAD COMPANY ROUTES ERROR:", error.message);
+      if (mountedRef.current) {
+        setRouteOptions([]);
+        setDestinationOptions([]);
+        showAlert(
+          "Filter Data Error",
+          "Unable to load routes and destinations. Please check your Supabase table permissions and try again.",
+          "error"
+        );
+      }
+    } finally {
+      if (mountedRef.current) setFilterOptionsLoading(false);
+    }
+  }, [showAlert]);
+
+  const handleCompanyFilterChange = useCallback(companyName => {
+    setCompanyFilter(companyName);
+    setRouteFilter("");
+    setDestinationFilter("");
+    setSelectedBusId(null);
+    loadCompanyRoutes(companyName);
+  }, [loadCompanyRoutes]);
+
+  const handleRouteFilterChange = useCallback(async routeName => {
+    setRouteFilter(routeName);
+    setDestinationFilter("");
+
+    if (!routeName) {
+      await loadCompanyRoutes(companyFilter);
+      return;
+    }
+
+    const selectedRoute = routeOptions.find(
+      route => normalizeText(route.route_name) === normalizeText(routeName)
+    );
+
+    if (!selectedRoute) {
+      setDestinationOptions([]);
+      return;
+    }
+
+    try {
+      setFilterOptionsLoading(true);
+      const { data, error } = await supabase
+        .from("route_stops")
+        .select("stop_id, route_id, stop_name, stop_order")
+        .eq("route_id", selectedRoute.route_id)
+        .order("stop_order", { ascending: true });
+
+      if (error) throw error;
+      if (mountedRef.current) {
+        setDestinationOptions([
+          ...new Set((data || []).map(stop => stop.stop_name).filter(Boolean)),
+        ]);
+      }
+    } catch (error) {
+      console.log("LOAD ROUTE STOPS ERROR:", error.message);
+      if (mountedRef.current) {
+        showAlert("Route Stops Error", "Unable to load stops for this route.", "error");
+      }
+    } finally {
+      if (mountedRef.current) setFilterOptionsLoading(false);
+    }
+  }, [companyFilter, routeOptions, loadCompanyRoutes, showAlert]);
 
   // ========================================
   // LOAD USER
@@ -745,6 +908,7 @@ export default function TrackingScreen() {
           bus_id,
           operator_id,
           destination,
+          route_id,
           status,
           started_at
         `)
@@ -779,7 +943,8 @@ export default function TrackingScreen() {
           capacity,
           availability_status,
           bus_status,
-          company
+          company,
+          company_id
         `)
         .in("bus_id", busIds);
 
@@ -841,6 +1006,7 @@ export default function TrackingScreen() {
           trip: activeTrip || null,
           trip_id: activeTrip?.trip_id ?? null,
           destination: activeTrip?.destination || null,
+          route_id: activeTrip?.route_id ?? null,
           operator_id: activeTrip?.operator_id ?? null,
           location: validLocation,
         };
@@ -1156,10 +1322,12 @@ export default function TrackingScreen() {
   const clearFilters = useCallback(() => {
     setBusTypeFilter("");
     setCompanyFilter("");
+    setRouteFilter("");
     setDestinationFilter("");
     setSelectedBusId(null);
+    loadCompanyRoutes("");
     setOpenDropdown("");
-  }, []);
+  }, [loadCompanyRoutes]);
 
   // ========================================
   // FILTER DROPDOWN
@@ -1310,9 +1478,11 @@ export default function TrackingScreen() {
       await Promise.all([
         loadUser(),
         loadTrackingData(),
+        loadCompanies(),
       ]);
 
       if (mountedRef.current) {
+        await loadCompanyRoutes("");
         startPassengerLocationTracking();
       }
     };
@@ -1338,6 +1508,8 @@ export default function TrackingScreen() {
   }, [
     loadUser,
     loadTrackingData,
+    loadCompanies,
+    loadCompanyRoutes,
     startPassengerLocationTracking,
   ]);
 
@@ -1850,7 +2022,7 @@ export default function TrackingScreen() {
               </Text>
 
               <Text style={styles.sidebarSubtitle}>
-                Choose your preferred bus type, company, and destination.
+                Choose your bus type, company, route, and destination.
               </Text>
 
               <View style={styles.sidebarStats}>
@@ -1901,19 +2073,37 @@ export default function TrackingScreen() {
               {renderDropdown(
                 "Bus Company",
                 companyFilter,
-                COMPANY_OPTIONS,
-                setCompanyFilter,
+                companies.map(company => company.company_name),
+                handleCompanyFilterChange,
                 "company",
                 "business-outline"
               )}
 
               {renderDropdown(
-                "Destination",
+                "Route",
+                routeFilter,
+                routeOptions.map(route => route.route_name),
+                handleRouteFilterChange,
+                "route",
+                "git-branch-outline"
+              )}
+
+              {renderDropdown(
+                "Destination / Stop",
                 destinationFilter,
-                DESTINATION_OPTIONS,
+                destinationOptions,
                 setDestinationFilter,
                 "destination",
                 "location-outline"
+              )}
+
+              {filterOptionsLoading && (
+                <View style={styles.filterLoadingRow}>
+                  <ActivityIndicator size="small" color={C.primary} />
+                  <Text style={styles.filterLoadingText}>
+                    Loading companies, routes and stops...
+                  </Text>
+                </View>
               )}
 
               {/* BUS RESULTS HEADER */}
@@ -2267,6 +2457,16 @@ export default function TrackingScreen() {
 // ========================================
 
 const styles = StyleSheet.create({
+  filterLoadingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 10,
+    gap: 8,
+  },
+  filterLoadingText: {
+    color: C.secondary,
+    fontSize: 12,
+  },
 
   container: {
     flex: 1,

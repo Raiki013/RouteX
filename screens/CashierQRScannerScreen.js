@@ -198,11 +198,11 @@ const CashierQRScannerScreen = ({ navigation }) => {
   const processingRef = useRef(false);
   const navigationLock = useRef(false);
 
-  const frameSize = Math.min(width - 100, 250);
+  const frameSize = Math.min(width - 104, 230);
 
   const cameraHeight = Math.min(
-    420,
-    Math.max(280, height * 0.52)
+    410,
+    Math.max(230, height * 0.44)
   );
 
   // ------------------------------------------
@@ -896,15 +896,16 @@ export default CashierQRScannerScreen;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: "#061522",
   },
 
   center: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: "#061522",
     justifyContent: "center",
     alignItems: "center",
-    padding: 25,
+    paddingHorizontal: 28,
+    paddingVertical: 32,
   },
 
   loadingText: {
@@ -932,21 +933,23 @@ const styles = StyleSheet.create({
   // HEADER
 
   header: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 18,
-    paddingTop: 12,
-    paddingBottom: 15,
+  flexDirection: "row",
+  alignItems: "center",
+  paddingHorizontal: 20,
+  paddingTop: 45,
+  paddingBottom: 18,
   },
 
   backButton: {
-    width: 43,
-    height: 43,
-    borderRadius: 13,
-    backgroundColor: COLORS.surfaceLight,
+    width: 46,
+    height: 46,
+    borderRadius: 15,
+    backgroundColor: "#123247",
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.14)",
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 13,
+    marginRight: 14,
   },
 
   headerInfo: {
@@ -955,14 +958,16 @@ const styles = StyleSheet.create({
 
   headerTitle: {
     color: COLORS.white,
-    fontSize: 20,
-    fontWeight: "bold",
+    fontSize: 21,
+    fontWeight: "800",
+    letterSpacing: 0.2,
   },
 
   headerSubtitle: {
-    color: COLORS.muted,
+    color: "#91A8B8",
     fontSize: 12,
-    marginTop: 3,
+    marginTop: 4,
+    letterSpacing: 0.15,
   },
 
   // INSTRUCTION
@@ -970,19 +975,22 @@ const styles = StyleSheet.create({
   instruction: {
     flexDirection: "row",
     alignItems: "center",
-    marginHorizontal: 18,
-    marginBottom: 14,
-    padding: 13,
-    borderRadius: 12,
-    backgroundColor: COLORS.surface,
-    gap: 10,
+    marginHorizontal: 20,
+    marginBottom: 16,
+    paddingHorizontal: 15,
+    paddingVertical: 14,
+    borderRadius: 15,
+    backgroundColor: "#102B3E",
+    borderWidth: 1,
+    borderColor: "rgba(6,182,212,0.18)",
+    gap: 11,
   },
 
   instructionText: {
-    color: "#CBD5E1",
+    color: "#D5E2EA",
     flex: 1,
     fontSize: 13,
-    lineHeight: 19,
+    lineHeight: 20,
   },
 
   // CAMERA AREA
@@ -990,18 +998,26 @@ const styles = StyleSheet.create({
   cameraArea: {
     flex: 1,
     minHeight: 0,
-    paddingHorizontal: 14,
-    paddingBottom: 12,
+    paddingHorizontal: 18,
+    paddingBottom: 10,
     justifyContent: "center",
   },
 
   cameraContainer: {
     width: "100%",
+    maxWidth: 520,
     alignSelf: "center",
     position: "relative",
-    backgroundColor: "#000000",
-    borderRadius: 18,
+    backgroundColor: "#02070B",
+    borderRadius: 24,
     overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(103,232,249,0.22)",
+    elevation: 9,
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.28,
+    shadowRadius: 16,
   },
 
   camera: {
@@ -1013,7 +1029,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.3)",
+    backgroundColor: "rgba(2,12,20,0.82)",
     zIndex: 1,
   },
 
@@ -1034,13 +1050,14 @@ const styles = StyleSheet.create({
 
   scanFrame: {
     position: "relative",
+    borderRadius: 18,
   },
 
   corner: {
     position: "absolute",
-    width: 38,
-    height: 38,
-    borderColor: COLORS.cyan,
+    width: 39,
+    height: 39,
+    borderColor: "#22D3EE",
   },
 
   topLeft: {
@@ -1120,35 +1137,41 @@ const styles = StyleSheet.create({
   // BOTTOM
 
   bottomSection: {
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 18,
-    backgroundColor: COLORS.background,
+    paddingHorizontal: 22,
+    paddingTop: 15,
+    paddingBottom: 24,
+    backgroundColor: "#0A2030",
+    borderTopWidth: 1,
+    borderTopColor: "rgba(148,163,184,0.10)",
   },
 
   statusRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 9,
+    gap: 10,
+    minHeight: 24,
   },
 
   statusIndicator: {
-    width: 9,
-    height: 9,
+    width: 10,
+    height: 10,
     borderRadius: 5,
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.18)",
   },
 
   statusText: {
-    color: COLORS.white,
-    fontWeight: "600",
+    color: "#E5F3F8",
+    fontWeight: "700",
     fontSize: 13,
+    letterSpacing: 0.1,
   },
 
   bottomDescription: {
-    color: COLORS.muted,
+    color: "#91A8B8",
     fontSize: 12,
-    lineHeight: 18,
-    marginTop: 8,
+    lineHeight: 19,
+    marginTop: 7,
   },
 
   // BUTTONS
@@ -1159,10 +1182,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 9,
+    minHeight: 50,
     paddingVertical: 14,
     paddingHorizontal: 24,
-    borderRadius: 12,
+    borderRadius: 15,
     marginTop: 18,
+    shadowColor: "#06B6D4",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 3,
   },
 
   buttonText: {
@@ -1185,10 +1214,10 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: 380,
     backgroundColor: "#FFFFFF",
-    borderRadius: 20,
-    padding: 25,
+    borderRadius: 24,
+    padding: 26,
     alignItems: "center",
-    elevation: 10,
+    elevation: 12,
   },
 
   alertIconContainer: {

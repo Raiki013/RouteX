@@ -1,7 +1,7 @@
 
 import "./tasks/backgroundLocation";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 import {
   View,
@@ -11,10 +11,21 @@ import {
 } from "react-native";
 
 import * as SplashScreen from "expo-splash-screen";
+import * as Notifications from "expo-notifications";
 
-import { NavigationContainer } from "@react-navigation/native";
+import {
+  NavigationContainer,
+  createNavigationContainerRef,
+} from "@react-navigation/native";
+
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+
+// SUPABASE
+import { supabase } from "./config/supabase";
+
+// PUSH NOTIFICATIONS
+import { registerPushToken } from "./services/pushNotifications";
 
 // AUTH
 import LoginScreen from "./screens/LoginScreen";
@@ -45,20 +56,103 @@ import TrackingScreen from "./screens/TrackingScreen";
 
 const Stack = createNativeStackNavigator();
 
+const navigationRef = createNavigationContainerRef();
+
+// Screens that can be opened from a notification.
+const ALLOWED_NOTIFICATION_SCREENS = [
+  "MainTabs",
+  "Payment",
+  "Ticket",
+  "Notifications",
+  "CashierDashboard",
+  "CashierPayment",
+  "CashierVerification",
+  "CashierQRScanner",
+  "OperatorDocking",
+  "TripManagement",
+  "OperatorGCash",
+  "OperatorTicketScanner",
+  "Tracking",
+];
+
+// FOREGROUND NOTIFICATION SETTINGS
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+  }),
+});
+
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function App() {
   const [isReady, setIsReady] = useState(false);
 
+  const registeredUserRef = useRef(null);
+  const registeringUserRef = useRef(null);
+
+  const pendingNotificationRouteRef = useRef(null);
+
+  // REGISTER PUSH TOKEN
+  async function registerUserDevice(userId) {
+    if (!userId) return;
+
+    // Prevent duplicate registration.
+    if (registeredUserRef.current === userId) {
+      return;
+    }
+
+    if (registeringUserRef.current === userId) {
+      return;
+    }
+
+    registeringUserRef.current = userId;
+
+    try {
+      const token = await registerPushToken(userId);
+
+      if (token) {
+        registeredUserRef.current = userId;
+        console.log("RouteX device registered for push notifications.");
+      }
+    } catch (error) {
+      console.log("DEVICE REGISTRATION ERROR:", error.message);
+    } finally {
+      registeringUserRef.current = null;
+    }
+  }
+
+  // OPEN SCREEN FROM NOTIFICATION
+  function handleNotificationNavigation(response) {
+    if (!response) return;
+
+    const data =
+      response.notification.request.content.data || {};
+
+    const requestedScreen = data.screen;
+
+    const screen = ALLOWED_NOTIFICATION_SCREENS.includes(
+      requestedScreen
+    )
+      ? requestedScreen
+      : "Notifications";
+
+    pendingNotificationRouteRef.current = screen;
+
+    if (navigationRef.isReady()) {
+      navigationRef.navigate(screen);
+      pendingNotificationRouteRef.current = null;
+    }
+  }
+
+  // PREPARE APP
   useEffect(() => {
     let mounted = true;
 
     async function prepareApp() {
       try {
-        // Allow React Native to prepare the application.
-        await new Promise(resolve =>
-          setTimeout(resolve, 1000)
-        );
+        await new Promise(resolve => setTimeout(resolve, 1000));
       } catch (error) {
         console.log("APP STARTUP ERROR:", error);
       } finally {
@@ -75,6 +169,7 @@ export default function App() {
     };
   }, []);
 
+  // HIDE SPLASH SCREEN
   useEffect(() => {
     if (isReady) {
       SplashScreen.hideAsync().catch(error => {
@@ -83,6 +178,75 @@ export default function App() {
     }
   }, [isReady]);
 
+  // AUTHENTICATION AND NOTIFICATION LISTENERS
+  useEffect(() => {
+    // Listen for login, logout, and session changes.
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      const userId = session?.user?.id;
+
+      if (userId) {
+        // Defer Supabase work until after the auth callback.
+        Promise.resolve().then(() => {
+          registerUserDevice(userId);
+        });
+      } else if (event === "SIGNED_OUT") {
+        registeredUserRef.current = null;
+      }
+    });
+
+    // Check existing login session when app starts.
+    async function checkExistingSession() {
+      try {
+        const {
+          data: { session },
+          error,
+        } = await supabase.auth.getSession();
+
+        if (error) throw error;
+
+        if (session?.user?.id) {
+          registerUserDevice(session.user.id);
+        }
+      } catch (error) {
+        console.log("SESSION CHECK ERROR:", error.message);
+      }
+    }
+
+    checkExistingSession();
+
+    // Listen when a notification is tapped while app is open/backgrounded.
+    const notificationResponseListener =
+      Notifications.addNotificationResponseReceivedListener(
+        response => {
+          handleNotificationNavigation(response);
+        }
+      );
+
+    // Check if app was opened by tapping a notification.
+    async function checkLastNotification() {
+      try {
+        const response =
+          await Notifications.getLastNotificationResponseAsync();
+
+        if (response) {
+          handleNotificationNavigation(response);
+        }
+      } catch (error) {
+        console.log("NOTIFICATION RESPONSE ERROR:", error.message);
+      }
+    }
+
+    checkLastNotification();
+
+    return () => {
+      subscription.unsubscribe();
+      notificationResponseListener.remove();
+    };
+  }, []);
+
+  // LOADING SCREEN
   if (!isReady) {
     return (
       <View style={styles.loadingContainer}>
@@ -103,7 +267,18 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <NavigationContainer>
+      <NavigationContainer
+        ref={navigationRef}
+        onReady={() => {
+          const pendingScreen =
+            pendingNotificationRouteRef.current;
+
+          if (pendingScreen) {
+            navigationRef.navigate(pendingScreen);
+            pendingNotificationRouteRef.current = null;
+          }
+        }}
+      >
         <Stack.Navigator
           initialRouteName="Login"
           screenOptions={{

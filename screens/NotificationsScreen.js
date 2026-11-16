@@ -17,6 +17,7 @@ import {
   StatusBar,
 } from "react-native";
 
+import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "../config/supabase";
 
@@ -57,7 +58,12 @@ export default function NotificationsScreen({ navigation }) {
 
   // LOAD NOTIFICATIONS
   const loadNotifications = useCallback(async (currentUserId) => {
-    if (!currentUserId) return;
+    if (!currentUserId) {
+      console.log("NO USER ID. CANNOT LOAD NOTIFICATIONS.");
+      return;
+    }
+
+    console.log("FETCHING NOTIFICATIONS FOR:", currentUserId);
 
     const { data, error } = await supabase
       .from("notifications")
@@ -70,18 +76,24 @@ export default function NotificationsScreen({ navigation }) {
       throw error;
     }
 
+    console.log("NOTIFICATIONS RECEIVED:", data?.length || 0);
+    console.log("NOTIFICATION DATA:", data);
+
     setNotifications(data || []);
+
+    return data || [];
   }, []);
 
-  // INITIAL LOAD AND REALTIME
+  // INITIAL LOAD AND REALTIME SUBSCRIPTION
   useEffect(() => {
-    let channel;
+    let channel = null;
     let isMounted = true;
 
     const initializeNotifications = async () => {
       try {
         setLoading(true);
 
+        // GET CURRENT LOGGED-IN USER
         const {
           data: { user },
           error,
@@ -89,18 +101,21 @@ export default function NotificationsScreen({ navigation }) {
 
         if (error) throw error;
 
+        if (!isMounted) return;
+
         if (!user) {
-          if (isMounted) {
-            setNotifications([]);
-            setUserId(null);
-          }
+          console.log("NO AUTHENTICATED USER FOUND.");
+
+          setNotifications([]);
+          setUserId(null);
           return;
         }
 
-        if (!isMounted) return;
+        console.log("NOTIFICATIONS SCREEN USER:", user.id);
 
         setUserId(user.id);
 
+        // LOAD EXISTING NOTIFICATIONS
         await loadNotifications(user.id);
 
         if (!isMounted) return;
@@ -117,7 +132,7 @@ export default function NotificationsScreen({ navigation }) {
               filter: `user_id=eq.${user.id}`,
             },
             (payload) => {
-              console.log("NOTIFICATION CHANGE:", payload);
+              console.log("NOTIFICATION REALTIME EVENT:", payload);
 
               loadNotifications(user.id).catch((error) => {
                 console.log("REALTIME REFRESH ERROR:", error);
@@ -125,15 +140,24 @@ export default function NotificationsScreen({ navigation }) {
             }
           )
           .subscribe((status, err) => {
-            console.log("NOTIFICATIONS REALTIME STATUS:", status);
+            console.log(
+              "NOTIFICATIONS REALTIME STATUS:",
+              status
+            );
 
             if (err) {
-              console.log("NOTIFICATIONS REALTIME ERROR:", err);
+              console.log(
+                "NOTIFICATIONS REALTIME ERROR:",
+                err
+              );
             }
           });
 
       } catch (error) {
-        console.log("NOTIFICATION INITIALIZATION ERROR:", error);
+        console.log(
+          "NOTIFICATION INITIALIZATION ERROR:",
+          error
+        );
 
         if (isMounted) {
           showAlert(
@@ -160,12 +184,57 @@ export default function NotificationsScreen({ navigation }) {
     };
   }, [loadNotifications]);
 
-  // REFRESH
+  // REFRESH WHENEVER SCREEN IS OPENED
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+
+      const refreshOnFocus = async () => {
+        if (!userId) return;
+
+        try {
+          console.log(
+            "NOTIFICATIONS SCREEN FOCUSED. REFRESHING..."
+          );
+
+          console.log(
+            "CURRENT NOTIFICATIONS USER:",
+            userId
+          );
+
+          await loadNotifications(userId);
+
+          if (isActive) {
+            console.log(
+              "FOCUS REFRESH COMPLETED."
+            );
+          }
+        } catch (error) {
+          console.log(
+            "FOCUS REFRESH ERROR:",
+            error
+          );
+        }
+      };
+
+      refreshOnFocus();
+
+      return () => {
+        isActive = false;
+      };
+    }, [userId, loadNotifications])
+  );
+
+  // MANUAL REFRESH
   const onRefresh = async () => {
-    if (!userId) return;
+    if (!userId) {
+      console.log("CANNOT REFRESH: USER ID IS MISSING.");
+      return;
+    }
 
     try {
       setRefreshing(true);
+
       await loadNotifications(userId);
     } catch (error) {
       showAlert(
@@ -329,7 +398,6 @@ export default function NotificationsScreen({ navigation }) {
       >
         {/* HEADER */}
         <View style={styles.header}>
-          {/* BACK BUTTON - MATCHES BUS LIST SCREEN */}
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => {
@@ -424,7 +492,8 @@ export default function NotificationsScreen({ navigation }) {
             </View>
 
             {notifications.map((item) => {
-              const iconColor = getNotificationColor(item.type);
+              const iconColor =
+                getNotificationColor(item.type);
 
               return (
                 <TouchableOpacity

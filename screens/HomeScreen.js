@@ -1091,8 +1091,7 @@ export default function HomeScreen({ navigation }) {
                 </Text>
 
                 <Text style={styles.heroSubtitle}>
-                  Find a bus, choose your seat, and book
-                  your journey with ease.
+                  Track your bus. Book your seat. Travel with ease.
                 </Text>
 
                 <TouchableOpacity
