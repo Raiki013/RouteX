@@ -11,9 +11,10 @@ import {
   MapPin,
   Power,
   Image as ImageIcon,
-  Save,
   Trash2,
   Upload,
+  UserCheck,
+  UserMinus,
 } from "lucide-react";
 
 import { supabase } from "../config/supabase";
@@ -32,6 +33,11 @@ function formatValue(value) {
   return value === null || value === undefined || value === ""
     ? "—"
     : value;
+}
+
+// CHECK CASHIER ROLE
+function isCashier(profile) {
+  return profile?.user_level?.toLowerCase() === "cashier";
 }
 
 // UPLOAD COMPANY LOGO TO SUPABASE STORAGE
@@ -141,8 +147,6 @@ export default function Companies() {
   const [formError, setFormError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
-  // Empty company ID means create a new company.
-  // Otherwise, add a terminal to an existing company.
   const [targetCompanyId, setTargetCompanyId] = useState("");
 
   const [companyName, setCompanyName] = useState("");
@@ -150,7 +154,6 @@ export default function Companies() {
   const [terminalName, setTerminalName] = useState("");
   const [terminalAddress, setTerminalAddress] = useState("");
 
-  // NEW COMPANY LOGO UPLOAD
   const [newCompanyLogoFile, setNewCompanyLogoFile] = useState(null);
   const [newCompanyLogoPreview, setNewCompanyLogoPreview] = useState("");
 
@@ -162,6 +165,10 @@ export default function Companies() {
   const [logoFile, setLogoFile] = useState(null);
   const [logoPreview, setLogoPreview] = useState("");
   const [savingLogo, setSavingLogo] = useState(false);
+
+  // CASHIER ASSIGNMENT
+  const [selectedCashierId, setSelectedCashierId] = useState("");
+  const [assigningCashier, setAssigningCashier] = useState(false);
 
   // CREATE LOCAL PREVIEW FOR NEW COMPANY LOGO
   useEffect(() => {
@@ -222,9 +229,12 @@ export default function Companies() {
           )
           .order("bus_id", { ascending: true }),
 
+        // USE EXISTING profiles.company_id
         supabase
           .from("profiles")
-          .select("id, full_name, email, phone, user_level"),
+          .select(
+            "id, full_name, email, phone, user_level, company_id"
+          ),
       ]);
 
       if (companyResult.error) throw companyResult.error;
@@ -261,7 +271,6 @@ export default function Companies() {
           Number(terminal.company_id) === Number(company.company_id)
       );
 
-      // Keep the existing buses.company text relationship.
       const companyBuses = buses.filter(
         (bus) =>
           bus.company?.trim().toLowerCase() ===
@@ -276,7 +285,7 @@ export default function Companies() {
     });
   }, [companiesData, terminals, buses]);
 
-  // GET THE LATEST SELECTED COMPANY DATA
+  // GET LATEST SELECTED COMPANY DATA
   const selectedCompany = useMemo(() => {
     if (!selectedCompanyId) return null;
 
@@ -288,10 +297,34 @@ export default function Companies() {
     );
   }, [companies, selectedCompanyId]);
 
+  // GET COMPANY CASHIERS
+  const companyCashiers = useMemo(() => {
+    if (!selectedCompany) return [];
+
+    return profiles.filter(
+      (profile) =>
+        isCashier(profile) &&
+        Number(profile.company_id) ===
+          Number(selectedCompany.company_id)
+    );
+  }, [profiles, selectedCompany]);
+
+  // GET UNASSIGNED CASHIERS
+  const availableCashiers = useMemo(() => {
+    return profiles.filter(
+      (profile) =>
+        isCashier(profile) &&
+        (profile.company_id === null ||
+          profile.company_id === undefined ||
+          profile.company_id === "")
+    );
+  }, [profiles]);
+
   // UPDATE LOGO INPUT WHEN SELECTED COMPANY CHANGES
   useEffect(() => {
     setLogoDraft(selectedCompany?.logo_url || "");
     setLogoFile(null);
+    setSelectedCashierId("");
   }, [selectedCompanyId, selectedCompany?.logo_url]);
 
   // SEARCH COMPANIES
@@ -315,6 +348,8 @@ export default function Companies() {
       .map((bus) => bus.operator_id)
   ).size;
 
+  const totalCashiers = profiles.filter(isCashier).length;
+
   // FIND OPERATOR
   function getOperator(operatorId) {
     if (!operatorId) return null;
@@ -337,6 +372,95 @@ export default function Companies() {
     return operatorIds
       .map(getOperator)
       .filter(Boolean);
+  }
+
+  // ASSIGN CASHIER TO COMPANY
+  async function handleAssignCashier() {
+    if (!selectedCompany || !selectedCashierId || assigningCashier) {
+      return;
+    }
+
+    setAssigningCashier(true);
+    setError("");
+    setSuccessMessage("");
+
+    try {
+      // Only assign a cashier who is currently unassigned.
+      const { data, error: assignError } = await supabase
+        .from("profiles")
+        .update({
+          company_id: selectedCompany.company_id,
+        })
+        .eq("id", selectedCashierId)
+        .eq("user_level", "cashier")
+        .is("company_id", null)
+        .select("id")
+        .single();
+
+      if (assignError) throw assignError;
+
+      if (!data) {
+        throw new Error(
+          "Cashier could not be assigned. The account may already belong to another company."
+        );
+      }
+
+      const assignedCashier = profiles.find(
+        (profile) => profile.id === selectedCashierId
+      );
+
+      setSuccessMessage(
+        `${assignedCashier?.full_name || "Cashier"} successfully assigned to ${selectedCompany.company_name}.`
+      );
+
+      setSelectedCashierId("");
+
+      await loadCompanies();
+    } catch (err) {
+      console.error("Cashier assignment error:", err);
+
+      setError(
+        err.message || "Unable to assign cashier."
+      );
+    } finally {
+      setAssigningCashier(false);
+    }
+  }
+
+  // REMOVE CASHIER FROM COMPANY
+  async function handleRemoveCashier(cashier) {
+    if (!selectedCompany) return;
+
+    const confirmed = window.confirm(
+      `Are you sure you want to remove ${cashier.full_name || cashier.email} from ${selectedCompany.company_name}?`
+    );
+
+    if (!confirmed) return;
+
+    setError("");
+    setSuccessMessage("");
+
+    try {
+      const { error: removeError } = await supabase
+        .from("profiles")
+        .update({
+          company_id: null,
+        })
+        .eq("id", cashier.id)
+        .eq("user_level", "cashier")
+        .eq("company_id", selectedCompany.company_id);
+
+      if (removeError) throw removeError;
+
+      setSuccessMessage(
+        `${cashier.full_name || "Cashier"} has been removed from ${selectedCompany.company_name}.`
+      );
+
+      await loadCompanies();
+    } catch (err) {
+      console.error("Remove cashier error:", err);
+      setError(err.message || "Unable to remove cashier.");
+    }
   }
 
   // ADD COMPANY WITH FIRST TERMINAL OR ADD TERMINAL TO EXISTING COMPANY
@@ -381,7 +505,6 @@ export default function Companies() {
       let finalCompanyName;
 
       if (targetCompanyId) {
-        // ADD TERMINAL TO AN EXISTING COMPANY
         const existingCompany = companiesData.find(
           (company) =>
             Number(company.company_id) === Number(targetCompanyId)
@@ -394,7 +517,6 @@ export default function Companies() {
         companyId = existingCompany.company_id;
         finalCompanyName = existingCompany.company_name;
       } else {
-        // CREATE A NEW COMPANY FIRST
         const { data: newCompany, error: companyError } =
           await supabase
             .from("companies")
@@ -414,7 +536,6 @@ export default function Companies() {
         finalCompanyName = newCompany.company_name;
         createdCompanyId = newCompany.company_id;
 
-        // UPLOAD THE SELECTED LOGO, IF THERE IS ONE
         if (newCompanyLogoFile) {
           const uploadedLogoUrl = await uploadCompanyLogo(
             newCompanyLogoFile,
@@ -430,26 +551,19 @@ export default function Companies() {
         }
       }
 
-      // INSERT THE TERMINAL USING THE COMPANY ID
       const { error: terminalError } = await supabase
         .from("terminals")
         .insert([
           {
             company_id: companyId,
-
-            // Keep this old column populated for compatibility
-            // with existing application code.
             operator_name: finalCompanyName,
-
             terminal_name: cleanTerminalName,
             terminal_address: cleanTerminalAddress,
             is_active: true,
           },
         ]);
 
-      if (terminalError) {
-        throw terminalError;
-      }
+      if (terminalError) throw terminalError;
 
       setCompanyName("");
       setLogoUrl("");
@@ -469,8 +583,6 @@ export default function Companies() {
     } catch (err) {
       console.error("Add company/terminal error:", err);
 
-      // If a newly created company has no terminal because
-      // terminal insertion failed, attempt to clean it up.
       if (createdCompanyId !== null) {
         const { error: cleanupError } = await supabase
           .from("companies")
@@ -514,7 +626,6 @@ export default function Companies() {
     try {
       let finalLogoUrl = cleanLogoUrl;
 
-      // UPLOAD FILE IF THE USER SELECTED ONE
       if (logoFile) {
         finalLogoUrl = await uploadCompanyLogo(
           logoFile,
@@ -550,7 +661,6 @@ export default function Companies() {
   }
 
   // ACTIVATE OR DEACTIVATE COMPANY
-  // IMPORTANT: This updates ONLY companies.is_active.
   async function handleCompanyStatus(company) {
     if (updatingCompany || updatingTerminal !== null) return;
 
@@ -594,7 +704,6 @@ export default function Companies() {
   }
 
   // ACTIVATE OR DEACTIVATE INDIVIDUAL TERMINAL
-  // IMPORTANT: This updates ONLY the selected terminal.
   async function handleTerminalStatus(terminal) {
     if (updatingCompany || updatingTerminal !== null) return;
 
@@ -768,7 +877,6 @@ export default function Companies() {
                   />
                 </div>
 
-                {/* NEW COMPANY LOGO URL */}
                 <div className="companies-form-group">
                   <label>Company Logo URL (Optional)</label>
 
@@ -787,7 +895,6 @@ export default function Companies() {
                   </small>
                 </div>
 
-                {/* NEW COMPANY LOGO UPLOAD */}
                 <div className="companies-form-group">
                   <label>Upload Company Logo</label>
 
@@ -940,6 +1047,17 @@ export default function Companies() {
             <h2>{loading ? "..." : totalOperators}</h2>
           </div>
         </div>
+
+        <div className="companies-summary-card">
+          <div className="companies-summary-icon blue">
+            <UserCheck size={22} />
+          </div>
+
+          <div>
+            <span>Total Cashiers</span>
+            <h2>{loading ? "..." : totalCashiers}</h2>
+          </div>
+        </div>
       </div>
 
       {/* COMPANY LIST */}
@@ -1069,6 +1187,7 @@ export default function Companies() {
           onClick={() => {
             setSelectedCompanyId(null);
             setLogoFile(null);
+            setSelectedCashierId("");
           }}
         >
           <div
@@ -1079,7 +1198,7 @@ export default function Companies() {
             <div className="company-modal-header">
               <div>
                 <h3>Company Details</h3>
-                <p>Company, terminals, and assigned buses</p>
+                <p>Company, terminals, assigned buses, and cashiers</p>
               </div>
 
               <button
@@ -1087,6 +1206,7 @@ export default function Companies() {
                 onClick={() => {
                   setSelectedCompanyId(null);
                   setLogoFile(null);
+                  setSelectedCashierId("");
                 }}
                 aria-label="Close modal"
               >
@@ -1387,6 +1507,145 @@ export default function Companies() {
               )}
             </div>
 
+            {/* ASSIGNED CASHIERS */}
+            <div className="company-modal-section">
+              <h4>
+                <UserCheck
+                  size={17}
+                  style={{ marginRight: 7, verticalAlign: "middle" }}
+                />
+                Assigned Cashiers
+              </h4>
+
+              <p className="company-no-data" style={{ marginBottom: 14 }}>
+                Manage cashier accounts assigned to this bus company.
+              </p>
+
+              {companyCashiers.length === 0 ? (
+                <p className="company-no-data">
+                  No cashiers assigned to this company.
+                </p>
+              ) : (
+                companyCashiers.map((cashier) => (
+                  <div
+                    className="company-operator-row"
+                    key={cashier.id}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 12,
+                    }}
+                  >
+                    <div className="company-operator-avatar">
+                      {(cashier.full_name || cashier.email || "?")
+                        .charAt(0)
+                        .toUpperCase()}
+                    </div>
+
+                    <div style={{ flex: 1 }}>
+                      <strong>
+                        {cashier.full_name || "Unnamed Cashier"}
+                      </strong>
+
+                      <span>
+                        {formatValue(cashier.email)}
+                      </span>
+
+                      <span style={{ color: "#64748B", fontSize: 12 }}>
+                        Cashier
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="companies-cancel-button"
+                      style={{
+                        color: "#DC2626",
+                        fontSize: 12,
+                      }}
+                      onClick={() => handleRemoveCashier(cashier)}
+                    >
+                      <UserMinus size={15} />
+                      Remove
+                    </button>
+                  </div>
+                ))
+              )}
+
+              {/* ASSIGN CASHIER */}
+              <div
+                style={{
+                  marginTop: 20,
+                  padding: 16,
+                  background: "#F8FAFC",
+                  borderRadius: 12,
+                  border: "1px solid #E2E8F0",
+                }}
+              >
+                <strong
+                  style={{
+                    display: "block",
+                    marginBottom: 10,
+                    color: "#1E293B",
+                  }}
+                >
+                  Assign a Cashier
+                </strong>
+
+                <div className="companies-form-group">
+                  <label>Select Available Cashier</label>
+
+                  <select
+                    value={selectedCashierId}
+                    onChange={(e) =>
+                      setSelectedCashierId(e.target.value)
+                    }
+                    disabled={assigningCashier}
+                  >
+                    <option value="">
+                      Select a cashier
+                    </option>
+
+                    {availableCashiers.map((cashier) => (
+                      <option
+                        key={cashier.id}
+                        value={cashier.id}
+                      >
+                        {cashier.full_name || cashier.email}
+                        {cashier.email
+                          ? ` (${cashier.email})`
+                          : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {availableCashiers.length === 0 ? (
+                  <p className="company-no-data">
+                    No available cashier accounts. All registered cashiers
+                    are already assigned to a company, or no cashier accounts
+                    have been created.
+                  </p>
+                ) : (
+                  <button
+                    type="button"
+                    className="companies-add-button"
+                    style={{ marginTop: 10 }}
+                    onClick={handleAssignCashier}
+                    disabled={
+                      !selectedCashierId || assigningCashier
+                    }
+                  >
+                    <Plus size={17} />
+
+                    {assigningCashier
+                      ? "Assigning..."
+                      : "Assign Cashier to Company"}
+                  </button>
+                )}
+              </div>
+            </div>
+
             {/* BUSES */}
             <div className="company-modal-section">
               <h4>Company Buses</h4>
@@ -1463,6 +1722,7 @@ export default function Companies() {
               onClick={() => {
                 setSelectedCompanyId(null);
                 setLogoFile(null);
+                setSelectedCashierId("");
               }}
             >
               Close Details
