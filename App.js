@@ -58,7 +58,7 @@ const Stack = createNativeStackNavigator();
 
 const navigationRef = createNavigationContainerRef();
 
-// Screens that can be opened from a notification.
+// SCREENS THAT CAN BE OPENED FROM NOTIFICATIONS
 const ALLOWED_NOTIFICATION_SCREENS = [
   "MainTabs",
   "Payment",
@@ -88,17 +88,20 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function App() {
   const [isReady, setIsReady] = useState(false);
+  const [initialRoute, setInitialRoute] = useState(null);
 
   const registeredUserRef = useRef(null);
   const registeringUserRef = useRef(null);
 
   const pendingNotificationRouteRef = useRef(null);
 
+  // =====================================
   // REGISTER PUSH TOKEN
+  // =====================================
+
   async function registerUserDevice(userId) {
     if (!userId) return;
 
-    // Prevent duplicate registration.
     if (registeredUserRef.current === userId) {
       return;
     }
@@ -114,16 +117,69 @@ export default function App() {
 
       if (token) {
         registeredUserRef.current = userId;
-        console.log("RouteX device registered for push notifications.");
+
+        console.log(
+          "RouteX device registered for push notifications."
+        );
       }
     } catch (error) {
-      console.log("DEVICE REGISTRATION ERROR:", error.message);
+      console.log(
+        "DEVICE REGISTRATION ERROR:",
+        error.message
+      );
     } finally {
       registeringUserRef.current = null;
     }
   }
 
+  // =====================================
+  // GET INITIAL SCREEN BASED ON ROLE
+  // =====================================
+
+  async function getUserInitialRoute(userId) {
+    try {
+      const { data: profile, error } = await supabase
+        .from("profiles")
+        .select("user_level")
+        .eq("id", userId)
+        .maybeSingle();
+
+      if (error) {
+        console.log("PROFILE ROLE ERROR:", error.message);
+        return "MainTabs";
+      }
+
+      const role = String(
+        profile?.user_level || "user"
+      ).toLowerCase();
+
+      console.log("RESTORED USER ROLE:", role);
+
+      switch (role) {
+        case "cashier":
+          return "CashierDashboard";
+
+        case "operator":
+          return "OperatorDocking";
+
+        case "user":
+        default:
+          return "MainTabs";
+      }
+    } catch (error) {
+      console.log(
+        "INITIAL ROUTE ERROR:",
+        error.message
+      );
+
+      return "MainTabs";
+    }
+  }
+
+  // =====================================
   // OPEN SCREEN FROM NOTIFICATION
+  // =====================================
+
   function handleNotificationNavigation(response) {
     if (!response) return;
 
@@ -146,17 +202,66 @@ export default function App() {
     }
   }
 
-  // PREPARE APP
+  // =====================================
+  // RESTORE LOGIN SESSION
+  // =====================================
+
   useEffect(() => {
     let mounted = true;
 
     async function prepareApp() {
       try {
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        console.log("RouteX: Checking saved login session...");
+
+        // GET SAVED SUPABASE SESSION
+        const {
+          data: { session },
+          error,
+        } = await supabase.auth.getSession();
+
+        if (error) {
+          throw error;
+        }
+
+        // IF USER IS ALREADY LOGGED IN
+        if (session?.user?.id) {
+          console.log("RouteX: Existing session found.");
+
+          const userId = session.user.id;
+
+          // REGISTER DEVICE
+          registerUserDevice(userId);
+
+          // GET ROLE AND SELECT CORRECT SCREEN
+          const route = await getUserInitialRoute(userId);
+
+          if (mounted) {
+            setInitialRoute(route);
+          }
+        } else {
+          // NO SAVED SESSION
+          console.log("RouteX: No existing session.");
+
+          if (mounted) {
+            setInitialRoute("Login");
+          }
+        }
       } catch (error) {
-        console.log("APP STARTUP ERROR:", error);
+        console.log(
+          "SESSION RESTORE ERROR:",
+          error.message
+        );
+
+        if (mounted) {
+          setInitialRoute("Login");
+        }
       } finally {
         if (mounted) {
+          // Wait briefly for the splash screen.
+          await new Promise(resolve =>
+            setTimeout(resolve, 500)
+          );
+
           setIsReady(true);
         }
       }
@@ -169,7 +274,10 @@ export default function App() {
     };
   }, []);
 
+  // =====================================
   // HIDE SPLASH SCREEN
+  // =====================================
+
   useEffect(() => {
     if (isReady) {
       SplashScreen.hideAsync().catch(error => {
@@ -178,45 +286,43 @@ export default function App() {
     }
   }, [isReady]);
 
-  // AUTHENTICATION AND NOTIFICATION LISTENERS
+  // =====================================
+  // AUTHENTICATION LISTENER
+  // =====================================
+
   useEffect(() => {
-    // Listen for login, logout, and session changes.
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      const userId = session?.user?.id;
+    } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        const userId = session?.user?.id;
 
-      if (userId) {
-        // Defer Supabase work until after the auth callback.
-        Promise.resolve().then(() => {
-          registerUserDevice(userId);
-        });
-      } else if (event === "SIGNED_OUT") {
-        registeredUserRef.current = null;
-      }
-    });
-
-    // Check existing login session when app starts.
-    async function checkExistingSession() {
-      try {
-        const {
-          data: { session },
-          error,
-        } = await supabase.auth.getSession();
-
-        if (error) throw error;
-
-        if (session?.user?.id) {
-          registerUserDevice(session.user.id);
+        if (userId) {
+          Promise.resolve().then(() => {
+            registerUserDevice(userId);
+          });
         }
-      } catch (error) {
-        console.log("SESSION CHECK ERROR:", error.message);
+
+        // CLEAR REGISTRATION STATE AFTER LOGOUT
+        if (event === "SIGNED_OUT") {
+          registeredUserRef.current = null;
+          registeringUserRef.current = null;
+
+          console.log("RouteX: User signed out.");
+        }
       }
-    }
+    );
 
-    checkExistingSession();
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
 
-    // Listen when a notification is tapped while app is open/backgrounded.
+  // =====================================
+  // NOTIFICATION LISTENERS
+  // =====================================
+
+  useEffect(() => {
     const notificationResponseListener =
       Notifications.addNotificationResponseReceivedListener(
         response => {
@@ -224,7 +330,6 @@ export default function App() {
         }
       );
 
-    // Check if app was opened by tapping a notification.
     async function checkLastNotification() {
       try {
         const response =
@@ -234,20 +339,25 @@ export default function App() {
           handleNotificationNavigation(response);
         }
       } catch (error) {
-        console.log("NOTIFICATION RESPONSE ERROR:", error.message);
+        console.log(
+          "NOTIFICATION RESPONSE ERROR:",
+          error.message
+        );
       }
     }
 
     checkLastNotification();
 
     return () => {
-      subscription.unsubscribe();
       notificationResponseListener.remove();
     };
   }, []);
 
+  // =====================================
   // LOADING SCREEN
-  if (!isReady) {
+  // =====================================
+
+  if (!isReady || !initialRoute) {
     return (
       <View style={styles.loadingContainer}>
         <Image
@@ -265,6 +375,10 @@ export default function App() {
     );
   }
 
+  // =====================================
+  // MAIN NAVIGATION
+  // =====================================
+
   return (
     <SafeAreaProvider>
       <NavigationContainer
@@ -280,7 +394,7 @@ export default function App() {
         }}
       >
         <Stack.Navigator
-          initialRouteName="Login"
+          initialRouteName={initialRoute}
           screenOptions={{
             headerShown: false,
             animation: "slide_from_right",
