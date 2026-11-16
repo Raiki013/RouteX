@@ -8,93 +8,95 @@ import {
   CheckCircle2,
   AlertCircle,
   Loader2,
+  Users,
 } from "lucide-react";
 
 import { supabase } from "../config/supabase";
 
+const ALLOWED_ROLES = ["user", "cashier", "operator"];
+
 export default function SendNotification() {
-  const [passengers, setPassengers] = useState([]);
+  const [recipients, setRecipients] = useState([]);
   const [selectedUser, setSelectedUser] = useState("");
   const [search, setSearch] = useState("");
+  const [recipientMode, setRecipientMode] = useState("individual");
 
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
   const [type, setType] = useState("general");
 
-  const [loadingPassengers, setLoadingPassengers] = useState(true);
+  const [loadingRecipients, setLoadingRecipients] = useState(true);
   const [sending, setSending] = useState(false);
-
   const [feedback, setFeedback] = useState(null);
 
-  // LOAD PASSENGER ACCOUNTS
+  // LOAD ALL ALLOWED ACCOUNT TYPES
   useEffect(() => {
     let cancelled = false;
 
-    async function loadPassengers() {
-      setLoadingPassengers(true);
-      setFeedback(null);
+    async function loadRecipients() {
+      setLoadingRecipients(true);
 
       const { data, error } = await supabase
         .from("profiles")
-        .select("id, full_name")
-        .eq("user_level", "user")
+        .select("id, full_name, user_level")
+        .in("user_level", ALLOWED_ROLES)
         .order("full_name", { ascending: true });
 
       if (cancelled) return;
 
       if (error) {
-        console.error("Passenger loading error:", error);
+        console.error("Recipient loading error:", error);
 
         setFeedback({
           type: "error",
-          message: error.message || "Unable to load passengers.",
+          message: error.message || "Unable to load recipients.",
         });
 
-        setPassengers([]);
+        setRecipients([]);
       } else {
-        setPassengers(data || []);
+        setRecipients(data || []);
       }
 
-      setLoadingPassengers(false);
+      setLoadingRecipients(false);
     }
 
-    loadPassengers();
+    loadRecipients();
 
     return () => {
       cancelled = true;
     };
   }, []);
 
-  // FILTER PASSENGERS
-  const filteredPassengers = useMemo(() => {
+  // FILTER RECIPIENTS
+  const filteredRecipients = useMemo(() => {
     const keyword = search.trim().toLowerCase();
 
-    if (!keyword) return passengers;
+    if (!keyword) return recipients;
 
-    return passengers.filter((passenger) =>
-      (passenger.full_name || "")
-        .toLowerCase()
-        .includes(keyword)
+    return recipients.filter((recipient) =>
+      (recipient.full_name || "").toLowerCase().includes(keyword) ||
+      (recipient.user_level || "").toLowerCase().includes(keyword)
     );
-  }, [passengers, search]);
+  }, [recipients, search]);
 
-  const selectedPassenger = passengers.find(
-    (passenger) => passenger.id === selectedUser
+  const selectedRecipient = recipients.find(
+    (recipient) => recipient.id === selectedUser
   );
+
+  // ROLE COUNTS
+  const roleCounts = useMemo(() => ({
+    user: recipients.filter((r) => r.user_level === "user").length,
+    cashier: recipients.filter((r) => r.user_level === "cashier").length,
+    operator: recipients.filter((r) => r.user_level === "operator").length,
+  }), [recipients]);
+
+  const totalRecipients =
+    roleCounts.user + roleCounts.cashier + roleCounts.operator;
 
   // SEND NOTIFICATION
   async function handleSendNotification(event) {
     event.preventDefault();
-
     setFeedback(null);
-
-    if (!selectedUser) {
-      setFeedback({
-        type: "error",
-        message: "Please select a passenger.",
-      });
-      return;
-    }
 
     if (!title.trim() || !message.trim()) {
       setFeedback({
@@ -104,10 +106,37 @@ export default function SendNotification() {
       return;
     }
 
+    if (recipientMode === "individual" && !selectedUser) {
+      setFeedback({
+        type: "error",
+        message: "Please select a recipient.",
+      });
+      return;
+    }
+
+    if (recipientMode === "all" && totalRecipients === 0) {
+      setFeedback({
+        type: "error",
+        message: "There are no eligible recipients.",
+      });
+      return;
+    }
+
+    // CONFIRM BEFORE BROADCASTING
+    if (recipientMode === "all") {
+      const confirmed = window.confirm(
+        `Send this notification to all ${totalRecipients} accounts?\n\n` +
+        `Passengers: ${roleCounts.user}\n` +
+        `Cashiers: ${roleCounts.cashier}\n` +
+        `Operators: ${roleCounts.operator}`
+      );
+
+      if (!confirmed) return;
+    }
+
     try {
       setSending(true);
 
-      // CONFIRM THE CURRENT SESSION EXISTS
       const {
         data: { session },
         error: sessionError,
@@ -119,20 +148,22 @@ export default function SendNotification() {
         throw new Error("Your session has expired. Please log in again.");
       }
 
-      // CALL EXISTING EDGE FUNCTION
+      const requestBody = {
+        audience: recipientMode === "all" ? "all" : "individual",
+        user_id: recipientMode === "individual" ? selectedUser : null,
+        title: title.trim(),
+        message: message.trim(),
+        type,
+        data: {
+          screen: "Notifications",
+          notification_type: type,
+        },
+      };
+
       const { data, error } = await supabase.functions.invoke(
         "send-push",
         {
-          body: {
-            user_id: selectedUser,
-            title: title.trim(),
-            message: message.trim(),
-            type,
-            data: {
-              screen: "Notifications",
-              notification_type: type,
-            },
-          },
+          body: requestBody,
         }
       );
 
@@ -142,12 +173,9 @@ export default function SendNotification() {
         if (error.context) {
           try {
             const response = await error.context.json();
-
-            if (response?.error) {
-              details = response.error;
-            }
+            if (response?.error) details = response.error;
           } catch {
-            // Keep the original error message.
+            // Keep original error message.
           }
         }
 
@@ -160,14 +188,23 @@ export default function SendNotification() {
         );
       }
 
-      setFeedback({
-        type: "success",
-        message:
-          `Notification saved for ${selectedPassenger?.full_name || "the passenger"}. ` +
-          `Push sent to ${data.successful_tickets || 0} device(s).`,
-      });
+      if (recipientMode === "all") {
+        setFeedback({
+          type: "success",
+          message:
+            `Broadcast completed. ${data.notifications_saved ?? totalRecipients} ` +
+            `notification(s) saved. ` +
+            `${data.successful_tickets || 0} push notification(s) sent.`,
+        });
+      } else {
+        setFeedback({
+          type: "success",
+          message:
+            `Notification saved for ${selectedRecipient?.full_name || "the recipient"}. ` +
+            `Push sent to ${data.successful_tickets || 0} device(s).`,
+        });
+      }
 
-      // RESET FORM AFTER SUCCESS
       setTitle("");
       setMessage("");
       setType("general");
@@ -192,7 +229,7 @@ export default function SendNotification() {
         <div>
           <h1>Send Notification</h1>
           <p>
-            Send a personal announcement or message to a RouteX passenger.
+            Send a personal message or announcement to RouteX accounts.
           </p>
         </div>
       </div>
@@ -204,38 +241,33 @@ export default function SendNotification() {
           padding: "25px",
         }}
       >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "13px",
-            marginBottom: "25px",
-          }}
-        >
-          <div
-            style={{
-              width: "48px",
-              height: "48px",
-              borderRadius: "13px",
-              background: "#eff6ff",
-              color: "#2563eb",
-              display: "grid",
-              placeItems: "center",
-            }}
-          >
+        {/* HEADER */}
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "13px",
+          marginBottom: "25px",
+        }}>
+          <div style={{
+            width: "48px",
+            height: "48px",
+            borderRadius: "13px",
+            background: "#eff6ff",
+            color: "#2563eb",
+            display: "grid",
+            placeItems: "center",
+          }}>
             <Bell size={23} />
           </div>
 
           <div>
             <h3 style={{ margin: 0 }}>New Notification</h3>
-            <p
-              style={{
-                margin: "5px 0 0",
-                color: "#64748b",
-                fontSize: "13px",
-              }}
-            >
-              The passenger will receive an in-app notification and push alert.
+            <p style={{
+              margin: "5px 0 0",
+              color: "#64748b",
+              fontSize: "13px",
+            }}>
+              Send an in-app notification and push alert.
             </p>
           </div>
         </div>
@@ -244,67 +276,104 @@ export default function SendNotification() {
           onSubmit={handleSendNotification}
           style={{ display: "grid", gap: "20px" }}
         >
-          {/* PASSENGER */}
+          {/* RECIPIENT MODE */}
           <div>
-            <label style={labelStyle}>
-              Select Passenger
-            </label>
+            <label style={labelStyle}>Recipient</label>
 
-            <div style={{ position: "relative", marginBottom: "10px" }}>
-              <Search
-                size={17}
-                style={{
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+              gap: "12px",
+            }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setRecipientMode("individual");
+                  setFeedback(null);
+                }}
+                style={modeButtonStyle(
+                  recipientMode === "individual"
+                )}
+              >
+                <User size={19} />
+                <span>Individual</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setRecipientMode("all");
+                  setSelectedUser("");
+                  setFeedback(null);
+                }}
+                style={modeButtonStyle(
+                  recipientMode === "all"
+                )}
+              >
+                <Users size={19} />
+                <span>All Users</span>
+              </button>
+            </div>
+          </div>
+
+          {/* INDIVIDUAL RECIPIENT */}
+          {recipientMode === "individual" && (
+            <div>
+              <label style={labelStyle}>Select Recipient</label>
+
+              <div style={{
+                position: "relative",
+                marginBottom: "10px",
+              }}>
+                <Search size={17} style={{
                   position: "absolute",
                   left: "13px",
                   top: "50%",
                   transform: "translateY(-50%)",
                   color: "#94a3b8",
-                }}
-              />
+                }} />
 
-              <input
-                type="text"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search passenger name..."
-                style={{
-                  ...inputStyle,
-                  paddingLeft: "40px",
-                }}
-              />
-            </div>
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Search name or account type..."
+                  style={{
+                    ...inputStyle,
+                    paddingLeft: "40px",
+                  }}
+                />
+              </div>
 
-            <select
-              value={selectedUser}
-              onChange={(event) => setSelectedUser(event.target.value)}
-              disabled={loadingPassengers}
-              required
-              style={inputStyle}
-            >
-              <option value="">
-                {loadingPassengers
-                  ? "Loading passengers..."
-                  : filteredPassengers.length
-                    ? "Choose a passenger"
-                    : "No passengers found"}
-              </option>
-
-              {filteredPassengers.map((passenger) => (
-                <option key={passenger.id} value={passenger.id}>
-                  {passenger.full_name || "Unnamed Passenger"}
+              <select
+                value={selectedUser}
+                onChange={(event) => setSelectedUser(event.target.value)}
+                disabled={loadingRecipients}
+                required
+                style={inputStyle}
+              >
+                <option value="">
+                  {loadingRecipients
+                    ? "Loading accounts..."
+                    : "Choose a recipient"}
                 </option>
-              ))}
-            </select>
 
-            <p style={helperStyle}>
-              {loadingPassengers
-                ? "Retrieving passenger accounts..."
-                : `${passengers.length} passenger account(s) available.`}
-            </p>
+                {filteredRecipients.map((recipient) => (
+                  <option key={recipient.id} value={recipient.id}>
+                    {recipient.full_name || "Unnamed Account"} (
+                    {recipient.user_level})
+                  </option>
+                ))}
+              </select>
 
-            {selectedPassenger && (
-              <div
-                style={{
+              <p style={helperStyle}>
+                {loadingRecipients
+                  ? "Retrieving accounts..."
+                  : `${recipients.length} account(s) available.`}
+              </p>
+
+              {selectedRecipient && (
+                <div style={{
                   marginTop: "12px",
                   padding: "12px",
                   background: "#eff6ff",
@@ -313,22 +382,94 @@ export default function SendNotification() {
                   alignItems: "center",
                   gap: "10px",
                   color: "#1d4ed8",
-                }}
-              >
-                <User size={18} />
+                }}>
+                  <User size={18} />
 
-                <span style={{ fontSize: "13px", fontWeight: 600 }}>
-                  Recipient: {selectedPassenger.full_name || "Unnamed Passenger"}
-                </span>
+                  <span style={{
+                    fontSize: "13px",
+                    fontWeight: 600,
+                  }}>
+                    {selectedRecipient.full_name || "Unnamed Account"}
+                    {" "}({selectedRecipient.user_level})
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* BROADCAST SUMMARY */}
+          {recipientMode === "all" && (
+            <div style={{
+              padding: "16px",
+              background: "#eff6ff",
+              border: "1px solid #bfdbfe",
+              borderRadius: "12px",
+            }}>
+              <div style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "9px",
+                color: "#1d4ed8",
+                fontWeight: 700,
+                marginBottom: "13px",
+              }}>
+                <Users size={19} />
+                Broadcast to all accounts
               </div>
-            )}
-          </div>
+
+              {loadingRecipients ? (
+                <p style={helperStyle}>Loading account totals...</p>
+              ) : (
+                <>
+                  <div style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                    gap: "10px",
+                  }}>
+                    {[
+                      ["Passengers", roleCounts.user],
+                      ["Cashiers", roleCounts.cashier],
+                      ["Operators", roleCounts.operator],
+                    ].map(([label, count]) => (
+                      <div key={label} style={{
+                        background: "#ffffff",
+                        padding: "12px",
+                        borderRadius: "9px",
+                        textAlign: "center",
+                      }}>
+                        <div style={{
+                          fontSize: "22px",
+                          fontWeight: 800,
+                          color: "#1e40af",
+                        }}>
+                          {count}
+                        </div>
+                        <div style={{
+                          fontSize: "11px",
+                          color: "#64748b",
+                        }}>
+                          {label}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <p style={{
+                    margin: "13px 0 0",
+                    fontSize: "13px",
+                    fontWeight: 700,
+                    color: "#1e40af",
+                  }}>
+                    Total recipients: {totalRecipients}
+                  </p>
+                </>
+              )}
+            </div>
+          )}
 
           {/* TITLE */}
           <div>
-            <label style={labelStyle}>
-              Notification Title
-            </label>
+            <label style={labelStyle}>Notification Title</label>
 
             <input
               type="text"
@@ -343,14 +484,12 @@ export default function SendNotification() {
 
           {/* MESSAGE */}
           <div>
-            <label style={labelStyle}>
-              Message
-            </label>
+            <label style={labelStyle}>Message</label>
 
             <textarea
               value={message}
               onChange={(event) => setMessage(event.target.value)}
-              placeholder="Write your message to the passenger..."
+              placeholder="Write your notification message..."
               rows={5}
               maxLength={1000}
               required
@@ -368,9 +507,7 @@ export default function SendNotification() {
 
           {/* TYPE */}
           <div>
-            <label style={labelStyle}>
-              Notification Type
-            </label>
+            <label style={labelStyle}>Notification Type</label>
 
             <select
               value={type}
@@ -417,17 +554,18 @@ export default function SendNotification() {
             type="submit"
             disabled={
               sending ||
-              loadingPassengers ||
-              !selectedUser ||
+              loadingRecipients ||
               !title.trim() ||
-              !message.trim()
+              !message.trim() ||
+              (recipientMode === "individual" && !selectedUser) ||
+              (recipientMode === "all" && totalRecipients === 0)
             }
             style={{
               width: "100%",
               minHeight: "46px",
               border: "none",
               borderRadius: "10px",
-              background: "#2563eb",
+              background: recipientMode === "all" ? "#0f766e" : "#2563eb",
               color: "#ffffff",
               fontWeight: 700,
               fontSize: "14px",
@@ -436,22 +574,20 @@ export default function SendNotification() {
               alignItems: "center",
               gap: "9px",
               cursor: sending ? "not-allowed" : "pointer",
-              opacity:
-                sending || loadingPassengers || !selectedUser ||
-                !title.trim() || !message.trim()
-                  ? 0.6
-                  : 1,
+              opacity: sending ? 0.6 : 1,
             }}
           >
             {sending ? (
               <>
-                <Loader2 size={18} className="spin" />
+                <Loader2 size={18} />
                 Sending...
               </>
             ) : (
               <>
                 <Send size={18} />
-                Send Notification
+                {recipientMode === "all"
+                  ? `Send to All (${totalRecipients})`
+                  : "Send Notification"}
               </>
             )}
           </button>
@@ -459,6 +595,23 @@ export default function SendNotification() {
       </div>
     </div>
   );
+}
+
+function modeButtonStyle(active) {
+  return {
+    minHeight: "45px",
+    border: active ? "2px solid #2563eb" : "1px solid #dbe2ea",
+    borderRadius: "9px",
+    background: active ? "#eff6ff" : "#ffffff",
+    color: active ? "#1d4ed8" : "#64748b",
+    fontWeight: 700,
+    fontSize: "13px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "8px",
+    cursor: "pointer",
+  };
 }
 
 const labelStyle = {
