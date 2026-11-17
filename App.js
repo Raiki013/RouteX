@@ -133,7 +133,7 @@ export default function App() {
   }
 
   // =====================================
-  // GET INITIAL SCREEN BASED ON ROLE
+  // GET USER INITIAL ROUTE BASED ON ROLE
   // =====================================
 
   async function getUserInitialRoute(userId) {
@@ -160,8 +160,6 @@ export default function App() {
           return "CashierDashboard";
 
         case "operator":
-          return "OperatorDocking";
-
         case "user":
         default:
           return "MainTabs";
@@ -177,7 +175,7 @@ export default function App() {
   }
 
   // =====================================
-  // OPEN SCREEN FROM NOTIFICATION
+  // OPEN SCREEN FROM NEW NOTIFICATION
   // =====================================
 
   function handleNotificationNavigation(response) {
@@ -223,23 +221,23 @@ export default function App() {
           throw error;
         }
 
-        // IF USER IS ALREADY LOGGED IN
+        // USER ALREADY LOGGED IN
         if (session?.user?.id) {
           console.log("RouteX: Existing session found.");
 
           const userId = session.user.id;
 
-          // REGISTER DEVICE
+          // REGISTER PUSH NOTIFICATION DEVICE
           registerUserDevice(userId);
 
-          // GET ROLE AND SELECT CORRECT SCREEN
+          // GET ROLE AND INITIAL SCREEN
           const route = await getUserInitialRoute(userId);
 
           if (mounted) {
             setInitialRoute(route);
           }
         } else {
-          // NO SAVED SESSION
+          // NO SAVED LOGIN SESSION
           console.log("RouteX: No existing session.");
 
           if (mounted) {
@@ -257,7 +255,6 @@ export default function App() {
         }
       } finally {
         if (mounted) {
-          // Wait briefly for the splash screen.
           await new Promise(resolve =>
             setTimeout(resolve, 500)
           );
@@ -319,7 +316,7 @@ export default function App() {
   }, []);
 
   // =====================================
-  // NOTIFICATION LISTENERS
+  // NOTIFICATION LISTENER
   // =====================================
 
   useEffect(() => {
@@ -330,23 +327,8 @@ export default function App() {
         }
       );
 
-    async function checkLastNotification() {
-      try {
-        const response =
-          await Notifications.getLastNotificationResponseAsync();
-
-        if (response) {
-          handleNotificationNavigation(response);
-        }
-      } catch (error) {
-        console.log(
-          "NOTIFICATION RESPONSE ERROR:",
-          error.message
-        );
-      }
-    }
-
-    checkLastNotification();
+    // DO NOT RESTORE OLD NOTIFICATION SCREEN
+    // WHEN THE APP IS OPENED NORMALLY.
 
     return () => {
       notificationResponseListener.remove();
@@ -383,15 +365,6 @@ export default function App() {
     <SafeAreaProvider>
       <NavigationContainer
         ref={navigationRef}
-        onReady={() => {
-          const pendingScreen =
-            pendingNotificationRouteRef.current;
-
-          if (pendingScreen) {
-            navigationRef.navigate(pendingScreen);
-            pendingNotificationRouteRef.current = null;
-          }
-        }}
       >
         <Stack.Navigator
           initialRouteName={initialRoute}
@@ -400,6 +373,7 @@ export default function App() {
             animation: "slide_from_right",
           }}
         >
+          {/* AUTH */}
           <Stack.Screen
             name="Login"
             component={LoginScreen}
@@ -410,6 +384,7 @@ export default function App() {
             component={SignupScreen}
           />
 
+          {/* MAIN TABS */}
           <Stack.Screen
             name="MainTabs"
             component={BottomTabs}
@@ -478,6 +453,7 @@ export default function App() {
             name="Tracking"
             component={TrackingScreen}
           />
+
         </Stack.Navigator>
       </NavigationContainer>
     </SafeAreaProvider>

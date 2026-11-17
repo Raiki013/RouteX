@@ -1,4 +1,3 @@
-
 import React, { useCallback, useState } from "react";
 
 import {
@@ -114,14 +113,10 @@ export default function OperatorDockingScreen({ navigation, route }) {
   };
 
   // LOAD TRIP
+  // Recover the operator's active trip if navigation parameters
+  // are missing after the app has been closed and reopened.
   const loadTrip = async (operatorId) => {
-    if (!tripId) {
-      throw new Error(
-        "Trip ID is missing. Please open this screen from Trip Management."
-      );
-    }
-
-    const { data, error } = await supabase
+    let query = supabase
       .from("bus_trips")
       .select(`
         trip_id,
@@ -132,11 +127,30 @@ export default function OperatorDockingScreen({ navigation, route }) {
         started_at,
         ended_at
       `)
-      .eq("trip_id", tripId)
-      .eq("operator_id", operatorId)
-      .single();
+      .eq("operator_id", operatorId);
+
+    if (tripId) {
+      // Normal flow: use the trip selected in Trip Management.
+      query = query.eq("trip_id", tripId);
+    } else {
+      // Recovery flow: find the latest active trip.
+      query = query
+        .eq("status", "active")
+        .order("started_at", { ascending: false })
+        .limit(1);
+    }
+
+    const { data, error } = await query.maybeSingle();
 
     if (error) throw error;
+
+    if (!data) {
+      throw new Error(
+        tripId
+          ? "The selected trip could not be found. Please return to Trip Management."
+          : "No active trip was found for your account. Please open Trip Management and select a trip."
+      );
+    }
 
     if (
       passedBusId &&
@@ -399,7 +413,6 @@ export default function OperatorDockingScreen({ navigation, route }) {
       return;
     }
 
-    // SHOW CANCEL AND START TRIP BUTTONS
     showAlert(
       "Start Trip",
       `Are you sure you want to start the trip to ${trip.destination}?`,
@@ -612,7 +625,13 @@ export default function OperatorDockingScreen({ navigation, route }) {
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.headerButton}
-          onPress={() => navigation.goBack()}
+          onPress={() => {
+            if (navigation.canGoBack()) {
+              navigation.goBack();
+            } else {
+              navigation.navigate("TripManagement");
+            }
+          }}
           activeOpacity={0.8}
         >
           <Ionicons name="arrow-back" size={21} color="#172B45" />

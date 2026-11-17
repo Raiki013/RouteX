@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 
 import {
   View,
@@ -22,13 +22,9 @@ export default function TicketScreen({ route, navigation }) {
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
 
-  useEffect(() => {
-    loadTicket();
-  }, [bookingId]);
-
-  const loadTicket = async () => {
+  // Load the latest booking information
+  const loadTicket = useCallback(async () => {
     try {
-      setLoading(true);
       setErrorMessage("");
 
       const {
@@ -51,7 +47,8 @@ export default function TicketScreen({ route, navigation }) {
           booking_status,
           payment_status,
           ticket_code,
-          paid_at
+          paid_at,
+          boarding_status
         `)
         .eq("booking_id", bookingId)
         .eq("user_id", user.id)
@@ -75,7 +72,53 @@ export default function TicketScreen({ route, navigation }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [bookingId]);
+
+  // Initial loading and automatic Realtime updates
+  useEffect(() => {
+    if (!bookingId) {
+      setErrorMessage("Booking ID is missing.");
+      setLoading(false);
+      return;
+    }
+
+    loadTicket();
+
+    const channel = supabase
+      .channel(`ticket-booking-${bookingId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "bookings",
+          filter: `booking_id=eq.${bookingId}`,
+        },
+        (payload) => {
+          console.log("Booking updated:", payload.new);
+
+          // Immediately update the displayed booking information
+          setBooking((currentBooking) => {
+            if (!currentBooking) return currentBooking;
+
+            return {
+              ...currentBooking,
+              ...payload.new,
+            };
+          });
+
+          // Fetch the latest complete booking record
+          loadTicket();
+        }
+      )
+      .subscribe((status) => {
+        console.log("Ticket Realtime status:", status);
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [bookingId, loadTicket]);
 
   // Return to MainTabs and select Home
   const goBackHome = () => {
@@ -103,7 +146,9 @@ export default function TicketScreen({ route, navigation }) {
     return (
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color="#2563EB" />
-        <Text style={styles.loadingText}>Loading your ticket...</Text>
+        <Text style={styles.loadingText}>
+          Loading your ticket...
+        </Text>
       </View>
     );
   }
@@ -117,15 +162,21 @@ export default function TicketScreen({ route, navigation }) {
           color="#EF4444"
         />
 
-        <Text style={styles.errorTitle}>Ticket Unavailable</Text>
+        <Text style={styles.errorTitle}>
+          Ticket Unavailable
+        </Text>
 
-        <Text style={styles.errorText}>{errorMessage}</Text>
+        <Text style={styles.errorText}>
+          {errorMessage}
+        </Text>
 
         <TouchableOpacity
           style={styles.button}
           onPress={goBackHome}
         >
-          <Text style={styles.buttonText}>Back to Home</Text>
+          <Text style={styles.buttonText}>
+            Back to Home
+          </Text>
         </TouchableOpacity>
       </View>
     );
@@ -136,6 +187,9 @@ export default function TicketScreen({ route, navigation }) {
     booking.booking_status === "confirmed" &&
     booking.ticket_code;
 
+  const isBoarded =
+    booking.boarding_status === "boarded";
+
   if (!isPaid) {
     return (
       <View style={styles.centerContainer}>
@@ -145,7 +199,9 @@ export default function TicketScreen({ route, navigation }) {
           color="#F59E0B"
         />
 
-        <Text style={styles.errorTitle}>Payment Pending</Text>
+        <Text style={styles.errorTitle}>
+          Payment Pending
+        </Text>
 
         <Text style={styles.errorText}>
           Your ticket is not available yet. Please complete your payment
@@ -156,7 +212,9 @@ export default function TicketScreen({ route, navigation }) {
           style={styles.button}
           onPress={goBackHome}
         >
-          <Text style={styles.buttonText}>Back to Home</Text>
+          <Text style={styles.buttonText}>
+            Back to Home
+          </Text>
         </TouchableOpacity>
       </View>
     );
@@ -169,50 +227,121 @@ export default function TicketScreen({ route, navigation }) {
     >
       <View style={styles.header}>
         <Ionicons
-          name="checkmark-circle"
+          name={
+            isBoarded
+              ? "checkmark-done-circle"
+              : "checkmark-circle"
+          }
           size={55}
           color="#16A34A"
         />
 
-        <Text style={styles.headerTitle}>Booking Confirmed!</Text>
+        <Text style={styles.headerTitle}>
+          {isBoarded ? "Successfully Boarded!" : "Booking Confirmed!"}
+        </Text>
 
         <Text style={styles.headerSubtitle}>
-          Your payment was successful.
+          {isBoarded
+            ? "Your ticket has been verified by the bus operator."
+            : "Your payment was successful."}
         </Text>
       </View>
 
+      {/* Ticket Card */}
       <View style={styles.ticketCard}>
         <View style={styles.ticketHeader}>
-          <Text style={styles.ticketTitle}>RouteX E-Ticket</Text>
+          <Text style={styles.ticketTitle}>
+            RouteX E-Ticket
+          </Text>
 
-          <View style={styles.paidBadge}>
-            <Text style={styles.paidText}>PAID</Text>
+          <View
+            style={[
+              styles.paidBadge,
+              isBoarded && styles.boardedBadge,
+            ]}
+          >
+            <Text
+              style={[
+                styles.paidText,
+                isBoarded && styles.boardedText,
+              ]}
+            >
+              {isBoarded ? "BOARDED" : "PAID"}
+            </Text>
           </View>
         </View>
 
         <View style={styles.divider} />
 
-        <Text style={styles.label}>Booking Reference</Text>
+        <Text style={styles.label}>
+          Booking Reference
+        </Text>
+
         <Text style={styles.value}>
           {booking.booking_reference}
         </Text>
 
-        <Text style={styles.label}>Booking ID</Text>
+        <Text style={styles.label}>
+          Booking ID
+        </Text>
+
         <Text style={styles.value}>
           {booking.booking_id}
         </Text>
 
-        <Text style={styles.label}>Total Amount</Text>
+        <Text style={styles.label}>
+          Total Amount
+        </Text>
+
         <Text style={styles.amount}>
           ₱{Number(booking.total_amount || 0).toFixed(2)}
         </Text>
 
-        <Text style={styles.label}>Payment Status</Text>
-        <Text style={styles.status}>Paid</Text>
+        <Text style={styles.label}>
+          Payment Status
+        </Text>
+
+        <Text style={styles.status}>
+          Paid
+        </Text>
+
+        {/* Boarding Status */}
+        <Text style={styles.label}>
+          Boarding Status
+        </Text>
+
+        <View style={styles.boardingStatusContainer}>
+          <Ionicons
+            name={
+              isBoarded
+                ? "checkmark-circle"
+                : "time-outline"
+            }
+            size={20}
+            color={isBoarded ? "#16A34A" : "#F59E0B"}
+          />
+
+          <Text
+            style={[
+              styles.boardingStatusText,
+              isBoarded && styles.boardedStatusText,
+            ]}
+          >
+            {isBoarded ? "Boarded" : "Not Boarded"}
+          </Text>
+        </View>
+
+        {isBoarded && (
+          <Text style={styles.boardedMessage}>
+            Your QR ticket has been successfully scanned and verified.
+          </Text>
+        )}
 
         <View style={styles.divider} />
 
-        <Text style={styles.qrTitle}>Your Ticket QR Code</Text>
+        <Text style={styles.qrTitle}>
+          Your Ticket QR Code
+        </Text>
 
         <View style={styles.qrContainer}>
           <QRCode
@@ -224,10 +353,15 @@ export default function TicketScreen({ route, navigation }) {
         </View>
 
         <Text style={styles.qrInstruction}>
-          Present this QR code to the bus operator when boarding.
+          {isBoarded
+            ? "This ticket has already been used for boarding."
+            : "Present this QR code to the bus operator when boarding."}
         </Text>
 
-        <Text style={styles.label}>Ticket Code</Text>
+        <Text style={styles.label}>
+          Ticket Code
+        </Text>
+
         <Text style={styles.ticketCode}>
           {booking.ticket_code}
         </Text>
@@ -243,7 +377,9 @@ export default function TicketScreen({ route, navigation }) {
           color="#FFFFFF"
         />
 
-        <Text style={styles.buttonText}>Back to Home</Text>
+        <Text style={styles.buttonText}>
+          Back to Home
+        </Text>
       </TouchableOpacity>
     </ScrollView>
   );
@@ -285,12 +421,14 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#1E293B",
     marginTop: 12,
+    textAlign: "center",
   },
 
   headerSubtitle: {
     fontSize: 14,
     color: "#64748B",
     marginTop: 5,
+    textAlign: "center",
   },
 
   ticketCard: {
@@ -332,6 +470,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
 
+  boardedBadge: {
+    backgroundColor: "#DBEAFE",
+  },
+
+  boardedText: {
+    color: "#1D4ED8",
+  },
+
   divider: {
     height: 1,
     backgroundColor: "#E2E8F0",
@@ -363,6 +509,30 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#16A34A",
     marginTop: 4,
+  },
+
+  boardingStatusContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    marginTop: 7,
+  },
+
+  boardingStatusText: {
+    fontSize: 15,
+    fontWeight: "bold",
+    color: "#F59E0B",
+  },
+
+  boardedStatusText: {
+    color: "#16A34A",
+  },
+
+  boardedMessage: {
+    fontSize: 12,
+    color: "#16A34A",
+    marginTop: 8,
+    lineHeight: 18,
   },
 
   qrTitle: {

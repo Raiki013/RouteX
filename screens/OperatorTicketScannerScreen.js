@@ -65,8 +65,8 @@ export default function OperatorTicketScannerScreen({
   const frameSize = Math.min(width - 100, 250);
 
   const cameraHeight = Math.min(
-    380,
-    Math.max(280, height * 0.42)
+    340,
+    Math.max(230, height * 0.36)
   );
 
   // ------------------------------------------
@@ -535,7 +535,7 @@ export default function OperatorTicketScannerScreen({
 
       {/* CAMERA PREVIEW */}
 
-      <View style={styles.cameraArea}>
+      {!result && <View style={styles.cameraArea}>
         <View
           style={[
             styles.cameraContainer,
@@ -695,9 +695,9 @@ export default function OperatorTicketScannerScreen({
             </View>
           )}
         </View>
-      </View>
+      </View>}
 
-      {/* BOTTOM CONTENT */}
+      {/* CONFIRMATION / RESULT DETAILS */}
 
       <ScrollView
         style={styles.bottomContent}
@@ -942,8 +942,8 @@ const styles = StyleSheet.create({
   // CAMERA AREA
 
   cameraArea: {
-    flex: 1,
-    minHeight: 0,
+    flexGrow: 0,
+    flexShrink: 0,
     paddingHorizontal: 14,
     paddingBottom: 10,
     justifyContent: "center",
@@ -1073,7 +1073,8 @@ const styles = StyleSheet.create({
   // BOTTOM CONTENT
 
   bottomContent: {
-    flex: 1,
+    flexGrow: 0,
+    flexShrink: 1,
     marginTop: 5,
   },
 
