@@ -36,6 +36,8 @@ import TerminalBookingScreen from "../screens/TerminalBookingScreen";
 import ProfileScreen from "../screens/ProfileScreen";
 import TripManagementScreen from "../screens/TripManagementScreen";
 import NotificationsScreen from "../screens/NotificationsScreen";
+import PaymentScreen from "../screens/PaymentScreen";
+import TicketScreen from "../screens/TicketScreen";
 
 // CASHIER SCREEN
 import CashierDashboardScreen from "../screens/CashierDashboardScreen";
@@ -378,10 +380,29 @@ export default function BottomTabs({ navigation }) {
       )}
 
       {isPassenger && (
-        <Tab.Screen
-          name="Booking"
-          component={BookingStack}
-        />
+        <>
+          <Tab.Screen
+            name="Booking"
+            component={BookingStack}
+          />
+
+          {/* HIDDEN ROUTES: KEEP BOTTOM TAB BAR VISIBLE */}
+          <Tab.Screen
+            name="Payment"
+            component={PaymentScreen}
+            options={{
+              tabBarButton: () => null,
+            }}
+          />
+
+          <Tab.Screen
+            name="Ticket"
+            component={TicketScreen}
+            options={{
+              tabBarButton: () => null,
+            }}
+          />
+        </>
       )}
 
       <Tab.Screen

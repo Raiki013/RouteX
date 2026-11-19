@@ -34,11 +34,6 @@ import SignupScreen from "./screens/SignupScreen";
 // NAVIGATION
 import BottomTabs from "./navigation/BottomTabs";
 
-// PASSENGER
-import PaymentScreen from "./screens/PaymentScreen";
-import TicketScreen from "./screens/TicketScreen";
-import NotificationsScreen from "./screens/NotificationsScreen";
-
 // OPERATOR
 import OperatorDockingScreen from "./screens/OperatorDockingScreen";
 import TripManagementScreen from "./screens/TripManagementScreen";
@@ -195,7 +190,23 @@ export default function App() {
     pendingNotificationRouteRef.current = screen;
 
     if (navigationRef.isReady()) {
-      navigationRef.navigate(screen);
+      // PASSENGER DESTINATIONS OPEN INSIDE MAINTABS
+      // SO THE BOTTOM NAVIGATION REMAINS VISIBLE.
+
+      const passengerScreens = [
+        "Payment",
+        "Ticket",
+        "Notifications",
+      ];
+
+      if (passengerScreens.includes(screen)) {
+        navigationRef.navigate("MainTabs", {
+          screen,
+        });
+      } else {
+        navigationRef.navigate(screen);
+      }
+
       pendingNotificationRouteRef.current = null;
     }
   }
@@ -388,22 +399,6 @@ export default function App() {
           <Stack.Screen
             name="MainTabs"
             component={BottomTabs}
-          />
-
-          {/* PASSENGER */}
-          <Stack.Screen
-            name="Payment"
-            component={PaymentScreen}
-          />
-
-          <Stack.Screen
-            name="Ticket"
-            component={TicketScreen}
-          />
-
-          <Stack.Screen
-            name="Notifications"
-            component={NotificationsScreen}
           />
 
           {/* CASHIER */}
