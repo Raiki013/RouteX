@@ -27,7 +27,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { supabase } from "../config/supabase";
 import AppHeader from "../components/AppHeader";
 
-// EXISTING SCREENS
+// SCREENS
 import HomeScreen from "../screens/HomeScreen";
 import TrackingScreen from "../screens/TrackingScreen";
 import BookingScreen from "../screens/BookingScreen";
@@ -39,11 +39,44 @@ import NotificationsScreen from "../screens/NotificationsScreen";
 import PaymentScreen from "../screens/PaymentScreen";
 import TicketScreen from "../screens/TicketScreen";
 
-// CASHIER SCREEN
+// CASHIER
 import CashierDashboardScreen from "../screens/CashierDashboardScreen";
 
 const Tab = createBottomTabNavigator();
 const BookingStackNavigator = createNativeStackNavigator();
+
+// ROUTEX COLORS
+const COLORS = {
+  primary: "#06B6D4",
+  primaryDark: "#0891B2",
+  background: "#F8FAFC",
+  white: "#FFFFFF",
+  text: "#172B4D",
+  secondaryText: "#64748B",
+  inactive: "#94A3B8",
+  border: "#E8EEF5",
+  danger: "#DC2626",
+};
+
+// TIMEOUT
+const withTimeout = (promise, timeout = 15000) => {
+  let timer;
+
+  const timeoutPromise = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      reject(
+        new Error("Request timed out. Please try again.")
+      );
+    }, timeout);
+  });
+
+  return Promise.race([
+    promise,
+    timeoutPromise,
+  ]).finally(() => {
+    clearTimeout(timer);
+  });
+};
 
 // BOOKING STACK
 function BookingStack() {
@@ -72,32 +105,52 @@ function BookingStack() {
   );
 }
 
-// ROUTEX THEME COLORS
-const COLORS = {
-  primary: "#1A8AE5",
-  primaryDark: "#126BB5",
-  primaryLight: "#DBEAFE",
-  background: "#F8FAFC",
-  white: "#FFFFFF",
-  text: "#0F172A",
-  secondaryText: "#64748B",
-  border: "#E2E8F0",
-  inactive: "#94A3B8",
-  danger: "#DC2626",
+// TAB ICONS
+const getTabIcon = (routeName, focused) => {
+  const icons = {
+    Home: focused ? "home" : "home-outline",
+
+    Notifications: focused
+      ? "notifications"
+      : "notifications-outline",
+
+    "Live Tracking": focused
+      ? "navigate"
+      : "navigate-outline",
+
+    "Trip Management": focused
+      ? "bus"
+      : "bus-outline",
+
+    Booking: focused
+      ? "ticket"
+      : "ticket-outline",
+
+    Dashboard: focused
+      ? "grid"
+      : "grid-outline",
+
+    Profile: focused
+      ? "person"
+      : "person-outline",
+  };
+
+  return icons[routeName] || "ellipse-outline";
 };
 
-const withTimeout = (promise, timeout = 15000) => {
-  let timer;
+// SHORT TAB LABELS
+const getTabLabel = (routeName) => {
+  const labels = {
+    Home: "Home",
+    Notifications: "Alerts",
+    "Live Tracking": "Track",
+    "Trip Management": "Trips",
+    Booking: "Book",
+    Dashboard: "Dashboard",
+    Profile: "Profile",
+  };
 
-  const timeoutPromise = new Promise((_, reject) => {
-    timer = setTimeout(() => {
-      reject(new Error("Request timed out. Please try again."));
-    }, timeout);
-  });
-
-  return Promise.race([promise, timeoutPromise]).finally(() => {
-    clearTimeout(timer);
-  });
+  return labels[routeName] || routeName;
 };
 
 export default function BottomTabs({ navigation }) {
@@ -119,7 +172,9 @@ export default function BottomTabs({ navigation }) {
       const {
         data: { user },
         error: authError,
-      } = await withTimeout(supabase.auth.getUser());
+      } = await withTimeout(
+        supabase.auth.getUser()
+      );
 
       if (authError) throw authError;
 
@@ -142,7 +197,10 @@ export default function BottomTabs({ navigation }) {
         throw new Error("Account role not found.");
       }
 
-      console.log("RouteX user role:", data.user_level);
+      console.log(
+        "RouteX user role:",
+        data.user_level
+      );
 
       setUserLevel(data.user_level);
 
@@ -150,7 +208,8 @@ export default function BottomTabs({ navigation }) {
       console.log("LOAD USER ROLE ERROR:", error);
 
       setErrorMessage(
-        error.message || "Unable to load your account."
+        error.message ||
+        "Unable to load your account."
       );
 
     } finally {
@@ -162,29 +221,55 @@ export default function BottomTabs({ navigation }) {
     loadUserRole();
   }, [loadUserRole, retryCount]);
 
-  // SHARED NAVIGATION OPTIONS
+  // CLEAN BOTTOM TAB DESIGN
   const sharedScreenOptions = {
     headerShown: true,
 
-    // SAME HEADER FOR ALL TABS
     header: () => <AppHeader />,
 
-    tabBarActiveTintColor: COLORS.primary,
+    tabBarActiveTintColor: COLORS.primaryDark,
     tabBarInactiveTintColor: COLORS.inactive,
+
+    tabBarHideOnKeyboard: true,
+
+    tabBarShowLabel: true,
+    tabBarLabelPosition: "below-icon",
 
     tabBarStyle: {
       height: 60 + insets.bottom,
-      paddingBottom: Math.max(insets.bottom, 8),
-      paddingTop: 7,
+
+      paddingTop: 5,
+      paddingBottom: insets.bottom,
+
       backgroundColor: COLORS.white,
+
+      borderTopWidth: 1,
       borderTopColor: COLORS.border,
-      elevation: 10,
+
+      elevation: 12,
+
+      shadowColor: "#0F2747",
+      shadowOffset: {
+        width: 0,
+        height: -3,
+      },
+      shadowOpacity: 0.06,
+      shadowRadius: 8,
+    },
+
+    tabBarIconStyle: {
+      marginTop: 1,
     },
 
     tabBarLabelStyle: {
-      fontSize: 11,
+      fontSize: 10,
       fontWeight: "700",
+      marginTop: 2,
+      marginBottom: 2,
+      includeFontPadding: false,
     },
+
+    tabBarAllowFontScaling: false,
   };
 
   // LOADING
@@ -223,7 +308,9 @@ export default function BottomTabs({ navigation }) {
 
         <TouchableOpacity
           style={styles.retryButton}
-          onPress={() => setRetryCount((prev) => prev + 1)}
+          onPress={() =>
+            setRetryCount((prev) => prev + 1)
+          }
         >
           <Ionicons
             name="refresh-outline"
@@ -244,35 +331,32 @@ export default function BottomTabs({ navigation }) {
   const isCashier = userLevel === "cashier";
   const isAdmin = userLevel === "admin";
 
-  // CASHIER AND ADMIN BOTTOM TABS
+  // TAB ICON AND LABEL OPTIONS
+ const tabOptions = ({ route }) => ({
+  ...sharedScreenOptions,
+
+  tabBarLabel: getTabLabel(route.name),
+
+  // Hide Payment and Ticket completely from tab layout
+  tabBarItemStyle:
+    route.name === "Payment" || route.name === "Ticket"
+      ? { display: "none" }
+      : undefined,
+
+  tabBarIcon: ({ focused, color }) => (
+    <Ionicons
+      name={getTabIcon(route.name, focused)}
+      size={22}
+      color={color}
+    />
+  ),
+});
+
+  // CASHIER AND ADMIN
   if (isCashier || isAdmin) {
     return (
       <Tab.Navigator
-        screenOptions={({ route }) => ({
-          ...sharedScreenOptions,
-
-          tabBarIcon: ({ color, size, focused }) => {
-            let iconName = "ellipse-outline";
-
-            if (route.name === "Dashboard") {
-              iconName = focused
-                ? "grid"
-                : "grid-outline";
-            } else if (route.name === "Profile") {
-              iconName = focused
-                ? "person"
-                : "person-outline";
-            }
-
-            return (
-              <Ionicons
-                name={iconName}
-                size={size}
-                color={color}
-              />
-            );
-          },
-        })}
+        screenOptions={tabOptions}
       >
         <Tab.Screen
           name="Dashboard"
@@ -304,74 +388,30 @@ export default function BottomTabs({ navigation }) {
     );
   }
 
-  // PASSENGER AND OPERATOR BOTTOM TABS
+  // PASSENGER AND OPERATOR
   return (
     <Tab.Navigator
-      screenOptions={({ route }) => ({
-        ...sharedScreenOptions,
-
-        tabBarLabelStyle: {
-          fontSize: 11,
-          fontWeight: "600",
-        },
-
-        tabBarIcon: ({ color, size, focused }) => {
-          let iconName = "ellipse-outline";
-
-          if (route.name === "Home") {
-            iconName = focused
-              ? "home"
-              : "home-outline";
-          } else if (route.name === "Notifications") {
-            iconName = focused
-              ? "notifications"
-              : "notifications-outline";
-          } else if (route.name === "Live Tracking") {
-            iconName = focused
-              ? "location"
-              : "location-outline";
-          } else if (route.name === "Trip Management") {
-            iconName = focused
-              ? "bus"
-              : "bus-outline";
-          } else if (route.name === "Booking") {
-            iconName = focused
-              ? "ticket"
-              : "ticket-outline";
-          } else if (route.name === "Profile") {
-            iconName = focused
-              ? "person"
-              : "person-outline";
-          }
-
-          return (
-            <Ionicons
-              name={iconName}
-              size={size}
-              color={color}
-            />
-          );
-        },
-      })}
+      screenOptions={tabOptions}
     >
+      {/* HOME */}
       <Tab.Screen
         name="Home"
         component={HomeScreen}
       />
 
+      {/* NOTIFICATIONS */}
       <Tab.Screen
         name="Notifications"
         component={NotificationsScreen}
-        options={{
-          title: "Notifications",
-        }}
       />
 
+      {/* LIVE TRACKING */}
       <Tab.Screen
         name="Live Tracking"
         component={TrackingScreen}
       />
 
+      {/* OPERATOR */}
       {isOperator && (
         <Tab.Screen
           name="Trip Management"
@@ -379,6 +419,7 @@ export default function BottomTabs({ navigation }) {
         />
       )}
 
+      {/* PASSENGER */}
       {isPassenger && (
         <>
           <Tab.Screen
@@ -386,25 +427,29 @@ export default function BottomTabs({ navigation }) {
             component={BookingStack}
           />
 
-          {/* HIDDEN ROUTES: KEEP BOTTOM TAB BAR VISIBLE */}
+          {/* HIDDEN PAYMENT ROUTE */}
           <Tab.Screen
             name="Payment"
             component={PaymentScreen}
             options={{
               tabBarButton: () => null,
+              headerShown: false,
             }}
           />
 
+          {/* HIDDEN TICKET ROUTE */}
           <Tab.Screen
             name="Ticket"
             component={TicketScreen}
             options={{
               tabBarButton: () => null,
+              headerShown: false,
             }}
           />
         </>
       )}
 
+      {/* PROFILE */}
       <Tab.Screen
         name="Profile"
         component={ProfileScreen}
@@ -413,6 +458,7 @@ export default function BottomTabs({ navigation }) {
   );
 }
 
+// STYLES
 const styles = StyleSheet.create({
   center: {
     flex: 1,
@@ -446,7 +492,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: COLORS.primary,
+    backgroundColor: COLORS.primaryDark,
     paddingHorizontal: 25,
     paddingVertical: 13,
     borderRadius: 12,

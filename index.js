@@ -1,3 +1,5 @@
+
+import "./cryptoPolyfill";
 import "./tasks/backgroundLocation";
 
 import { registerRootComponent } from "expo";

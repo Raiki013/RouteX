@@ -1,5 +1,5 @@
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 
 import {
   View,
@@ -114,6 +114,9 @@ export default function LoginScreen({ navigation }) {
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // PASSWORD RESET COOLDOWN
+  const [resetCooldown, setResetCooldown] = useState(0);
+
   // SWEET ALERT STATE
   const [alertConfig, setAlertConfig] = useState({
     visible: false,
@@ -138,8 +141,23 @@ export default function LoginScreen({ navigation }) {
     }));
   };
 
+  // PASSWORD RESET COUNTDOWN
+  useEffect(() => {
+    if (resetCooldown <= 0) return;
+
+    const timer = setTimeout(() => {
+      setResetCooldown((prev) =>
+        Math.max(0, prev - 1)
+      );
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [resetCooldown]);
+
   // LOGIN
   const handleLogin = async () => {
+    if (loading) return;
+
     if (!email.trim() || !password) {
       showAlert(
         "Missing Fields",
@@ -193,10 +211,11 @@ export default function LoginScreen({ navigation }) {
     }
   };
 
-
   // FORGOT PASSWORD
   const handleForgotPassword = async () => {
     const cleanEmail = email.trim().toLowerCase();
+
+    if (loading) return;
 
     if (!cleanEmail) {
       showAlert(
@@ -207,14 +226,30 @@ export default function LoginScreen({ navigation }) {
       return;
     }
 
+    if (resetCooldown > 0) {
+      showAlert(
+        "Please Wait",
+        `Please wait ${resetCooldown} seconds before requesting another reset email.`,
+        "warning"
+      );
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const redirectUrl = Linking.createURL("reset-password");
+      const redirectUrl =
+        Linking.createURL("reset-password");
 
-      console.log("========== PASSWORD RESET DEBUG ==========");
-      console.log("Supabase URL:", "https://xtwzhsftzhidhzdvmkaf.supabase.co");
-      console.log("Email:", cleanEmail);
+      console.log(
+        "========== PASSWORD RESET DEBUG =========="
+      );
+
+      console.log(
+        "Supabase URL:",
+        "https://xtwzhsftzhidhzdvmkaf.supabase.co"
+      );
+
       console.log("Redirect URL:", redirectUrl);
 
       const { data, error } =
@@ -230,18 +265,39 @@ export default function LoginScreen({ navigation }) {
         console.log("Error message:", error.message);
         console.log("Error status:", error.status);
         console.log("Error code:", error.code);
-        console.log("Full error:", JSON.stringify(error, null, 2));
+
+        // HANDLE EMAIL RATE LIMIT
+        if (
+          error.code === "over_email_send_rate_limit" ||
+          error.status === 429
+        ) {
+          setResetCooldown(60);
+
+          showAlert(
+            "Too Many Requests",
+            "You have requested too many password reset emails. Please wait before trying again. If you already received a reset email, check your inbox and spam folder.",
+            "warning"
+          );
+
+          return;
+        }
 
         showAlert(
           "Request Failed",
-          `${error.message}\n\nStatus: ${error.status || "Unknown"}\nCode: ${error.code || "Unknown"}`,
+          "We couldn't send your password reset email. Please try again later.",
           "error"
         );
 
         return;
       }
 
-      console.log("RESET PASSWORD SUCCESS:", data);
+      console.log(
+        "RESET PASSWORD SUCCESS:",
+        data
+      );
+
+      // START COOLDOWN AFTER SUCCESS
+      setResetCooldown(60);
 
       showAlert(
         "Email Sent!",
@@ -250,11 +306,14 @@ export default function LoginScreen({ navigation }) {
       );
 
     } catch (error) {
-      console.log("FORGOT PASSWORD EXCEPTION:", error);
+      console.log(
+        "FORGOT PASSWORD EXCEPTION:",
+        error
+      );
 
       showAlert(
         "Error",
-        error.message || "Something went wrong. Please try again.",
+        "Something went wrong. Please try again later.",
         "error"
       );
 
@@ -262,7 +321,6 @@ export default function LoginScreen({ navigation }) {
       setLoading(false);
     }
   };
-
 
   return (
     <KeyboardAvoidingView
@@ -287,7 +345,9 @@ export default function LoginScreen({ navigation }) {
             resizeMode="contain"
           />
 
-          <Text style={styles.appName}>RouteX</Text>
+          <Text style={styles.appName}>
+            RouteX
+          </Text>
         </View>
 
         {/* LOGIN CARD */}
@@ -371,11 +431,20 @@ export default function LoginScreen({ navigation }) {
           <View style={styles.forgotPasswordContainer}>
             <TouchableOpacity
               onPress={handleForgotPassword}
-              disabled={loading}
+              disabled={loading || resetCooldown > 0}
               activeOpacity={0.7}
             >
-              <Text style={styles.forgotPasswordText}>
-                Forgot Password?
+              <Text
+                style={[
+                  styles.forgotPasswordText,
+                  (loading || resetCooldown > 0) && {
+                    opacity: 0.5,
+                  },
+                ]}
+              >
+                {resetCooldown > 0
+                  ? `Try Again in ${resetCooldown}s`
+                  : "Forgot Password?"}
               </Text>
             </TouchableOpacity>
           </View>
