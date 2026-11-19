@@ -4,9 +4,11 @@
     "name": "RouteX",
     "slug": "RouteX",
     "version": "1.0.0",
+    "scheme": "routex",
     "orientation": "portrait",
     "icon": "./assets/routex-logo.png",
     "userInterfaceStyle": "light",
+
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
@@ -15,6 +17,7 @@
         ]
       }
     },
+
     "android": {
       "package": "com.anonymous.RouteX",
       "googleServicesFile": "./google-services.json",
@@ -34,61 +37,67 @@
         "android.permission.POST_NOTIFICATIONS"
       ]
     },
+
     "web": {
       "favicon": "./assets/favicon.png"
     },
+
     "plugins": [
-      "expo-status-bar",
-      [
-        "expo-camera",
-        {
-          "cameraPermission": "RouteX needs camera access to scan passenger booking QR codes."
-        }
-      ],
-      [
-        "expo-location",
-        {
-          "locationWhenInUsePermission": "RouteX uses your location during bus trips.",
-          "locationAlwaysAndWhenInUsePermission": "RouteX shares your bus location with passengers while your trip is active.",
-          "isAndroidBackgroundLocationEnabled": true,
-          "isAndroidForegroundServiceEnabled": true,
-          "isIosBackgroundLocationEnabled": true
-        }
-      ],
-      [
-        "expo-notifications",
-        {
-          "sounds": [
-            "./assets/sounds/hail_received.wav",
-            "./assets/sounds/hail_accepted.wav",
-            "./assets/sounds/passenger_nearby.wav"
-          ]
-        }
-      ],
-      "expo-font",
-      [
-        "expo-splash-screen",
-        {
-          "image": "./assets/routex-logo-blue.png",
-          "imageWidth": 200,
-          "resizeMode": "contain",
-          "backgroundColor": "#F3F7FC"
-        }
+  "react-native-quick-crypto",
+  "expo-status-bar",
+  [
+    "expo-camera",
+    {
+      "cameraPermission": "RouteX needs camera access to scan passenger booking QR codes."
+    }
+  ],
+  [
+    "expo-location",
+    {
+      "locationWhenInUsePermission": "RouteX uses your location during bus trips.",
+      "locationAlwaysAndWhenInUsePermission": "RouteX shares your bus location with passengers while your trip is active.",
+      "isAndroidBackgroundLocationEnabled": true,
+      "isAndroidForegroundServiceEnabled": true,
+      "isIosBackgroundLocationEnabled": true
+    }
+  ],
+  [
+    "expo-notifications",
+    {
+      "sounds": [
+        "./assets/sounds/hail_received.wav",
+        "./assets/sounds/hail_accepted.wav",
+        "./assets/sounds/passenger_nearby.wav"
       ]
-    ],
+    }
+  ],
+  "expo-font",
+  [
+    "expo-splash-screen",
+    {
+      "image": "./assets/routex-logo-blue.png",
+      "imageWidth": 200,
+      "resizeMode": "contain",
+      "backgroundColor": "#F3F7FC"
+    }
+  ]
+],
+
     "extra": {
       "eas": {
         "projectId": "004dab7d-48b1-4d17-a5b1-2348073c0908"
       }
     },
+
     "runtimeVersion": {
       "policy": "appVersion"
     },
+
     "updates": {
       "url": "https://u.expo.dev/004dab7d-48b1-4d17-a5b1-2348073c0908",
-       "enabled": true,
-       "checkAutomatically": "ON_LOAD",
-       "fallbackToCacheTimeout": 10000
+      "enabled": true,
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 10000
     }
   }
 }

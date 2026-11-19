@@ -8,7 +8,7 @@ const SUPABASE_URL =
   "https://xtwzhsftzhidhzdvmkaf.supabase.co";
 
 const SUPABASE_ANON_KEY =
-  "sb_publishable_C7Ah5kcDdY7KuxJ_rkgktg_C9QPG_P0";
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh0d3poc2Z0emhpZGh6ZHZta2FmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQwMzMyMTAsImV4cCI6MjEwOTYwOTIxMH0.2psxKurzGZCu2mXTZB5uyXn0Rv7efb9m3TyOrFkSExw";
 
 export const supabase = createClient(
   SUPABASE_URL,
@@ -16,9 +16,14 @@ export const supabase = createClient(
   {
     auth: {
       storage: AsyncStorage,
+
+      // SESSION SETTINGS
       autoRefreshToken: true,
       persistSession: true,
       detectSessionInUrl: false,
+
+      // PASSWORD RECOVERY AUTHENTICATION
+      flowType: "pkce",
     },
   }
 );

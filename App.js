@@ -12,6 +12,7 @@ import {
 
 import * as SplashScreen from "expo-splash-screen";
 import * as Notifications from "expo-notifications";
+import * as Linking from "expo-linking";
 
 import {
   NavigationContainer,
@@ -30,6 +31,7 @@ import { registerPushToken } from "./services/pushNotifications";
 // AUTH
 import LoginScreen from "./screens/LoginScreen";
 import SignupScreen from "./screens/SignupScreen";
+import ResetPasswordScreen from "./screens/ResetPasswordScreen";
 
 // NAVIGATION
 import BottomTabs from "./navigation/BottomTabs";
@@ -89,6 +91,10 @@ export default function App() {
   const registeringUserRef = useRef(null);
 
   const pendingNotificationRouteRef = useRef(null);
+
+  // PASSWORD RECOVERY REFERENCES
+  const pendingRecoveryRef = useRef(false);
+  const processedRecoveryCodeRef = useRef(null);
 
   // =====================================
   // REGISTER PUSH TOKEN
@@ -170,6 +176,73 @@ export default function App() {
   }
 
   // =====================================
+  // PASSWORD RECOVERY DEEP LINK
+  // =====================================
+
+  async function handleRecoveryLink(url) {
+    if (!url) return;
+
+    try {
+      console.log("RouteX: Recovery link received.");
+
+      const parsedUrl = Linking.parse(url);
+
+      const code = parsedUrl.queryParams?.code;
+
+      if (!code) {
+        console.log(
+          "RouteX: No recovery code found in link."
+        );
+        return;
+      }
+
+      const recoveryCode = String(code);
+
+      // PREVENT PROCESSING THE SAME CODE TWICE
+      if (
+        processedRecoveryCodeRef.current === recoveryCode
+      ) {
+        return;
+      }
+
+      processedRecoveryCodeRef.current = recoveryCode;
+
+      // EXCHANGE RECOVERY CODE FOR SUPABASE SESSION
+      const { error } =
+        await supabase.auth.exchangeCodeForSession(
+          recoveryCode
+        );
+
+      if (error) {
+        processedRecoveryCodeRef.current = null;
+
+        console.log(
+          "PASSWORD RECOVERY ERROR:",
+          error.message
+        );
+
+        return;
+      }
+
+      console.log(
+        "RouteX: Password recovery session verified."
+      );
+
+      // OPEN RESET PASSWORD SCREEN
+      if (navigationRef.isReady()) {
+        navigationRef.navigate("ResetPassword");
+      } else {
+        pendingRecoveryRef.current = true;
+      }
+    } catch (error) {
+      console.log(
+        "RECOVERY LINK ERROR:",
+        error.message
+      );
+    }
+  }
+
+  // =====================================
   // OPEN SCREEN FROM NEW NOTIFICATION
   // =====================================
 
@@ -210,6 +283,38 @@ export default function App() {
       pendingNotificationRouteRef.current = null;
     }
   }
+
+  // =====================================
+  // LISTEN FOR PASSWORD RECOVERY LINKS
+  // =====================================
+
+  useEffect(() => {
+    // HANDLE LINKS WHEN APP IS ALREADY OPEN
+    const linkingSubscription = Linking.addEventListener(
+      "url",
+      ({ url }) => {
+        handleRecoveryLink(url);
+      }
+    );
+
+    // HANDLE LINKS WHEN APP IS CLOSED
+    Linking.getInitialURL()
+      .then((url) => {
+        if (url) {
+          handleRecoveryLink(url);
+        }
+      })
+      .catch((error) => {
+        console.log(
+          "INITIAL RECOVERY LINK ERROR:",
+          error.message
+        );
+      });
+
+    return () => {
+      linkingSubscription.remove();
+    };
+  }, []);
 
   // =====================================
   // RESTORE LOGIN SESSION
@@ -376,6 +481,14 @@ export default function App() {
     <SafeAreaProvider>
       <NavigationContainer
         ref={navigationRef}
+        onReady={() => {
+          // OPEN RESET PASSWORD AFTER NAVIGATION IS READY
+          if (pendingRecoveryRef.current) {
+            pendingRecoveryRef.current = false;
+
+            navigationRef.navigate("ResetPassword");
+          }
+        }}
       >
         <Stack.Navigator
           initialRouteName={initialRoute}
@@ -393,6 +506,12 @@ export default function App() {
           <Stack.Screen
             name="Signup"
             component={SignupScreen}
+          />
+
+          {/* PASSWORD RECOVERY */}
+          <Stack.Screen
+            name="ResetPassword"
+            component={ResetPasswordScreen}
           />
 
           {/* MAIN TABS */}

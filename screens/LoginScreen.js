@@ -1,3 +1,4 @@
+
 import React, { useState } from "react";
 
 import {
@@ -16,6 +17,8 @@ import {
 } from "react-native";
 
 import { Ionicons } from "@expo/vector-icons";
+import * as Linking from "expo-linking";
+
 import { supabase } from "../config/supabase";
 import { registerPushToken } from "../services/pushNotifications";
 
@@ -175,10 +178,11 @@ export default function LoginScreen({ navigation }) {
           );
         }
 
-        // CONTINUE EVEN IF PUSH REGISTRATION FAILS
         navigation.replace("MainTabs");
       }
     } catch (error) {
+      console.log("Login error:", error);
+
       showAlert(
         "Error",
         "Something went wrong. Please try again.",
@@ -188,6 +192,77 @@ export default function LoginScreen({ navigation }) {
       setLoading(false);
     }
   };
+
+
+  // FORGOT PASSWORD
+  const handleForgotPassword = async () => {
+    const cleanEmail = email.trim().toLowerCase();
+
+    if (!cleanEmail) {
+      showAlert(
+        "Email Required",
+        "Please enter your email address first.",
+        "warning"
+      );
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const redirectUrl = Linking.createURL("reset-password");
+
+      console.log("========== PASSWORD RESET DEBUG ==========");
+      console.log("Supabase URL:", "https://xtwzhsftzhidhzdvmkaf.supabase.co");
+      console.log("Email:", cleanEmail);
+      console.log("Redirect URL:", redirectUrl);
+
+      const { data, error } =
+        await supabase.auth.resetPasswordForEmail(
+          cleanEmail,
+          {
+            redirectTo: redirectUrl,
+          }
+        );
+
+      if (error) {
+        console.log("RESET PASSWORD ERROR:", error);
+        console.log("Error message:", error.message);
+        console.log("Error status:", error.status);
+        console.log("Error code:", error.code);
+        console.log("Full error:", JSON.stringify(error, null, 2));
+
+        showAlert(
+          "Request Failed",
+          `${error.message}\n\nStatus: ${error.status || "Unknown"}\nCode: ${error.code || "Unknown"}`,
+          "error"
+        );
+
+        return;
+      }
+
+      console.log("RESET PASSWORD SUCCESS:", data);
+
+      showAlert(
+        "Email Sent!",
+        "If an account exists for this email, you will receive a password reset link. Please check your inbox and spam folder.",
+        "success"
+      );
+
+    } catch (error) {
+      console.log("FORGOT PASSWORD EXCEPTION:", error);
+
+      showAlert(
+        "Error",
+        error.message || "Something went wrong. Please try again.",
+        "error"
+      );
+
+    } finally {
+      setLoading(false);
+    }
+  };
+
 
   return (
     <KeyboardAvoidingView
@@ -206,7 +281,6 @@ export default function LoginScreen({ navigation }) {
       >
         {/* HEADER */}
         <View style={styles.topHeader}>
-          {/* LOGO */}
           <Image
             source={require("../assets/routex-logo-blue.png")}
             style={styles.logo}
@@ -290,6 +364,19 @@ export default function LoginScreen({ navigation }) {
                 size={21}
                 color={C.gray}
               />
+            </TouchableOpacity>
+          </View>
+
+          {/* FORGOT PASSWORD */}
+          <View style={styles.forgotPasswordContainer}>
+            <TouchableOpacity
+              onPress={handleForgotPassword}
+              disabled={loading}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.forgotPasswordText}>
+                Forgot Password?
+              </Text>
             </TouchableOpacity>
           </View>
 
@@ -455,6 +542,19 @@ const styles = StyleSheet.create({
     color: C.text,
     marginLeft: 12,
     height: "100%",
+  },
+
+  // FORGOT PASSWORD
+  forgotPasswordContainer: {
+    alignItems: "flex-end",
+    marginTop: -10,
+    marginBottom: 12,
+  },
+
+  forgotPasswordText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: C.blue,
   },
 
   // LOGIN BUTTON
