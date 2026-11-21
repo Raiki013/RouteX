@@ -39,21 +39,24 @@ import NotificationsScreen from "../screens/NotificationsScreen";
 import PaymentScreen from "../screens/PaymentScreen";
 import TicketScreen from "../screens/TicketScreen";
 
-// CASHIER
-import CashierDashboardScreen from "../screens/CashierDashboardScreen";
+// CASHIER STACK
+import CashierStack from "./CashierStack";
 
 const Tab = createBottomTabNavigator();
 const BookingStackNavigator = createNativeStackNavigator();
 
-// ROUTEX COLORS
+// ROUTEX BLUE THEME
 const COLORS = {
-  primary: "#06B6D4",
-  primaryDark: "#0891B2",
+  primary: "#1A8AE5",
+  primaryDark: "#1A8AE5",
+
   background: "#F8FAFC",
   white: "#FFFFFF",
+
   text: "#172B4D",
   secondaryText: "#64748B",
   inactive: "#94A3B8",
+
   border: "#E8EEF5",
   danger: "#DC2626",
 };
@@ -138,7 +141,7 @@ const getTabIcon = (routeName, focused) => {
   return icons[routeName] || "ellipse-outline";
 };
 
-// SHORT TAB LABELS
+// TAB LABELS
 const getTabLabel = (routeName) => {
   const labels = {
     Home: "Home",
@@ -197,12 +200,11 @@ export default function BottomTabs({ navigation }) {
         throw new Error("Account role not found.");
       }
 
-      console.log(
-        "RouteX user role:",
-        data.user_level
-      );
+      const role = String(data.user_level).toLowerCase();
 
-      setUserLevel(data.user_level);
+      console.log("RouteX user role:", role);
+
+      setUserLevel(role);
 
     } catch (error) {
       console.log("LOAD USER ROLE ERROR:", error);
@@ -221,7 +223,7 @@ export default function BottomTabs({ navigation }) {
     loadUserRole();
   }, [loadUserRole, retryCount]);
 
-  // CLEAN BOTTOM TAB DESIGN
+  // BOTTOM TAB DESIGN
   const sharedScreenOptions = {
     headerShown: true,
 
@@ -272,7 +274,7 @@ export default function BottomTabs({ navigation }) {
     tabBarAllowFontScaling: false,
   };
 
-  // LOADING
+  // LOADING SCREEN
   if (loading) {
     return (
       <View style={styles.center}>
@@ -288,7 +290,7 @@ export default function BottomTabs({ navigation }) {
     );
   }
 
-  // ERROR
+  // ERROR SCREEN
   if (errorMessage) {
     return (
       <View style={styles.center}>
@@ -331,26 +333,25 @@ export default function BottomTabs({ navigation }) {
   const isCashier = userLevel === "cashier";
   const isAdmin = userLevel === "admin";
 
-  // TAB ICON AND LABEL OPTIONS
- const tabOptions = ({ route }) => ({
-  ...sharedScreenOptions,
+  // TAB OPTIONS
+  const tabOptions = ({ route }) => ({
+    ...sharedScreenOptions,
 
-  tabBarLabel: getTabLabel(route.name),
+    tabBarLabel: getTabLabel(route.name),
 
-  // Hide Payment and Ticket completely from tab layout
-  tabBarItemStyle:
-    route.name === "Payment" || route.name === "Ticket"
-      ? { display: "none" }
-      : undefined,
+    tabBarItemStyle:
+      route.name === "Payment" || route.name === "Ticket"
+        ? { display: "none" }
+        : undefined,
 
-  tabBarIcon: ({ focused, color }) => (
-    <Ionicons
-      name={getTabIcon(route.name, focused)}
-      size={22}
-      color={color}
-    />
-  ),
-});
+    tabBarIcon: ({ focused, color }) => (
+      <Ionicons
+        name={getTabIcon(route.name, focused)}
+        size={22}
+        color={color}
+      />
+    ),
+  });
 
   // CASHIER AND ADMIN
   if (isCashier || isAdmin) {
@@ -360,7 +361,10 @@ export default function BottomTabs({ navigation }) {
       >
         <Tab.Screen
           name="Dashboard"
-          component={CashierDashboardScreen}
+          component={CashierStack}
+          options={{
+            title: "Dashboard",
+          }}
         />
 
         <Tab.Screen
@@ -492,7 +496,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: COLORS.primaryDark,
+    backgroundColor: COLORS.primary,
     paddingHorizontal: 25,
     paddingVertical: 13,
     borderRadius: 12,

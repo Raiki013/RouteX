@@ -1,3 +1,4 @@
+
 import "./tasks/backgroundLocation";
 
 import React, { useEffect, useRef, useState } from "react";
@@ -41,12 +42,6 @@ import TripManagementScreen from "./screens/TripManagementScreen";
 import OperatorGCashScreen from "./screens/OperatorGCashScreen";
 import OperatorTicketScannerScreen from "./screens/OperatorTicketScannerScreen";
 
-// CASHIER
-import CashierDashboardScreen from "./screens/CashierDashboardScreen";
-import CashierPaymentScreen from "./screens/CashierPaymentScreen";
-import CashierVerificationScreen from "./screens/CashierVerificationScreen";
-import CashierQRScannerScreen from "./screens/CashierQRScannerScreen";
-
 // TRACKING
 import TrackingScreen from "./screens/TrackingScreen";
 
@@ -60,14 +55,20 @@ const ALLOWED_NOTIFICATION_SCREENS = [
   "Payment",
   "Ticket",
   "Notifications",
+
+  // CASHIER
   "CashierDashboard",
   "CashierPayment",
   "CashierVerification",
   "CashierQRScanner",
+
+  // OPERATOR
   "OperatorDocking",
   "TripManagement",
   "OperatorGCash",
   "OperatorTicketScanner",
+
+  // TRACKING
   "Tracking",
 ];
 
@@ -157,10 +158,11 @@ export default function App() {
 
       switch (role) {
         case "cashier":
-          return "CashierDashboard";
+          return "MainTabs";
 
         case "operator":
         case "user":
+        case "admin":
         default:
           return "MainTabs";
       }
@@ -192,6 +194,7 @@ export default function App() {
         console.log(
           "RouteX: No recovery code found in link."
         );
+
         return;
       }
 
@@ -242,7 +245,7 @@ export default function App() {
   }
 
   // =====================================
-  // OPEN SCREEN FROM NEW NOTIFICATION
+  // OPEN SCREEN FROM NOTIFICATION
   // =====================================
 
   function handleNotificationNavigation(response) {
@@ -262,20 +265,35 @@ export default function App() {
     pendingNotificationRouteRef.current = screen;
 
     if (navigationRef.isReady()) {
-      // PASSENGER DESTINATIONS OPEN INSIDE MAINTABS
-      // SO THE BOTTOM NAVIGATION REMAINS VISIBLE.
 
-      const passengerScreens = [
-        "Payment",
-        "Ticket",
-        "Notifications",
+      // CASHIER SCREENS OPEN INSIDE DASHBOARD STACK
+      const cashierScreens = [
+        "CashierDashboard",
+        "CashierPayment",
+        "CashierVerification",
+        "CashierQRScanner",
       ];
 
-      if (passengerScreens.includes(screen)) {
+      if (cashierScreens.includes(screen)) {
         navigationRef.navigate("MainTabs", {
-          screen,
+          screen: "Dashboard",
+          params: {
+            screen: screen,
+          },
         });
-      } else {
+      }
+
+      // PASSENGER SCREENS OPEN INSIDE MAIN TABS
+      else if (
+        ["Payment", "Ticket", "Notifications"].includes(screen)
+      ) {
+        navigationRef.navigate("MainTabs", {
+          screen: screen,
+        });
+      }
+
+      // OTHER ROOT SCREENS
+      else {
         navigationRef.navigate(screen);
       }
 
@@ -442,9 +460,6 @@ export default function App() {
         }
       );
 
-    // DO NOT RESTORE OLD NOTIFICATION SCREEN
-    // WHEN THE APP IS OPENED NORMALLY.
-
     return () => {
       notificationResponseListener.remove();
     };
@@ -519,27 +534,6 @@ export default function App() {
             component={BottomTabs}
           />
 
-          {/* CASHIER */}
-          <Stack.Screen
-            name="CashierDashboard"
-            component={CashierDashboardScreen}
-          />
-
-          <Stack.Screen
-            name="CashierPayment"
-            component={CashierPaymentScreen}
-          />
-
-          <Stack.Screen
-            name="CashierVerification"
-            component={CashierVerificationScreen}
-          />
-
-          <Stack.Screen
-            name="CashierQRScanner"
-            component={CashierQRScannerScreen}
-          />
-
           {/* OPERATOR */}
           <Stack.Screen
             name="OperatorDocking"
@@ -572,6 +566,10 @@ export default function App() {
     </SafeAreaProvider>
   );
 }
+
+// =====================================
+// STYLES
+// =====================================
 
 const styles = StyleSheet.create({
   loadingContainer: {
