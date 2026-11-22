@@ -290,7 +290,7 @@ export default function Bookings() {
     <div className="bookings-page">
       <div className="page-heading">
         <div>
-          <h1>Bookings Management</h1>
+          <h1>Bookings</h1>
           <p>Monitor passenger reservations, payments, and boarding.</p>
         </div>
 

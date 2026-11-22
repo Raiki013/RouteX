@@ -255,7 +255,7 @@ export default function Trips() {
       {/* PAGE HEADING */}
       <div className="trips-heading">
         <div>
-          <h1>Trips Management</h1>
+          <h1>Trips</h1>
           <p>
             Monitor bus trips, destinations, and assigned operators.
           </p>

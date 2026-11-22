@@ -169,8 +169,8 @@ export default function Payments() {
       {/* HEADER */}
       <div className="payment-header">
         <div>
-          <h1>Payments Management</h1>
-          <p>Monitor and manage booking payment records.</p>
+          <h1>Payments</h1>
+          <p>Monitor booking payment records.</p>
         </div>
 
         <button

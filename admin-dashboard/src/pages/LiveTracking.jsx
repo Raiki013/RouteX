@@ -559,8 +559,8 @@ export default function LiveTracking() {
           display: flex;
           flex-direction: column;
           width: 100%;
-          height: calc(100dvh - 120px);
-          min-height: 400px;
+          height: 100%;
+          min-height: 0;
           color: #172033;
           overflow: hidden;
           box-sizing: border-box;
