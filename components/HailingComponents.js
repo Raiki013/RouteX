@@ -1150,7 +1150,7 @@ export function OperatorHailRequests() {
 
 const styles = StyleSheet.create({
   hailButton: {
-    backgroundColor: "#0891B2",
+    backgroundColor: "#1A8AE5",
     padding: 15,
     borderRadius: 12,
     flexDirection: "row",

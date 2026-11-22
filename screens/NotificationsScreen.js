@@ -1,257 +1,135 @@
 
-import React, {
-  useCallback,
-  useEffect,
-  useState,
-} from "react";
+import React, { useCallback, useEffect, useState } from "react";
 
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
+  ScrollView,
+  StatusBar,
   ActivityIndicator,
   RefreshControl,
   Modal,
-  StatusBar,
 } from "react-native";
 
-import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
+
 import { supabase } from "../config/supabase";
 
 const C = {
-  blue: "#1677D2",
-  navy: "#142238",
-  background: "#F4F7FB",
+  background: "#F1F5F9",
+  primary: "#1677D2",
+  primaryDark: "#125FA8",
+  text: "#26384A",
+  secondary: "#64798D",
+  muted: "#8A9CAD",
   white: "#FFFFFF",
-  gray: "#718096",
-  light: "#E5EAF1",
+  border: "#E2E8F0",
   green: "#16A34A",
+  red: "#DC2626",
+};
+
+const GLASS = {
+  card: "rgba(255, 255, 255, 0.85)",
+  border: "rgba(255, 255, 255, 0.95)",
+  shadow: "#64748B",
+  text: "#26384A",
+  secondary: "#64798D",
+  muted: "#8A9CAD",
 };
 
 export default function NotificationsScreen({ navigation }) {
   const [notifications, setNotifications] = useState([]);
-  const [userId, setUserId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState(null);
 
-  // CUSTOM ALERT STATES
   const [alertVisible, setAlertVisible] = useState(false);
   const [alertTitle, setAlertTitle] = useState("");
   const [alertMessage, setAlertMessage] = useState("");
-  const [alertType, setAlertType] = useState("error");
+  const [alertType, setAlertType] = useState("info");
 
-  // SHOW ALERT
-  const showAlert = (title, message, type = "error") => {
+  const showAlert = (title, message, type = "info") => {
     setAlertTitle(title);
     setAlertMessage(message);
     setAlertType(type);
     setAlertVisible(true);
   };
 
-  // CLOSE ALERT
-  const closeAlert = () => {
-    setAlertVisible(false);
-  };
-
-  // LOAD NOTIFICATIONS
-  const loadNotifications = useCallback(async (currentUserId) => {
-    if (!currentUserId) {
-      console.log("NO USER ID. CANNOT LOAD NOTIFICATIONS.");
-      return;
-    }
-
-    console.log("FETCHING NOTIFICATIONS FOR:", currentUserId);
-
-    const { data, error } = await supabase
-      .from("notifications")
-      .select("*")
-      .eq("user_id", currentUserId)
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      console.log("LOAD NOTIFICATIONS ERROR:", error);
-      throw error;
-    }
-
-    console.log("NOTIFICATIONS RECEIVED:", data?.length || 0);
-    console.log("NOTIFICATION DATA:", data);
-
-    setNotifications(data || []);
-
-    return data || [];
-  }, []);
-
-  // INITIAL LOAD AND REALTIME SUBSCRIPTION
-  useEffect(() => {
-    let channel = null;
-    let isMounted = true;
-
-    const initializeNotifications = async () => {
-      try {
-        setLoading(true);
-
-        // GET CURRENT LOGGED-IN USER
-        const {
-          data: { user },
-          error,
-        } = await supabase.auth.getUser();
-
-        if (error) throw error;
-
-        if (!isMounted) return;
-
-        if (!user) {
-          console.log("NO AUTHENTICATED USER FOUND.");
-
-          setNotifications([]);
-          setUserId(null);
-          return;
-        }
-
-        console.log("NOTIFICATIONS SCREEN USER:", user.id);
-
-        setUserId(user.id);
-
-        // LOAD EXISTING NOTIFICATIONS
-        await loadNotifications(user.id);
-
-        if (!isMounted) return;
-
-        // REALTIME SUBSCRIPTION
-        channel = supabase
-          .channel(`notifications-${user.id}`)
-          .on(
-            "postgres_changes",
-            {
-              event: "*",
-              schema: "public",
-              table: "notifications",
-              filter: `user_id=eq.${user.id}`,
-            },
-            (payload) => {
-              console.log("NOTIFICATION REALTIME EVENT:", payload);
-
-              loadNotifications(user.id).catch((error) => {
-                console.log("REALTIME REFRESH ERROR:", error);
-              });
-            }
-          )
-          .subscribe((status, err) => {
-            console.log(
-              "NOTIFICATIONS REALTIME STATUS:",
-              status
-            );
-
-            if (err) {
-              console.log(
-                "NOTIFICATIONS REALTIME ERROR:",
-                err
-              );
-            }
-          });
-
-      } catch (error) {
-        console.log(
-          "NOTIFICATION INITIALIZATION ERROR:",
-          error
-        );
-
-        if (isMounted) {
-          showAlert(
-            "Notifications Error",
-            error.message || "Unable to load notifications.",
-            "error"
-          );
-        }
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
-      }
-    };
-
-    initializeNotifications();
-
-    return () => {
-      isMounted = false;
-
-      if (channel) {
-        supabase.removeChannel(channel);
-      }
-    };
-  }, [loadNotifications]);
-
-  // REFRESH WHENEVER SCREEN IS OPENED
-  useFocusEffect(
-    useCallback(() => {
-      let isActive = true;
-
-      const refreshOnFocus = async () => {
-        if (!userId) return;
-
-        try {
-          console.log(
-            "NOTIFICATIONS SCREEN FOCUSED. REFRESHING..."
-          );
-
-          console.log(
-            "CURRENT NOTIFICATIONS USER:",
-            userId
-          );
-
-          await loadNotifications(userId);
-
-          if (isActive) {
-            console.log(
-              "FOCUS REFRESH COMPLETED."
-            );
-          }
-        } catch (error) {
-          console.log(
-            "FOCUS REFRESH ERROR:",
-            error
-          );
-        }
-      };
-
-      refreshOnFocus();
-
-      return () => {
-        isActive = false;
-      };
-    }, [userId, loadNotifications])
-  );
-
-  // MANUAL REFRESH
-  const onRefresh = async () => {
-    if (!userId) {
-      console.log("CANNOT REFRESH: USER ID IS MISSING.");
-      return;
-    }
-
+  const loadNotifications = useCallback(async () => {
     try {
-      setRefreshing(true);
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
 
-      await loadNotifications(userId);
+      if (authError) throw authError;
+
+      if (!user) {
+        setCurrentUserId(null);
+        setNotifications([]);
+        return;
+      }
+
+      setCurrentUserId(user.id);
+
+      const { data, error } = await supabase
+        .from("notifications")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      setNotifications(data || []);
     } catch (error) {
-      showAlert(
-        "Refresh Failed",
-        "Unable to refresh notifications.",
-        "error"
-      );
+      console.log("LOAD NOTIFICATIONS ERROR:", error.message);
     } finally {
+      setLoading(false);
       setRefreshing(false);
     }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadNotifications();
+    }, [loadNotifications])
+  );
+
+  useEffect(() => {
+    if (!currentUserId) return;
+
+    const channel = supabase
+      .channel("notifications-realtime")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "notifications",
+          filter: `user_id=eq.${currentUserId}`,
+        },
+        () => {
+          loadNotifications();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentUserId, loadNotifications]);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    loadNotifications();
   };
 
-  // MARK AS READ
   const markAsRead = async (notification) => {
     if (notification.is_read) return;
 
-    // UPDATE UI IMMEDIATELY
     setNotifications((previous) =>
       previous.map((item) =>
         item.id === notification.id
@@ -264,12 +142,11 @@ export default function NotificationsScreen({ navigation }) {
       .from("notifications")
       .update({ is_read: true })
       .eq("id", notification.id)
-      .eq("user_id", userId);
+      .eq("user_id", currentUserId);
 
     if (error) {
-      console.log("MARK AS READ ERROR:", error);
+      console.log("MARK AS READ ERROR:", error.message);
 
-      // RESTORE UNREAD STATE
       setNotifications((previous) =>
         previous.map((item) =>
           item.id === notification.id
@@ -286,55 +163,91 @@ export default function NotificationsScreen({ navigation }) {
     }
   };
 
-  // NOTIFICATION ICON
+  const markAllAsRead = async () => {
+    const unread = notifications.filter((item) => !item.is_read);
+
+    if (unread.length === 0) {
+      showAlert(
+        "All Caught Up",
+        "You have no unread notifications.",
+        "info"
+      );
+      return;
+    }
+
+    const previousNotifications = [...notifications];
+
+    setNotifications((previous) =>
+      previous.map((item) => ({ ...item, is_read: true }))
+    );
+
+    const { error } = await supabase
+      .from("notifications")
+      .update({ is_read: true })
+      .eq("user_id", currentUserId)
+      .eq("is_read", false);
+
+    if (error) {
+      console.log("MARK ALL AS READ ERROR:", error.message);
+      setNotifications(previousNotifications);
+
+      showAlert(
+        "Update Failed",
+        "Unable to update your notifications.",
+        "error"
+      );
+      return;
+    }
+
+    showAlert(
+      "Success",
+      "All notifications have been marked as read.",
+      "success"
+    );
+  };
+
   const getNotificationIcon = (type) => {
     switch ((type || "").toLowerCase()) {
       case "booking":
         return "ticket-outline";
-
       case "payment":
-        return "card-outline";
-
-      case "trip":
-        return "bus-outline";
-
-      case "cancellation":
+        return "wallet-outline";
+      case "tracking":
+        return "location-outline";
+      case "success":
+        return "checkmark-circle-outline";
+      case "warning":
+        return "alert-circle-outline";
+      case "error":
         return "close-circle-outline";
-
       default:
         return "notifications-outline";
     }
   };
 
-  // NOTIFICATION COLOR
   const getNotificationColor = (type) => {
     switch ((type || "").toLowerCase()) {
-      case "booking":
-        return C.blue;
-
-      case "payment":
+      case "success":
         return C.green;
-
-      case "trip":
-        return "#F59E0B";
-
-      case "cancellation":
-        return "#DC2626";
-
+      case "warning":
+        return "#D97706";
+      case "error":
+        return C.red;
+      case "payment":
+        return "#0D9488";
+      case "booking":
+        return C.primary;
       default:
-        return C.gray;
+        return C.primary;
     }
   };
 
-  // FORMAT DATE
   const formatDate = (date) => {
     if (!date) return "";
 
     const notificationDate = new Date(date);
 
-    if (Number.isNaN(notificationDate.getTime())) {
-      return "";
-    }
+    if (Number.isNaN(notificationDate.getTime())) return "";
 
     return notificationDate.toLocaleString([], {
       month: "short",
@@ -345,229 +258,255 @@ export default function NotificationsScreen({ navigation }) {
     });
   };
 
-  // UNREAD COUNT
   const unreadCount = notifications.filter(
     (item) => !item.is_read
   ).length;
 
-  // ALERT CONFIGURATION
-  const alertConfig = {
-    success: {
-      icon: "checkmark-circle",
-      color: "#16A34A",
-      background: "#DCFCE7",
-    },
-    warning: {
-      icon: "alert-circle",
-      color: "#F59E0B",
-      background: "#FEF3C7",
-    },
-    error: {
-      icon: "close-circle",
-      color: "#DC2626",
-      background: "#FEE2E2",
-    },
-    info: {
-      icon: "information-circle",
-      color: C.blue,
-      background: "#DBEAFE",
-    },
+  const handleNotificationPress = async (notification) => {
+    await markAsRead(notification);
   };
-
-  const currentAlert =
-    alertConfig[alertType] || alertConfig.error;
 
   return (
     <View style={styles.container}>
       <StatusBar
-        backgroundColor={C.white}
         barStyle="dark-content"
+        backgroundColor={C.background}
       />
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.content}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={[C.blue]}
-            tintColor={C.blue}
+      {/* HEADER */}
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => {
+            if (navigation.canGoBack()) {
+              navigation.goBack();
+            } else {
+              navigation.navigate("Home");
+            }
+          }}
+        >
+          <Ionicons
+            name="arrow-back"
+            size={22}
+            color={C.text}
           />
-        }
-      >
-        {/* HEADER */}
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => {
-              if (navigation.canGoBack()) {
-                navigation.goBack();
-              } else {
-                navigation.navigate("Home");
-              }
-            }}
-            activeOpacity={0.8}
-          >
-            <Ionicons
-              name="arrow-back"
-              size={22}
-              color={C.navy}
-            />
-          </TouchableOpacity>
+        </TouchableOpacity>
 
-          <View style={styles.titleContainer}>
-            <View style={styles.titleRow}>
-              <Text style={styles.title}>
-                Notifications
-              </Text>
-
-              {unreadCount > 0 && (
-                <View style={styles.unreadBadge}>
-                  <Text style={styles.unreadBadgeText}>
-                    {unreadCount} New
-                  </Text>
-                </View>
-              )}
-            </View>
-
-            <Text style={styles.subtitle}>
-              Stay updated with your RouteX activities.
-            </Text>
-          </View>
+        <View style={styles.headerTextContainer}>
+          <Text style={styles.headerTitle}>Notifications</Text>
+          <Text style={styles.headerSubtitle}>
+            Stay updated with your latest activities
+          </Text>
         </View>
 
-        {/* LOADING */}
-        {loading ? (
-          <View style={styles.center}>
-            <ActivityIndicator
-              size="large"
-              color={C.blue}
+        <TouchableOpacity
+          style={styles.headerIcon}
+          onPress={loadNotifications}
+        >
+          <Ionicons
+            name="refresh-outline"
+            size={21}
+            color={C.primary}
+          />
+        </TouchableOpacity>
+      </View>
+
+      {/* SUMMARY */}
+      <View style={styles.summaryCard}>
+        <View style={styles.summaryIcon}>
+          <Ionicons
+            name="notifications"
+            size={23}
+            color={C.primary}
+          />
+        </View>
+
+        <View style={styles.summaryTextContainer}>
+          <Text style={styles.summaryTitle}>
+            Your Notifications
+          </Text>
+          <Text style={styles.summarySubtitle}>
+            {unreadCount === 0
+              ? "You're all caught up!"
+              : `You have ${unreadCount} unread ${
+                  unreadCount === 1
+                    ? "notification"
+                    : "notifications"
+                }`}
+          </Text>
+        </View>
+
+        <View style={styles.countBadge}>
+          <Text style={styles.countText}>
+            {unreadCount}
+          </Text>
+        </View>
+      </View>
+
+      {/* NOTIFICATION LIST HEADER */}
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>
+          Recent Notifications
+        </Text>
+
+        {unreadCount > 0 && (
+          <TouchableOpacity onPress={markAllAsRead}>
+            <Text style={styles.markAllText}>
+              Mark all as read
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* NOTIFICATION LIST */}
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator
+            size="large"
+            color={C.primary}
+          />
+          <Text style={styles.loadingText}>
+            Loading notifications...
+          </Text>
+        </View>
+      ) : (
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={C.primary}
+              colors={[C.primary]}
             />
-
-            <Text style={styles.loadingText}>
-              Loading notifications...
-            </Text>
-          </View>
-        ) : notifications.length === 0 ? (
-          /* EMPTY STATE */
-          <View style={styles.emptyCard}>
-            <View style={styles.iconContainer}>
-              <Ionicons
-                name="notifications-outline"
-                size={42}
-                color={C.blue}
-              />
-            </View>
-
-            <Text style={styles.emptyTitle}>
-              No Notifications Yet
-            </Text>
-
-            <Text style={styles.emptyText}>
-              You're all caught up! We'll notify you when
-              there are updates about your bookings,
-              payments, and trips.
-            </Text>
-          </View>
-        ) : (
-          /* NOTIFICATION LIST */
-          <View style={styles.notificationList}>
-            <View style={styles.sectionHeader}>
-              <View>
-                <Text style={styles.sectionTitle}>
-                  Recent Notifications
-                </Text>
-
-                <Text style={styles.sectionSubtitle}>
-                  Your latest updates and activities
-                </Text>
+          }
+        >
+          {notifications.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <View style={styles.emptyIconContainer}>
+                <Ionicons
+                  name="notifications-off-outline"
+                  size={42}
+                  color={C.muted}
+                />
               </View>
 
-              <View style={styles.countBadge}>
-                <Text style={styles.countText}>
-                  {notifications.length}
-                </Text>
-              </View>
+              <Text style={styles.emptyTitle}>
+                No Notifications Yet
+              </Text>
+
+              <Text style={styles.emptySubtitle}>
+                When you receive notifications, they will
+                appear here.
+              </Text>
             </View>
-
-            {notifications.map((item) => {
-              const iconColor =
-                getNotificationColor(item.type);
-
-              return (
-                <TouchableOpacity
-                  key={item.id}
+          ) : (
+            notifications.map((item) => (
+              <TouchableOpacity
+                key={item.id}
+                activeOpacity={0.85}
+                onPress={() => handleNotificationPress(item)}
+                style={styles.notificationCard}
+              >
+                <View
                   style={[
-                    styles.notificationCard,
-                    !item.is_read && styles.unreadCard,
+                    styles.notificationIcon,
+                    {
+                      backgroundColor: `${getNotificationColor(
+                        item.type
+                      )}15`,
+                    },
                   ]}
-                  activeOpacity={0.75}
-                  onPress={() => markAsRead(item)}
                 >
-                  <View
-                    style={[
-                      styles.notificationIcon,
-                      {
-                        backgroundColor: `${iconColor}15`,
-                      },
-                    ]}
-                  >
-                    <Ionicons
-                      name={getNotificationIcon(item.type)}
-                      size={24}
-                      color={iconColor}
-                    />
+                  <Ionicons
+                    name={getNotificationIcon(item.type)}
+                    size={23}
+                    color={getNotificationColor(item.type)}
+                  />
+                </View>
+
+                <View style={styles.notificationContent}>
+                  <View style={styles.notificationTitleRow}>
+                    <Text
+                      style={styles.notificationTitle}
+                      numberOfLines={2}
+                    >
+                      {item.title || "Notification"}
+                    </Text>
+
+                    {!item.is_read && (
+                      <View style={styles.unreadDot} />
+                    )}
                   </View>
 
-                  <View style={styles.notificationContent}>
-                    <View style={styles.notificationTitleRow}>
-                      <Text style={styles.notificationTitle}>
-                        {item.title}
-                      </Text>
+                  <Text style={styles.notificationMessage}>
+                    {item.message || ""}
+                  </Text>
 
-                      {!item.is_read && (
-                        <View style={styles.unreadDot} />
-                      )}
-                    </View>
-
-                    <Text style={styles.notificationMessage}>
-                      {item.message}
-                    </Text>
+                  <View style={styles.notificationFooter}>
+                    <Ionicons
+                      name="time-outline"
+                      size={13}
+                      color={C.muted}
+                    />
 
                     <Text style={styles.notificationDate}>
                       {formatDate(item.created_at)}
                     </Text>
+
+                    {item.is_read && (
+                      <Text style={styles.readLabel}>
+                        Read
+                      </Text>
+                    )}
                   </View>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        )}
-      </ScrollView>
+                </View>
+              </TouchableOpacity>
+            ))
+          )}
+        </ScrollView>
+      )}
 
       {/* CUSTOM ALERT MODAL */}
       <Modal
         visible={alertVisible}
         transparent
         animationType="fade"
-        onRequestClose={closeAlert}
-        statusBarTranslucent
+        onRequestClose={() => setAlertVisible(false)}
       >
-        <View style={styles.alertOverlay}>
+        <View style={styles.modalOverlay}>
           <View style={styles.alertCard}>
             <View
               style={[
-                styles.alertIconContainer,
+                styles.alertIcon,
                 {
-                  backgroundColor: currentAlert.background,
+                  backgroundColor:
+                    alertType === "success"
+                      ? "#DCFCE7"
+                      : alertType === "error"
+                      ? "#FEE2E2"
+                      : "#DBEAFE",
                 },
               ]}
             >
               <Ionicons
-                name={currentAlert.icon}
-                size={42}
-                color={currentAlert.color}
+                name={
+                  alertType === "success"
+                    ? "checkmark-circle"
+                    : alertType === "error"
+                    ? "alert-circle"
+                    : "information-circle"
+                }
+                size={34}
+                color={
+                  alertType === "success"
+                    ? C.green
+                    : alertType === "error"
+                    ? C.red
+                    : C.primary
+                }
               />
             </View>
 
@@ -581,11 +520,10 @@ export default function NotificationsScreen({ navigation }) {
 
             <TouchableOpacity
               style={styles.alertButton}
-              onPress={closeAlert}
-              activeOpacity={0.8}
+              onPress={() => setAlertVisible(false)}
             >
               <Text style={styles.alertButtonText}>
-                OK
+                Okay
               </Text>
             </TouchableOpacity>
           </View>
@@ -601,176 +539,171 @@ const styles = StyleSheet.create({
     backgroundColor: C.background,
   },
 
-  content: {
-    padding: 17,
-    paddingBottom: 30,
-    flexGrow: 1,
-  },
-
-  // HEADER
   header: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 25,
+    paddingHorizontal: 20,
+    paddingTop: 15,
+    paddingBottom: 18,
+    backgroundColor: GLASS.card,
+    borderBottomWidth: 1,
+    borderBottomColor: GLASS.border,
   },
 
   backButton: {
     width: 42,
     height: 42,
-    borderRadius: 13,
-    backgroundColor: "#E8F3FF",
+    borderRadius: 14,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: GLASS.border,
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 13,
+    marginRight: 12,
   },
 
-  titleContainer: {
+  headerTextContainer: {
     flex: 1,
   },
 
-  titleRow: {
+  headerTitle: {
+    fontSize: 21,
+    fontWeight: "800",
+    color: GLASS.text,
+  },
+
+  headerSubtitle: {
+    fontSize: 12,
+    color: GLASS.secondary,
+    marginTop: 3,
+  },
+
+  headerIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 13,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: GLASS.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  summaryCard: {
     flexDirection: "row",
     alignItems: "center",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-
-  title: {
-    fontSize: 22,
-    fontWeight: "900",
-    color: C.navy,
-  },
-
-  subtitle: {
-    fontSize: 12,
-    color: C.gray,
-    marginTop: 5,
-    lineHeight: 18,
-  },
-
-  unreadBadge: {
-    backgroundColor: "#DBEAFE",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    marginHorizontal: 18,
+    marginTop: 20,
+    padding: 16,
     borderRadius: 20,
-  },
-
-  unreadBadgeText: {
-    color: C.blue,
-    fontSize: 10,
-    fontWeight: "800",
-  },
-
-  // LOADING
-  center: {
-    padding: 40,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  loadingText: {
-    marginTop: 12,
-    color: C.gray,
-    fontSize: 13,
-  },
-
-  // EMPTY STATE
-  emptyCard: {
-    backgroundColor: C.white,
-    borderRadius: 18,
-    padding: 28,
-    alignItems: "center",
-    marginTop: 25,
+    backgroundColor: GLASS.card,
     borderWidth: 1,
-    borderColor: C.light,
+    borderColor: GLASS.border,
+    shadowColor: GLASS.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
 
-  iconContainer: {
-    width: 85,
-    height: 85,
-    borderRadius: 25,
-    backgroundColor: "#E8F3FF",
-    justifyContent: "center",
+  summaryIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: "#E8F2FC",
     alignItems: "center",
-    marginBottom: 18,
+    justifyContent: "center",
   },
 
-  emptyTitle: {
-    fontSize: 17,
+  summaryTextContainer: {
+    flex: 1,
+    marginLeft: 13,
+  },
+
+  summaryTitle: {
+    fontSize: 15,
     fontWeight: "800",
-    color: C.navy,
+    color: GLASS.text,
   },
 
-  emptyText: {
+  summarySubtitle: {
+    fontSize: 12,
+    color: GLASS.secondary,
+    marginTop: 4,
+  },
+
+  countBadge: {
+    minWidth: 30,
+    height: 30,
+    paddingHorizontal: 8,
+    borderRadius: 15,
+    backgroundColor: "#E8F2FC",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  countText: {
+    color: C.primary,
     fontSize: 13,
-    color: C.gray,
-    textAlign: "center",
-    lineHeight: 20,
-    marginTop: 9,
-  },
-
-  // NOTIFICATION LIST
-  notificationList: {
-    gap: 12,
+    fontWeight: "800",
   },
 
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 5,
+    marginHorizontal: 20,
+    marginTop: 25,
+    marginBottom: 12,
   },
 
   sectionTitle: {
-    color: C.navy,
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: "800",
+    color: GLASS.text,
   },
 
-  sectionSubtitle: {
-    color: C.gray,
-    fontSize: 11,
-    marginTop: 4,
-  },
-
-  countBadge: {
-    minWidth: 32,
-    height: 32,
-    paddingHorizontal: 9,
-    borderRadius: 10,
-    backgroundColor: "#E8F3FF",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  countText: {
+  markAllText: {
     fontSize: 12,
-    fontWeight: "800",
-    color: C.blue,
+    fontWeight: "700",
+    color: C.primary,
+  },
+
+  scrollView: {
+    flex: 1,
+  },
+
+  scrollContent: {
+    paddingHorizontal: 18,
+    paddingBottom: 30,
   },
 
   notificationCard: {
-    backgroundColor: C.white,
-    borderRadius: 16,
-    padding: 15,
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 13,
-    borderWidth: 1,
-    borderColor: C.light,
-  },
+    padding: 15,
+    marginBottom: 12,
+    borderRadius: 18,
 
-  unreadCard: {
-    borderColor: "#BFDBFE",
-    backgroundColor: "#F8FBFF",
+    // Same background and border for every notification.
+    backgroundColor: GLASS.card,
+    borderWidth: 1,
+    borderColor: GLASS.border,
+
+    shadowColor: GLASS.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.07,
+    shadowRadius: 7,
+    elevation: 2,
   },
 
   notificationIcon: {
-    width: 46,
-    height: 46,
+    width: 43,
+    height: 43,
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
+    marginRight: 12,
   },
 
   notificationContent: {
@@ -784,95 +717,148 @@ const styles = StyleSheet.create({
   },
 
   notificationTitle: {
-    color: C.navy,
+    flex: 1,
     fontSize: 14,
     fontWeight: "800",
-    flex: 1,
+    color: GLASS.text,
+    marginRight: 8,
   },
 
   unreadDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: C.blue,
-    marginLeft: 8,
+    backgroundColor: C.primary,
   },
 
   notificationMessage: {
-    color: C.gray,
     fontSize: 12,
     lineHeight: 19,
-    marginTop: 5,
+    color: GLASS.secondary,
+    marginTop: 6,
+  },
+
+  notificationFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 10,
   },
 
   notificationDate: {
-    color: "#94A3B8",
     fontSize: 10,
-    marginTop: 9,
+    color: GLASS.muted,
+    marginLeft: 5,
   },
 
-  // ALERT MODAL
-  alertOverlay: {
+  readLabel: {
+    fontSize: 10,
+    color: GLASS.muted,
+    marginLeft: "auto",
+    fontWeight: "600",
+  },
+
+  loadingContainer: {
     flex: 1,
-    backgroundColor: "rgba(15, 23, 42, 0.55)",
-    justifyContent: "center",
     alignItems: "center",
+    justifyContent: "center",
+  },
+
+  loadingText: {
+    color: GLASS.secondary,
+    fontSize: 13,
+    marginTop: 12,
+  },
+
+  emptyCard: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 25,
+    paddingVertical: 45,
+    borderRadius: 20,
+    backgroundColor: GLASS.card,
+    borderWidth: 1,
+    borderColor: GLASS.border,
+  },
+
+  emptyIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 26,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 17,
+  },
+
+  emptyTitle: {
+    fontSize: 17,
+    fontWeight: "800",
+    color: GLASS.text,
+  },
+
+  emptySubtitle: {
+    fontSize: 12,
+    lineHeight: 19,
+    color: GLASS.secondary,
+    textAlign: "center",
+    marginTop: 8,
+  },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.40)",
+    alignItems: "center",
+    justifyContent: "center",
     padding: 25,
   },
 
   alertCard: {
     width: "100%",
-    maxWidth: 360,
-    backgroundColor: C.white,
+    maxWidth: 350,
+    backgroundColor: "#FFFFFF",
     borderRadius: 24,
     padding: 25,
     alignItems: "center",
-    elevation: 10,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 5,
-    },
-    shadowOpacity: 0.18,
-    shadowRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
   },
 
-  alertIconContainer: {
-    width: 78,
-    height: 78,
-    borderRadius: 39,
-    justifyContent: "center",
+  alertIcon: {
+    width: 65,
+    height: 65,
+    borderRadius: 22,
     alignItems: "center",
-    marginBottom: 18,
+    justifyContent: "center",
+    marginBottom: 15,
   },
 
   alertTitle: {
-    fontSize: 20,
-    fontWeight: "900",
-    color: C.navy,
+    fontSize: 19,
+    fontWeight: "800",
+    color: GLASS.text,
     textAlign: "center",
   },
 
   alertMessage: {
-    fontSize: 14,
-    color: C.gray,
+    fontSize: 13,
+    lineHeight: 20,
+    color: GLASS.secondary,
     textAlign: "center",
-    lineHeight: 21,
-    marginTop: 10,
+    marginTop: 9,
   },
 
   alertButton: {
     width: "100%",
-    backgroundColor: C.blue,
-    paddingVertical: 14,
-    borderRadius: 13,
+    backgroundColor: C.primary,
+    paddingVertical: 13,
+    borderRadius: 14,
     alignItems: "center",
-    marginTop: 24,
+    marginTop: 22,
   },
 
   alertButtonText: {
-    color: C.white,
     fontSize: 14,
     fontWeight: "800",
+    color: "#FFFFFF",
   },
 });

@@ -2452,25 +2452,45 @@ export default function TrackingScreen() {
   );
 }
 
-// ========================================
-// STYLES
-// ========================================
+
+const GLASS = {
+  background: "#F1F5F9",
+  card: "rgba(255, 255, 255, 0.72)",
+  cardStrong: "rgba(255, 255, 255, 0.92)",
+  cardSoft: "rgba(255, 255, 255, 0.48)",
+  border: "rgba(255, 255, 255, 0.90)",
+  borderSoft: "rgba(255, 255, 255, 0.55)",
+  shadow: "#64748B",
+  text: "#26384A",
+  secondary: "#64798D",
+  muted: "#8A9CAD",
+  selected: "rgba(255, 255, 255, 0.85)",
+};
 
 const styles = StyleSheet.create({
+  // ========================================
+  // FILTER LOADING
+  // ========================================
+
   filterLoadingRow: {
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 10,
     gap: 8,
   },
+
   filterLoadingText: {
-    color: C.secondary,
+    color: GLASS.secondary,
     fontSize: 12,
   },
 
+  // ========================================
+  // MAIN CONTAINER
+  // ========================================
+
   container: {
     flex: 1,
-    backgroundColor: C.background,
+    backgroundColor: GLASS.background,
   },
 
   map: {
@@ -2478,20 +2498,24 @@ const styles = StyleSheet.create({
     backgroundColor: "#E2E8F0",
   },
 
+  // ========================================
   // LOADING
+  // ========================================
 
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: C.background,
+    backgroundColor: GLASS.background,
   },
 
   loadingIcon: {
     width: 65,
     height: 65,
     borderRadius: 20,
-    backgroundColor: C.primaryLight,
+    backgroundColor: GLASS.card,
+    borderWidth: 1,
+    borderColor: GLASS.border,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 20,
@@ -2499,18 +2523,20 @@ const styles = StyleSheet.create({
 
   loadingText: {
     marginTop: 12,
-    color: C.text,
+    color: GLASS.text,
     fontSize: 15,
     fontWeight: "600",
   },
 
   loadingSubtext: {
     marginTop: 5,
-    color: C.secondary,
+    color: GLASS.secondary,
     fontSize: 12,
   },
 
+  // ========================================
   // FLOATING HEADER
+  // ========================================
 
   header: {
     position: "absolute",
@@ -2519,16 +2545,18 @@ const styles = StyleSheet.create({
     right: 12,
     paddingVertical: 12,
     paddingHorizontal: 15,
-    backgroundColor: C.white,
+    backgroundColor: GLASS.card,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    borderRadius: 15,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: GLASS.border,
     elevation: 5,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 5,
+    shadowColor: GLASS.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.13,
+    shadowRadius: 10,
   },
 
   headerTextContainer: {
@@ -2551,12 +2579,12 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: "bold",
-    color: C.text,
+    color: GLASS.text,
   },
 
   headerSubtitle: {
     fontSize: 12,
-    color: C.secondary,
+    color: GLASS.secondary,
     marginTop: 3,
     marginLeft: 15,
   },
@@ -2564,13 +2592,17 @@ const styles = StyleSheet.create({
   headerButton: {
     width: 40,
     height: 40,
-    borderRadius: 11,
-    backgroundColor: C.primaryLight,
+    borderRadius: 12,
+    backgroundColor: GLASS.cardSoft,
+    borderWidth: 1,
+    borderColor: GLASS.border,
     alignItems: "center",
     justifyContent: "center",
   },
 
+  // ========================================
   // FILTER BUTTON
+  // ========================================
 
   filterButton: {
     position: "absolute",
@@ -2578,20 +2610,22 @@ const styles = StyleSheet.create({
     left: 15,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: C.white,
+    backgroundColor: GLASS.card,
     paddingHorizontal: 14,
     paddingVertical: 11,
-    borderRadius: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: GLASS.border,
     gap: 8,
     elevation: 5,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
+    shadowColor: GLASS.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.13,
+    shadowRadius: 9,
   },
 
   filterButtonText: {
-    color: C.text,
+    color: GLASS.text,
     fontSize: 13,
     fontWeight: "600",
   },
@@ -2611,20 +2645,24 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
 
+  // ========================================
   // MAP CONTROLS
+  // ========================================
 
   mapControls: {
     position: "absolute",
     right: 13,
     top: 88,
-    backgroundColor: C.white,
-    borderRadius: 14,
+    backgroundColor: GLASS.card,
+    borderRadius: 15,
     padding: 4,
-    elevation: 6,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.18,
-    shadowRadius: 5,
+    borderWidth: 1,
+    borderColor: GLASS.border,
+    elevation: 5,
+    shadowColor: GLASS.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.13,
+    shadowRadius: 9,
   },
 
   mapControlButton: {
@@ -2636,11 +2674,13 @@ const styles = StyleSheet.create({
 
   mapControlDivider: {
     height: 1,
-    backgroundColor: C.border,
+    backgroundColor: GLASS.borderSoft,
     marginHorizontal: 5,
   },
 
+  // ========================================
   // LOCATION WARNING
+  // ========================================
 
   locationWarning: {
     position: "absolute",
@@ -2650,12 +2690,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFBEB",
     borderColor: "#FDE68A",
     borderWidth: 1,
-    borderRadius: 11,
+    borderRadius: 13,
     padding: 11,
     flexDirection: "row",
     alignItems: "center",
     gap: 7,
-    elevation: 2,
+    elevation: 3,
   },
 
   locationWarningText: {
@@ -2665,22 +2705,30 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
 
+  // ========================================
   // SELECTED BUS CARD
+  // ========================================
 
   selectedBusPopup: {
-    position: "absolute",
-    left: 14,
-    right: 14,
-    bottom: 15,
-    backgroundColor: C.white,
-    borderRadius: 18,
-    padding: 16,
-    elevation: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.2,
-    shadowRadius: 7,
-  },
+  position: "absolute",
+  left: 14,
+  right: 14,
+
+  // Keep the bus information above the bottom tab navigation
+  bottom: 85,
+
+  backgroundColor: GLASS.cardStrong,
+  borderRadius: 22,
+  padding: 16,
+  borderWidth: 1,
+  borderColor: GLASS.border,
+  elevation: 9,
+  shadowColor: GLASS.shadow,
+  shadowOffset: { width: 0, height: 5 },
+  shadowOpacity: 0.16,
+  shadowRadius: 12,
+  zIndex: 10,
+},
 
   popupHeader: {
     flexDirection: "row",
@@ -2690,8 +2738,10 @@ const styles = StyleSheet.create({
   popupBusIcon: {
     width: 48,
     height: 48,
-    borderRadius: 13,
-    backgroundColor: C.primaryLight,
+    borderRadius: 15,
+    backgroundColor: GLASS.cardSoft,
+    borderWidth: 1,
+    borderColor: GLASS.border,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -2704,27 +2754,29 @@ const styles = StyleSheet.create({
   popupBusName: {
     fontSize: 16,
     fontWeight: "bold",
-    color: C.text,
+    color: GLASS.text,
   },
 
   popupBusPlate: {
     fontSize: 12,
-    color: C.secondary,
+    color: GLASS.secondary,
     marginTop: 3,
   },
 
   closePopupButton: {
     width: 34,
     height: 34,
-    borderRadius: 10,
-    backgroundColor: "#F1F5F9",
+    borderRadius: 11,
+    backgroundColor: GLASS.cardSoft,
+    borderWidth: 1,
+    borderColor: GLASS.border,
     alignItems: "center",
     justifyContent: "center",
   },
 
   popupDivider: {
     height: 1,
-    backgroundColor: C.border,
+    backgroundColor: GLASS.borderSoft,
     marginVertical: 12,
   },
 
@@ -2732,10 +2784,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    backgroundColor: C.primaryLight,
+    backgroundColor: GLASS.cardSoft,
+    borderWidth: 1,
+    borderColor: GLASS.border,
     paddingHorizontal: 11,
     paddingVertical: 11,
-    borderRadius: 10,
+    borderRadius: 12,
     marginBottom: 12,
   },
 
@@ -2747,7 +2801,7 @@ const styles = StyleSheet.create({
 
   distanceDetailsLabel: {
     fontSize: 12,
-    color: C.text,
+    color: GLASS.text,
     fontWeight: "600",
   },
 
@@ -2766,64 +2820,63 @@ const styles = StyleSheet.create({
 
   popupLabel: {
     fontSize: 12,
-    color: C.secondary,
+    color: GLASS.secondary,
   },
 
   popupValue: {
     fontSize: 12,
     fontWeight: "600",
-    color: C.text,
+    color: GLASS.text,
     maxWidth: "60%",
     textAlign: "right",
   },
 
   operatorPopupText: {
-    color: C.secondary,
+    color: GLASS.secondary,
     fontSize: 12,
     textAlign: "center",
   },
 
+  // ========================================
   // SIDEBAR OVERLAY
+  // ========================================
 
   sidebarOverlay: {
     flex: 1,
     flexDirection: "row",
-    backgroundColor: "rgba(15,23,42,0.40)",
+    backgroundColor: "rgba(15, 23, 42, 0.30)",
   },
 
   sidebarBackdrop: {
     ...StyleSheet.absoluteFillObject,
   },
 
-  // SIDEBAR
+  // ========================================
+  // SOLID WHITE SIDEBAR
+  // ========================================
 
   sidebar: {
     width: "88%",
     maxWidth: 400,
     height: "100%",
-    backgroundColor: C.background,
+    backgroundColor: "#FFFFFF",
     paddingTop: 48,
-    elevation: 20,
-    shadowColor: "#000",
+    borderRightWidth: 1,
+    borderRightColor: "#E2E8F0",
+    elevation: 15,
+    shadowColor: "#64748B",
     shadowOffset: { width: 4, height: 0 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.16,
     shadowRadius: 12,
   },
 
   sidebarHeader: {
-    backgroundColor: C.white,
+    backgroundColor: "#FFFFFF",
     paddingHorizontal: 20,
     paddingTop: 8,
     paddingBottom: 17,
     borderBottomWidth: 1,
-    borderBottomColor: C.border,
-  },
-
-  sidebarHeaderTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 15,
+    borderBottomColor: "#E2E8F0",
   },
 
   sidebarHeaderIcon: {
@@ -2838,12 +2891,12 @@ const styles = StyleSheet.create({
   sidebarTitle: {
     fontSize: 22,
     fontWeight: "800",
-    color: C.text,
+    color: GLASS.text,
   },
 
   sidebarSubtitle: {
     fontSize: 12,
-    color: C.secondary,
+    color: GLASS.secondary,
     marginTop: 5,
     lineHeight: 18,
   },
@@ -2851,10 +2904,12 @@ const styles = StyleSheet.create({
   sidebarStats: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: C.primaryLight,
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
     paddingHorizontal: 12,
     paddingVertical: 10,
-    borderRadius: 10,
+    borderRadius: 12,
     marginTop: 15,
   },
 
@@ -2867,14 +2922,14 @@ const styles = StyleSheet.create({
 
   sidebarStatText: {
     fontSize: 11,
-    color: C.primaryDark,
+    color: GLASS.text,
     fontWeight: "600",
   },
 
   sidebarStatDivider: {
     width: 1,
     height: 17,
-    backgroundColor: "#BFDBFE",
+    backgroundColor: "#E2E8F0",
     marginHorizontal: 10,
   },
 
@@ -2888,8 +2943,10 @@ const styles = StyleSheet.create({
   sidebarCloseButton: {
     width: 37,
     height: 37,
-    borderRadius: 11,
+    borderRadius: 12,
     backgroundColor: "#F1F5F9",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2898,17 +2955,20 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 18,
     paddingTop: 19,
+    backgroundColor: "#FFFFFF",
   },
 
   filterHeading: {
     fontSize: 11,
     fontWeight: "800",
     letterSpacing: 1,
-    color: C.muted,
+    color: GLASS.secondary,
     marginBottom: 15,
   },
 
+  // ========================================
   // DROPDOWNS
+  // ========================================
 
   dropdownSection: {
     marginBottom: 16,
@@ -2923,8 +2983,10 @@ const styles = StyleSheet.create({
   dropdownIcon: {
     width: 27,
     height: 27,
-    borderRadius: 8,
-    backgroundColor: C.primaryLight,
+    borderRadius: 9,
+    backgroundColor: "#F1F5F9",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
     alignItems: "center",
     justifyContent: "center",
     marginRight: 8,
@@ -2934,7 +2996,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 12,
     fontWeight: "700",
-    color: "#334155",
+    color: GLASS.text,
   },
 
   dropdownReset: {
@@ -2945,10 +3007,10 @@ const styles = StyleSheet.create({
 
   dropdownButton: {
     minHeight: 49,
-    backgroundColor: C.white,
+    backgroundColor: "#F8FAFC",
     borderWidth: 1,
-    borderColor: C.border,
-    borderRadius: 12,
+    borderColor: "#E2E8F0",
+    borderRadius: 13,
     paddingHorizontal: 14,
     flexDirection: "row",
     alignItems: "center",
@@ -2957,34 +3019,37 @@ const styles = StyleSheet.create({
 
   dropdownButtonActive: {
     borderColor: C.primary,
-    backgroundColor: "#F0F7FF",
+    backgroundColor: "#FFFFFF",
   },
 
   dropdownButtonSelected: {
-    borderColor: "#BFDBFE",
+    borderColor: "rgba(26, 138, 229, 0.35)",
   },
 
   dropdownValue: {
     flex: 1,
     fontSize: 13,
-    color: C.text,
+    color: GLASS.text,
     fontWeight: "600",
     marginRight: 10,
   },
 
   dropdownPlaceholder: {
-    color: C.muted,
+    color: GLASS.muted,
     fontWeight: "400",
   },
 
   dropdownOptions: {
     marginTop: 6,
-    backgroundColor: C.white,
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: C.border,
-    borderRadius: 12,
+    borderColor: "#E2E8F0",
+    borderRadius: 13,
     overflow: "hidden",
-    elevation: 2,
+    elevation: 3,
+    shadowColor: GLASS.shadow,
+    shadowOpacity: 0.10,
+    shadowRadius: 6,
   },
 
   dropdownOptionsScroll: {
@@ -2998,16 +3063,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     borderBottomWidth: 1,
-    borderBottomColor: C.lightBorder,
+    borderBottomColor: "#F1F5F9",
   },
 
   dropdownOptionActive: {
-    backgroundColor: "#F0F7FF",
+    backgroundColor: "rgba(26, 138, 229, 0.07)",
   },
 
   dropdownOptionText: {
     fontSize: 12,
-    color: "#475569",
+    color: GLASS.secondary,
   },
 
   dropdownOptionSelected: {
@@ -3015,7 +3080,9 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 
+  // ========================================
   // RESULTS HEADER
+  // ========================================
 
   resultsHeader: {
     flexDirection: "row",
@@ -3024,19 +3091,19 @@ const styles = StyleSheet.create({
     paddingTop: 18,
     paddingBottom: 13,
     borderTopWidth: 1,
-    borderTopColor: C.border,
+    borderTopColor: "#E2E8F0",
     marginTop: 5,
   },
 
   resultsTitle: {
     fontSize: 16,
     fontWeight: "800",
-    color: C.text,
+    color: GLASS.text,
   },
 
   resultsSubtitle: {
     fontSize: 11,
-    color: C.secondary,
+    color: GLASS.secondary,
     marginTop: 4,
   },
 
@@ -3044,8 +3111,10 @@ const styles = StyleSheet.create({
     minWidth: 32,
     height: 32,
     paddingHorizontal: 8,
-    borderRadius: 10,
-    backgroundColor: C.primaryLight,
+    borderRadius: 11,
+    backgroundColor: GLASS.card,
+    borderWidth: 1,
+    borderColor: GLASS.border,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -3056,36 +3125,45 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
 
+  // ========================================
   // BUS CARDS
+  // ========================================
 
   busListItem: {
-    backgroundColor: C.white,
-    borderWidth: 1,
-    borderColor: C.border,
-    borderRadius: 15,
-    padding: 13,
-    marginBottom: 11,
-  },
+  backgroundColor: "#FFFFFF",
+  borderWidth: 1,
+  borderColor: "#FFFFFF",
+  borderRadius: 17,
+  padding: 13,
+  marginBottom: 11,
+  elevation: 2,
+  shadowColor: GLASS.shadow,
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.08,
+  shadowRadius: 5,
+},
 
   busListItemSelected: {
-    borderColor: C.primary,
-    backgroundColor: "#F0F7FF",
-  },
+  backgroundColor: "#FFFFFF",
+  borderColor: "#FFFFFF",
+},
 
   busListTop: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
+  flexDirection: "row",
+  alignItems: "center",
+},
 
-  busListIcon: {
-    width: 43,
-    height: 43,
-    borderRadius: 12,
-    backgroundColor: C.primaryLight,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 10,
-  },
+busListIcon: {
+  width: 43,
+  height: 43,
+  borderRadius: 13,
+  backgroundColor: "#FFFFFF",
+  borderWidth: 1,
+  borderColor: "#FFFFFF",
+  alignItems: "center",
+  justifyContent: "center",
+  marginRight: 10,
+},
 
   busListInfo: {
     flex: 1,
@@ -3094,12 +3172,12 @@ const styles = StyleSheet.create({
   busListName: {
     fontSize: 13,
     fontWeight: "800",
-    color: C.text,
+    color: GLASS.text,
   },
 
   busListPlate: {
     fontSize: 11,
-    color: C.secondary,
+    color: GLASS.secondary,
     marginTop: 4,
   },
 
@@ -3112,39 +3190,41 @@ const styles = StyleSheet.create({
 
   busListDestinationText: {
     fontSize: 12,
-    color: "#334155",
+    color: GLASS.text,
     fontWeight: "600",
   },
 
   busListTags: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-    marginTop: 10,
-  },
+  flexDirection: "row",
+  flexWrap: "wrap",
+  gap: 6,
+  marginTop: 10,
+},
 
-  busListTag: {
-    backgroundColor: "#F1F5F9",
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 6,
-  },
+busListTag: {
+  backgroundColor: "#FFFFFF",
+  borderWidth: 1,
+  borderColor: "#FFFFFF",
+  paddingHorizontal: 8,
+  paddingVertical: 5,
+  borderRadius: 7,
+},
 
   busListTagText: {
     fontSize: 10,
-    color: "#475569",
+    color: GLASS.secondary,
     fontWeight: "600",
   },
 
   busListBottom: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    borderTopWidth: 1,
-    borderTopColor: C.lightBorder,
-    marginTop: 12,
-    paddingTop: 10,
-  },
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "space-between",
+  borderTopWidth: 1,
+  borderTopColor: "#E2E8F0",
+  marginTop: 12,
+  paddingTop: 10,
+},
 
   busListStatusRow: {
     flexDirection: "row",
@@ -3171,7 +3251,7 @@ const styles = StyleSheet.create({
 
   gpsStatusText: {
     fontSize: 10,
-    color: C.muted,
+    color: GLASS.muted,
     fontWeight: "600",
   },
 
@@ -3179,7 +3259,9 @@ const styles = StyleSheet.create({
     color: C.success,
   },
 
+  // ========================================
   // EMPTY STATE
+  // ========================================
 
   emptyBusList: {
     alignItems: "center",
@@ -3192,7 +3274,9 @@ const styles = StyleSheet.create({
     width: 65,
     height: 65,
     borderRadius: 20,
-    backgroundColor: "#F1F5F9",
+    backgroundColor: GLASS.card,
+    borderWidth: 1,
+    borderColor: GLASS.border,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -3200,23 +3284,25 @@ const styles = StyleSheet.create({
   emptyBusTitle: {
     fontSize: 15,
     fontWeight: "bold",
-    color: "#334155",
+    color: GLASS.text,
     marginTop: 12,
   },
 
   emptyBusText: {
     fontSize: 12,
-    color: C.secondary,
+    color: GLASS.secondary,
     textAlign: "center",
     marginTop: 5,
     lineHeight: 18,
   },
 
   emptyClearButton: {
-    backgroundColor: C.primaryLight,
+    backgroundColor: GLASS.card,
+    borderWidth: 1,
+    borderColor: GLASS.border,
     paddingHorizontal: 17,
     paddingVertical: 10,
-    borderRadius: 9,
+    borderRadius: 11,
     marginTop: 14,
   },
 
@@ -3226,7 +3312,9 @@ const styles = StyleSheet.create({
     color: C.primaryDark,
   },
 
+  // ========================================
   // SIDEBAR FOOTER
+  // ========================================
 
   sidebarFooter: {
     flexDirection: "row",
@@ -3236,18 +3324,18 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 25,
     borderTopWidth: 1,
-    borderTopColor: C.border,
-    backgroundColor: C.white,
+    borderTopColor: "#E2E8F0",
+    backgroundColor: "#FFFFFF",
   },
 
   sidebarClearButton: {
     height: 49,
     minWidth: 95,
     paddingHorizontal: 14,
-    borderRadius: 12,
+    borderRadius: 13,
     borderWidth: 1,
-    borderColor: "#BFDBFE",
-    backgroundColor: C.white,
+    borderColor: "#E2E8F0",
+    backgroundColor: "#F8FAFC",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -3264,12 +3352,16 @@ const styles = StyleSheet.create({
     height: 49,
     flex: 1,
     backgroundColor: C.primary,
-    borderRadius: 12,
+    borderRadius: 13,
     justifyContent: "center",
     alignItems: "center",
     flexDirection: "row",
     gap: 7,
-    elevation: 2,
+    elevation: 3,
+    shadowColor: C.primary,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.20,
+    shadowRadius: 6,
   },
 
   sidebarDoneText: {
@@ -3278,11 +3370,13 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
 
+  // ========================================
   // LOCATION SERVICES MODAL
+  // ========================================
 
   alertOverlay: {
     flex: 1,
-    backgroundColor: "rgba(15, 23, 42, 0.55)",
+    backgroundColor: "rgba(15, 23, 42, 0.50)",
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 25,
@@ -3291,22 +3385,26 @@ const styles = StyleSheet.create({
   locationModal: {
     width: "100%",
     maxWidth: 380,
-    backgroundColor: C.white,
-    borderRadius: 22,
+    backgroundColor: GLASS.cardStrong,
+    borderWidth: 1,
+    borderColor: GLASS.border,
+    borderRadius: 24,
     padding: 22,
     alignItems: "center",
     elevation: 15,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
+    shadowColor: GLASS.shadow,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.20,
+    shadowRadius: 14,
   },
 
   locationModalIcon: {
     width: 68,
     height: 68,
     borderRadius: 22,
-    backgroundColor: C.primaryLight,
+    backgroundColor: GLASS.card,
+    borderWidth: 1,
+    borderColor: GLASS.border,
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 17,
@@ -3315,14 +3413,14 @@ const styles = StyleSheet.create({
   locationModalTitle: {
     fontSize: 19,
     fontWeight: "800",
-    color: C.text,
+    color: GLASS.text,
     textAlign: "center",
   },
 
   locationModalMessage: {
     fontSize: 13,
     lineHeight: 20,
-    color: C.secondary,
+    color: GLASS.secondary,
     textAlign: "center",
     marginTop: 10,
   },
@@ -3337,8 +3435,10 @@ const styles = StyleSheet.create({
   locationCancelButton: {
     flex: 1,
     height: 48,
-    borderRadius: 12,
-    backgroundColor: "#F1F5F9",
+    borderRadius: 13,
+    backgroundColor: GLASS.card,
+    borderWidth: 1,
+    borderColor: GLASS.border,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -3346,13 +3446,13 @@ const styles = StyleSheet.create({
   locationCancelText: {
     fontSize: 13,
     fontWeight: "700",
-    color: C.secondary,
+    color: GLASS.secondary,
   },
 
   locationEnableButton: {
     flex: 1.4,
     height: 48,
-    borderRadius: 12,
+    borderRadius: 13,
     backgroundColor: C.primary,
     flexDirection: "row",
     justifyContent: "center",
@@ -3365,5 +3465,4 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: C.white,
   },
-
 });

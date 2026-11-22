@@ -21,6 +21,7 @@ import {
   CircleDollarSign,
   RadioTower,
   MessageSquare,
+  History,
 } from "lucide-react";
 
 import { supabase } from "../config/supabase";
@@ -36,6 +37,7 @@ import LiveTracking from "./LiveTracking";
 import Fares from "./Fares";
 import RouteManagement from "./RouteManagement";
 import SendNotification from "./SendNotification";
+import ActivityLogs from "./ActivityLogs";
 
 // SIDEBAR NAVIGATION
 const navigation = [
@@ -50,6 +52,7 @@ const navigation = [
   { name: "Fares", icon: CircleDollarSign },
   { name: "Payments", icon: CreditCard },
   { name: "Send Notification", icon: MessageSquare },
+  { name: "Activity Logs", icon: History },
   { name: "Settings", icon: SettingsIcon },
 ];
 
@@ -1239,6 +1242,9 @@ export default function Dashboard() {
 
       case "Send Notification":
         return <SendNotification />;
+
+      case "Activity Logs":
+        return <ActivityLogs />;
 
       case "Settings":
         return <Settings />;

@@ -562,12 +562,13 @@ export default function OperatorDockingScreen({ navigation, route }) {
         "success",
         "Continue",
         () => {
-          navigation.replace("TripManagement", {
-            tripId: updatedTrip.trip_id,
+          navigation.replace("BusManagement", {
             busId: bus.bus_id,
+            tripId: updatedTrip.trip_id,
           });
         }
       );
+
     } catch (error) {
       console.log("START TRIP ERROR:", error);
 

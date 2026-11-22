@@ -45,23 +45,39 @@ import CashierStack from "./CashierStack";
 const Tab = createBottomTabNavigator();
 const BookingStackNavigator = createNativeStackNavigator();
 
-// ROUTEX BLUE THEME
-const COLORS = {
-  primary: "#1A8AE5",
-  primaryDark: "#1A8AE5",
+// =====================================
+// ROUTEX BLUE GLASS PALETTE
+// =====================================
 
-  background: "#F8FAFC",
+const COLORS = {
+  background: "#BFD5E9",
+  background2: "#AFC9E0",
+
+  primary: "#286DF6",
+  primaryLight: "#5B8FFF",
+  primaryDark: "#1D55CC",
+
   white: "#FFFFFF",
 
-  text: "#172B4D",
-  secondaryText: "#64748B",
-  inactive: "#94A3B8",
+  text: "#081B33",
+  secondaryText: "#263F59",
+  inactive: "#496681",
 
-  border: "#E8EEF5",
-  danger: "#DC2626",
+  glass: "rgba(20, 93, 168, 0.88)",
+  glassLight: "rgba(36, 112, 184, 0.82)",
+  glassBorder: "rgba(255, 255, 255, 0.28)",
+
+  border: "rgba(20, 93, 168, 0.20)",
+  shadow: "rgba(20, 55, 90, 0.16)",
+
+  danger: "#D9485F",
+  dangerLight: "rgba(217, 72, 95, 0.10)",
 };
 
-// TIMEOUT
+// =====================================
+// REQUEST TIMEOUT
+// =====================================
+
 const withTimeout = (promise, timeout = 15000) => {
   let timer;
 
@@ -81,7 +97,10 @@ const withTimeout = (promise, timeout = 15000) => {
   });
 };
 
+// =====================================
 // BOOKING STACK
+// =====================================
+
 function BookingStack() {
   return (
     <BookingStackNavigator.Navigator
@@ -108,7 +127,10 @@ function BookingStack() {
   );
 }
 
+// =====================================
 // TAB ICONS
+// =====================================
+
 const getTabIcon = (routeName, focused) => {
   const icons = {
     Home: focused ? "home" : "home-outline",
@@ -141,7 +163,10 @@ const getTabIcon = (routeName, focused) => {
   return icons[routeName] || "ellipse-outline";
 };
 
+// =====================================
 // TAB LABELS
+// =====================================
+
 const getTabLabel = (routeName) => {
   const labels = {
     Home: "Home",
@@ -156,6 +181,28 @@ const getTabLabel = (routeName) => {
   return labels[routeName] || routeName;
 };
 
+// =====================================
+// BLUE GLASS TAB BACKGROUND
+// =====================================
+
+function GlassTabBackground() {
+  return (
+    <View
+      pointerEvents="none"
+      style={styles.tabBackground}
+    >
+      <View style={styles.glassBase} />
+      <View style={styles.glassInner} />
+      <View style={styles.glassReflection} />
+      <View style={styles.glassGlow} />
+    </View>
+  );
+}
+
+// =====================================
+// MAIN BOTTOM TABS
+// =====================================
+
 export default function BottomTabs({ navigation }) {
   const insets = useSafeAreaInsets();
 
@@ -164,7 +211,10 @@ export default function BottomTabs({ navigation }) {
   const [errorMessage, setErrorMessage] = useState("");
   const [retryCount, setRetryCount] = useState(0);
 
+  // =====================================
   // LOAD USER ROLE
+  // =====================================
+
   const loadUserRole = useCallback(async () => {
     try {
       setLoading(true);
@@ -200,7 +250,9 @@ export default function BottomTabs({ navigation }) {
         throw new Error("Account role not found.");
       }
 
-      const role = String(data.user_level).toLowerCase();
+      const role = String(
+        data.user_level
+      ).toLowerCase();
 
       console.log("RouteX user role:", role);
 
@@ -223,199 +275,258 @@ export default function BottomTabs({ navigation }) {
     loadUserRole();
   }, [loadUserRole, retryCount]);
 
-  // BOTTOM TAB DESIGN
+  // =====================================
+  // SHARED TAB OPTIONS
+  // =====================================
+
   const sharedScreenOptions = {
     headerShown: true,
 
     header: () => <AppHeader />,
 
-    tabBarActiveTintColor: COLORS.primaryDark,
-    tabBarInactiveTintColor: COLORS.inactive,
+    tabBarActiveTintColor: COLORS.white,
+    tabBarInactiveTintColor: "#D0E2F3",
 
     tabBarHideOnKeyboard: true,
 
     tabBarShowLabel: true,
     tabBarLabelPosition: "below-icon",
 
-    tabBarStyle: {
-      height: 60 + insets.bottom,
-
-      paddingTop: 5,
-      paddingBottom: insets.bottom,
-
-      backgroundColor: COLORS.white,
-
-      borderTopWidth: 1,
-      borderTopColor: COLORS.border,
-
-      elevation: 12,
-
-      shadowColor: "#0F2747",
-      shadowOffset: {
-        width: 0,
-        height: -3,
-      },
-      shadowOpacity: 0.06,
-      shadowRadius: 8,
-    },
-
-    tabBarIconStyle: {
-      marginTop: 1,
-    },
+    tabBarBackground: () => <GlassTabBackground />,
 
     tabBarLabelStyle: {
-      fontSize: 10,
+      fontSize: 11,
       fontWeight: "700",
       marginTop: 2,
-      marginBottom: 2,
-      includeFontPadding: false,
+    },
+
+    tabBarStyle: {
+      position: "absolute",
+
+      left: 0,
+      right: 0,
+      bottom: 0,
+
+      height: 66 + insets.bottom,
+
+      paddingTop: 7,
+      paddingBottom: Math.max(insets.bottom, 5),
+
+      backgroundColor: COLORS.primary,
+
+      // REMOVE TOP BORDER
+      borderWidth: 0,
+      borderTopWidth: 0,
+      borderTopColor: "transparent",
+
+      borderTopLeftRadius: 22,
+      borderTopRightRadius: 22,
+
+      elevation: 0,
+
+      shadowColor: "transparent",
+      shadowOpacity: 0,
+      shadowRadius: 0,
+      shadowOffset: {
+        width: 0,
+        height: 0,
+      },
     },
 
     tabBarAllowFontScaling: false,
   };
 
+  // =====================================
   // LOADING SCREEN
+  // =====================================
+
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator
-          size="large"
-          color={COLORS.primary}
-        />
+        <View style={styles.loadingGlow}>
+          <View style={styles.loadingGlass}>
 
-        <Text style={styles.loadingText}>
-          Checking your RouteX account...
-        </Text>
+            <View style={styles.loadingIcon}>
+              <ActivityIndicator
+                size="large"
+                color={COLORS.primary}
+              />
+            </View>
+
+            <Text style={styles.loadingTitle}>
+              RouteX
+            </Text>
+
+            <Text style={styles.loadingText}>
+              Checking your account...
+            </Text>
+
+          </View>
+        </View>
       </View>
     );
   }
 
+  // =====================================
   // ERROR SCREEN
+  // =====================================
+
   if (errorMessage) {
     return (
       <View style={styles.center}>
-        <Ionicons
-          name="alert-circle-outline"
-          size={48}
-          color={COLORS.danger}
-        />
+        <View style={styles.errorGlass}>
 
-        <Text style={styles.errorTitle}>
-          Unable to Open RouteX
-        </Text>
+          <View style={styles.errorIcon}>
+            <Ionicons
+              name="alert-circle-outline"
+              size={38}
+              color={COLORS.danger}
+            />
+          </View>
 
-        <Text style={styles.errorText}>
-          {errorMessage}
-        </Text>
-
-        <TouchableOpacity
-          style={styles.retryButton}
-          onPress={() =>
-            setRetryCount((prev) => prev + 1)
-          }
-        >
-          <Ionicons
-            name="refresh-outline"
-            size={18}
-            color={COLORS.white}
-          />
-
-          <Text style={styles.retryText}>
-            Try Again
+          <Text style={styles.errorTitle}>
+            Unable to Open RouteX
           </Text>
-        </TouchableOpacity>
+
+          <Text style={styles.errorText}>
+            {errorMessage}
+          </Text>
+
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={() =>
+              setRetryCount((prev) => prev + 1)
+            }
+            activeOpacity={0.85}
+          >
+            <Ionicons
+              name="refresh-outline"
+              size={18}
+              color={COLORS.white}
+            />
+
+            <Text style={styles.retryText}>
+              Try Again
+            </Text>
+          </TouchableOpacity>
+
+        </View>
       </View>
     );
   }
+
+  // =====================================
+  // ACCOUNT ROLES
+  // =====================================
 
   const isOperator = userLevel === "operator";
   const isPassenger = userLevel === "user";
   const isCashier = userLevel === "cashier";
   const isAdmin = userLevel === "admin";
 
+  // =====================================
   // TAB OPTIONS
+  // =====================================
+
   const tabOptions = ({ route }) => ({
     ...sharedScreenOptions,
 
     tabBarLabel: getTabLabel(route.name),
 
     tabBarItemStyle:
-      route.name === "Payment" || route.name === "Ticket"
+      route.name === "Payment" ||
+      route.name === "Ticket"
         ? { display: "none" }
         : undefined,
 
     tabBarIcon: ({ focused, color }) => (
-      <Ionicons
-        name={getTabIcon(route.name, focused)}
-        size={22}
-        color={color}
-      />
+      <View
+        style={[
+          styles.tabIconContainer,
+          focused && styles.activeTabIconContainer,
+        ]}
+      >
+        <Ionicons
+          name={getTabIcon(route.name, focused)}
+          size={22}
+          color={color}
+        />
+      </View>
     ),
   });
 
+  // =====================================
   // CASHIER AND ADMIN
+  // =====================================
+
   if (isCashier || isAdmin) {
     return (
-      <Tab.Navigator
-        screenOptions={tabOptions}
-      >
+      <Tab.Navigator screenOptions={tabOptions}>
+
         <Tab.Screen
           name="Dashboard"
           component={CashierStack}
-          options={{
-            title: "Dashboard",
-          }}
         />
 
         <Tab.Screen
           name="Profile"
           component={ProfileScreen}
         />
+
       </Tab.Navigator>
     );
   }
 
+  // =====================================
   // UNSUPPORTED ROLE
+  // =====================================
+
   if (!isOperator && !isPassenger) {
     return (
       <View style={styles.center}>
-        <Ionicons
-          name="alert-circle-outline"
-          size={45}
-          color={COLORS.danger}
-        />
+        <View style={styles.errorGlass}>
 
-        <Text style={styles.errorText}>
-          Unsupported account role: {userLevel}
-        </Text>
+          <Ionicons
+            name="alert-circle-outline"
+            size={45}
+            color={COLORS.danger}
+          />
+
+          <Text style={styles.errorTitle}>
+            Unsupported Account
+          </Text>
+
+          <Text style={styles.errorText}>
+            Unsupported account role: {userLevel}
+          </Text>
+
+        </View>
       </View>
     );
   }
 
-  // PASSENGER AND OPERATOR
+  // =====================================
+  // PASSENGER AND OPERATOR NAVIGATION
+  // =====================================
+
   return (
-    <Tab.Navigator
-      screenOptions={tabOptions}
-    >
-      {/* HOME */}
+    <Tab.Navigator screenOptions={tabOptions}>
+
       <Tab.Screen
         name="Home"
         component={HomeScreen}
       />
 
-      {/* NOTIFICATIONS */}
       <Tab.Screen
         name="Notifications"
         component={NotificationsScreen}
       />
 
-      {/* LIVE TRACKING */}
       <Tab.Screen
         name="Live Tracking"
         component={TrackingScreen}
       />
 
-      {/* OPERATOR */}
       {isOperator && (
         <Tab.Screen
           name="Trip Management"
@@ -423,7 +534,6 @@ export default function BottomTabs({ navigation }) {
         />
       )}
 
-      {/* PASSENGER */}
       {isPassenger && (
         <>
           <Tab.Screen
@@ -431,7 +541,6 @@ export default function BottomTabs({ navigation }) {
             component={BookingStack}
           />
 
-          {/* HIDDEN PAYMENT ROUTE */}
           <Tab.Screen
             name="Payment"
             component={PaymentScreen}
@@ -441,7 +550,6 @@ export default function BottomTabs({ navigation }) {
             }}
           />
 
-          {/* HIDDEN TICKET ROUTE */}
           <Tab.Screen
             name="Ticket"
             component={TicketScreen}
@@ -453,17 +561,22 @@ export default function BottomTabs({ navigation }) {
         </>
       )}
 
-      {/* PROFILE */}
       <Tab.Screen
         name="Profile"
         component={ProfileScreen}
       />
+
     </Tab.Navigator>
   );
 }
 
+// =====================================
 // STYLES
+// =====================================
+
 const styles = StyleSheet.create({
+
+  // MAIN BACKGROUND
   center: {
     flex: 1,
     backgroundColor: COLORS.background,
@@ -472,41 +585,258 @@ const styles = StyleSheet.create({
     padding: 25,
   },
 
+  // ===================================
+  // BLUE GLASS TAB BAR
+  // ===================================
+
+  tabBackground: {
+    ...StyleSheet.absoluteFillObject,
+
+    backgroundColor: COLORS.primary,
+
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+
+    overflow: "hidden",
+
+    // NO TOP BORDER
+    borderWidth: 0,
+  },
+
+  glassBase: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "#145DA8",
+  },
+
+  glassInner: {
+    ...StyleSheet.absoluteFillObject,
+
+    backgroundColor: "rgba(8, 63, 119, 0.28)",
+
+    // REMOVED THE TOP BORDER THAT CAUSED THE LINE
+    borderWidth: 0,
+    borderTopWidth: 0,
+  },
+
+  glassReflection: {
+    position: "absolute",
+
+    top: 0,
+    left: 0,
+    right: 0,
+
+    height: 30,
+
+    backgroundColor: "rgba(255,255,255,0.10)",
+  },
+
+  glassGlow: {
+    position: "absolute",
+
+    bottom: -22,
+    left: "15%",
+    right: "15%",
+
+    height: 40,
+
+    backgroundColor: "rgba(135, 211, 245, 0.18)",
+
+    borderRadius: 50,
+  },
+
+  // ===================================
+  // TAB ICONS
+  // ===================================
+
+  tabIconContainer: {
+    width: 39,
+    height: 31,
+
+    justifyContent: "center",
+    alignItems: "center",
+
+    borderRadius: 12,
+  },
+
+  activeTabIconContainer: {
+    backgroundColor: "rgba(255,255,255,0.18)",
+
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.28)",
+
+    shadowColor: "#FFFFFF",
+    shadowOffset: {
+      width: 0,
+      height: 0,
+    },
+    shadowOpacity: 0.16,
+    shadowRadius: 7,
+
+    elevation: 3,
+  },
+
+  // ===================================
+  // LOADING
+  // ===================================
+
+  loadingGlow: {
+    width: "100%",
+    maxWidth: 320,
+
+    borderRadius: 25,
+    overflow: "hidden",
+
+    borderWidth: 1,
+    borderColor: COLORS.glassBorder,
+
+    backgroundColor: COLORS.glass,
+
+    shadowColor: COLORS.primary,
+    shadowOffset: {
+      width: 0,
+      height: 5,
+    },
+    shadowOpacity: 0.20,
+    shadowRadius: 16,
+
+    elevation: 6,
+  },
+
+  loadingGlass: {
+    padding: 30,
+    alignItems: "center",
+
+    backgroundColor: COLORS.background2,
+  },
+
+  loadingIcon: {
+    width: 75,
+    height: 75,
+
+    borderRadius: 25,
+
+    backgroundColor: "rgba(20,93,168,0.12)",
+
+    borderWidth: 1,
+    borderColor: "rgba(20,93,168,0.22)",
+
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  loadingTitle: {
+    color: COLORS.text,
+
+    fontSize: 23,
+    fontWeight: "900",
+
+    marginTop: 17,
+    letterSpacing: 1,
+  },
+
   loadingText: {
-    marginTop: 12,
     color: COLORS.secondaryText,
-    fontSize: 14,
+
+    fontSize: 13,
+    marginTop: 9,
+  },
+
+  // ===================================
+  // ERROR
+  // ===================================
+
+  errorGlass: {
+    width: "100%",
+    maxWidth: 350,
+
+    borderRadius: 24,
+    padding: 25,
+
+    alignItems: "center",
+    overflow: "hidden",
+
+    borderWidth: 1,
+    borderColor: COLORS.glassBorder,
+
+    backgroundColor: COLORS.glassLight,
+  },
+
+  errorIcon: {
+    width: 75,
+    height: 75,
+
+    borderRadius: 24,
+
+    backgroundColor: COLORS.dangerLight,
+
+    borderWidth: 1,
+    borderColor: "rgba(217,72,95,0.20)",
+
+    justifyContent: "center",
+    alignItems: "center",
   },
 
   errorTitle: {
     color: COLORS.text,
+
     fontSize: 18,
-    fontWeight: "800",
-    marginTop: 12,
+    fontWeight: "900",
+
+    marginTop: 15,
+    textAlign: "center",
   },
 
   errorText: {
-    color: COLORS.danger,
+    color: COLORS.secondaryText,
+
     textAlign: "center",
-    fontSize: 14,
-    marginTop: 12,
+
+    fontSize: 13,
+    lineHeight: 20,
+
+    marginTop: 10,
   },
+
+  // ===================================
+  // RETRY
+  // ===================================
 
   retryButton: {
     flexDirection: "row",
+
     alignItems: "center",
     justifyContent: "center",
+
     backgroundColor: COLORS.primary,
+
     paddingHorizontal: 25,
     paddingVertical: 13,
-    borderRadius: 12,
-    marginTop: 22,
+
+    borderRadius: 13,
+
+    marginTop: 23,
+
     gap: 8,
+
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.35)",
+
+    shadowColor: COLORS.primary,
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.20,
+    shadowRadius: 8,
+
+    elevation: 4,
   },
 
   retryText: {
     color: COLORS.white,
+
     fontWeight: "800",
     fontSize: 14,
   },
+
 });

@@ -26,11 +26,14 @@ const C = {
   navy: "#0F2747",
   blue: "#2563EB",
   cyan: "#06B6D4",
-  background: "#F3F7FC",
+  background: "#DCEAF6",
   white: "#FFFFFF",
   text: "#172B4D",
   gray: "#7B8798",
-  border: "#E3EAF2",
+
+  // SAME SOLID COLOR FOR CARD AND TEXTBOXES
+  glass: "#F3F8FD",
+  glassBorder: "#FFFFFF",
 };
 
 // CUSTOM SWEET ALERT
@@ -80,27 +83,19 @@ function SweetAlert({
             />
           </View>
 
-          <Text style={styles.alertTitle}>
-            {title}
-          </Text>
+          <Text style={styles.alertTitle}>{title}</Text>
 
-          <Text style={styles.alertMessage}>
-            {message}
-          </Text>
+          <Text style={styles.alertMessage}>{message}</Text>
 
           <TouchableOpacity
             style={[
               styles.alertButton,
-              {
-                backgroundColor: alertColors[type],
-              },
+              { backgroundColor: alertColors[type] },
             ]}
             onPress={onConfirm}
             activeOpacity={0.85}
           >
-            <Text style={styles.alertButtonText}>
-              OK
-            </Text>
+            <Text style={styles.alertButtonText}>OK</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -146,9 +141,7 @@ export default function LoginScreen({ navigation }) {
     if (resetCooldown <= 0) return;
 
     const timer = setTimeout(() => {
-      setResetCooldown((prev) =>
-        Math.max(0, prev - 1)
-      );
+      setResetCooldown((prev) => Math.max(0, prev - 1));
     }, 1000);
 
     return () => clearTimeout(timer);
@@ -177,11 +170,7 @@ export default function LoginScreen({ navigation }) {
         });
 
       if (error) {
-        showAlert(
-          "Login Failed",
-          error.message,
-          "error"
-        );
+        showAlert("Login Failed", error.message, "error");
         return;
       }
 
@@ -238,8 +227,7 @@ export default function LoginScreen({ navigation }) {
     setLoading(true);
 
     try {
-      const redirectUrl =
-        Linking.createURL("reset-password");
+      const redirectUrl = Linking.createURL("reset-password");
 
       console.log(
         "========== PASSWORD RESET DEBUG =========="
@@ -291,10 +279,7 @@ export default function LoginScreen({ navigation }) {
         return;
       }
 
-      console.log(
-        "RESET PASSWORD SUCCESS:",
-        data
-      );
+      console.log("RESET PASSWORD SUCCESS:", data);
 
       // START COOLDOWN AFTER SUCCESS
       setResetCooldown(60);
@@ -304,19 +289,14 @@ export default function LoginScreen({ navigation }) {
         "If an account exists for this email, you will receive a password reset link. Please check your inbox and spam folder.",
         "success"
       );
-
     } catch (error) {
-      console.log(
-        "FORGOT PASSWORD EXCEPTION:",
-        error
-      );
+      console.log("FORGOT PASSWORD EXCEPTION:", error);
 
       showAlert(
         "Error",
         "Something went wrong. Please try again later.",
         "error"
       );
-
     } finally {
       setLoading(false);
     }
@@ -345,17 +325,17 @@ export default function LoginScreen({ navigation }) {
             resizeMode="contain"
           />
 
-          <Text style={styles.appName}>
-            RouteX
+          <Text style={styles.appName}>RouteX</Text>
+
+          <Text style={styles.headerSubtitle}>
+            YOUR JOURNEY, CONNECTED.
           </Text>
         </View>
 
         {/* LOGIN CARD */}
         <View style={styles.card}>
           <View style={styles.welcomeContainer}>
-            <Text style={styles.title}>
-              Welcome Back!
-            </Text>
+            <Text style={styles.title}>Welcome Back!</Text>
 
             <Text style={styles.subtitle}>
               Sign in to continue your journey with RouteX.
@@ -363,9 +343,7 @@ export default function LoginScreen({ navigation }) {
           </View>
 
           {/* EMAIL */}
-          <Text style={styles.inputLabel}>
-            Email Address
-          </Text>
+          <Text style={styles.inputLabel}>Email Address</Text>
 
           <View style={styles.inputBox}>
             <Ionicons
@@ -376,7 +354,7 @@ export default function LoginScreen({ navigation }) {
 
             <TextInput
               placeholder="Enter your email"
-              placeholderTextColor="#A0AAB8"
+              placeholderTextColor="#91A2B5"
               style={styles.input}
               value={email}
               onChangeText={setEmail}
@@ -388,9 +366,7 @@ export default function LoginScreen({ navigation }) {
           </View>
 
           {/* PASSWORD */}
-          <Text style={styles.inputLabel}>
-            Password
-          </Text>
+          <Text style={styles.inputLabel}>Password</Text>
 
           <View style={styles.inputBox}>
             <Ionicons
@@ -401,7 +377,7 @@ export default function LoginScreen({ navigation }) {
 
             <TextInput
               placeholder="Enter your password"
-              placeholderTextColor="#A0AAB8"
+              placeholderTextColor="#91A2B5"
               secureTextEntry={!showPass}
               style={styles.input}
               value={password}
@@ -463,9 +439,7 @@ export default function LoginScreen({ navigation }) {
               <ActivityIndicator color={C.white} />
             ) : (
               <View style={styles.buttonContent}>
-                <Text style={styles.buttonText}>
-                  Login
-                </Text>
+                <Text style={styles.buttonText}>Login</Text>
 
                 <Ionicons
                   name="arrow-forward"
@@ -485,9 +459,7 @@ export default function LoginScreen({ navigation }) {
             <TouchableOpacity
               onPress={() => navigation.navigate("Signup")}
             >
-              <Text style={styles.signupLink}>
-                Sign Up
-              </Text>
+              <Text style={styles.signupLink}>Sign Up</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -550,19 +522,33 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
 
+  headerSubtitle: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: "#6483A5",
+    letterSpacing: 2.5,
+    marginTop: 6,
+  },
+
   // LOGIN CARD
   card: {
-    backgroundColor: C.white,
-    borderRadius: 25,
+    backgroundColor: C.glass,
+    borderRadius: 27,
     padding: 25,
-    elevation: 5,
-    shadowColor: "#193B5C",
+
+    borderWidth: 1.5,
+    borderColor: C.glassBorder,
+
+    elevation: 8,
+    shadowColor: "#52799E",
     shadowOffset: {
       width: 0,
-      height: 5,
+      height: 8,
     },
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.10,
     shadowRadius: 15,
+
+    overflow: "hidden",
   },
 
   welcomeContainer: {
@@ -578,7 +564,7 @@ const styles = StyleSheet.create({
 
   subtitle: {
     fontSize: 13,
-    color: C.gray,
+    color: "#71849B",
     textAlign: "center",
     marginTop: 9,
     lineHeight: 20,
@@ -596,13 +582,20 @@ const styles = StyleSheet.create({
   inputBox: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#F7F9FC",
-    borderWidth: 1,
-    borderColor: C.border,
-    borderRadius: 13,
+
+    // EXACT SAME COLOR AS OUTER CARD
+    backgroundColor: C.glass,
+
+    borderWidth: 1.5,
+    borderColor: C.glassBorder,
+    borderRadius: 14,
+
     paddingHorizontal: 15,
     height: 55,
     marginBottom: 19,
+
+    elevation: 0,
+    shadowOpacity: 0,
   },
 
   input: {
@@ -611,6 +604,8 @@ const styles = StyleSheet.create({
     color: C.text,
     marginLeft: 12,
     height: "100%",
+    backgroundColor: "transparent",
+    paddingVertical: 0,
   },
 
   // FORGOT PASSWORD
@@ -634,14 +629,18 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginTop: 10,
-    elevation: 4,
+
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.45)",
+
+    elevation: 5,
     shadowColor: C.blue,
     shadowOffset: {
       width: 0,
-      height: 4,
+      height: 5,
     },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
+    shadowOpacity: 0.25,
+    shadowRadius: 9,
   },
 
   buttonDisabled: {
@@ -692,7 +691,7 @@ const styles = StyleSheet.create({
 
   footerText: {
     fontSize: 11,
-    color: C.gray,
+    color: "#71849B",
   },
 
   // SWEET ALERT
@@ -708,10 +707,21 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: 360,
     backgroundColor: C.white,
-    borderRadius: 20,
+    borderRadius: 22,
     padding: 24,
     alignItems: "center",
-    elevation: 10,
+
+    borderWidth: 1.5,
+    borderColor: C.glassBorder,
+
+    elevation: 12,
+    shadowColor: "#102B4C",
+    shadowOffset: {
+      width: 0,
+      height: 8,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 15,
   },
 
   alertIcon: {
@@ -741,7 +751,7 @@ const styles = StyleSheet.create({
   alertButton: {
     width: "100%",
     padding: 14,
-    borderRadius: 10,
+    borderRadius: 12,
     alignItems: "center",
     marginTop: 23,
   },

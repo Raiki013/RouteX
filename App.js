@@ -39,6 +39,7 @@ import BottomTabs from "./navigation/BottomTabs";
 // OPERATOR
 import OperatorDockingScreen from "./screens/OperatorDockingScreen";
 import TripManagementScreen from "./screens/TripManagementScreen";
+import BusManagementScreen from "./screens/BusManagementScreen";
 import OperatorGCashScreen from "./screens/OperatorGCashScreen";
 import OperatorTicketScannerScreen from "./screens/OperatorTicketScannerScreen";
 
@@ -65,6 +66,7 @@ const ALLOWED_NOTIFICATION_SCREENS = [
   // OPERATOR
   "OperatorDocking",
   "TripManagement",
+  "BusManagement",
   "OperatorGCash",
   "OperatorTicketScanner",
 
@@ -543,6 +545,12 @@ export default function App() {
           <Stack.Screen
             name="TripManagement"
             component={TripManagementScreen}
+          />
+
+          {/* NEW BUS MANAGEMENT SCREEN */}
+          <Stack.Screen
+            name="BusManagement"
+            component={BusManagementScreen}
           />
 
           <Stack.Screen

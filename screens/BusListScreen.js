@@ -5,8 +5,8 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
   TouchableOpacity,
+  FlatList,
   TextInput,
   Image,
   ActivityIndicator,
@@ -18,24 +18,82 @@ import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { supabase } from "../config/supabase";
 import CustomAlert from "../components/CustomAlert";
 
+// ========================================
+// WHITE GLASS COLOR PALETTE
+// SAME AS BOOKING SCREEN
+// ========================================
+
 const COLORS = {
-  primary: "#1677D2",
-  primaryDark: "#105BA8",
-  primaryLight: "#E8F3FF",
-  background: "#F4F7FB",
+  background: "#D6E6F3",
+  background2: "#C9DEEF",
+
+  navy: "#145DA8",
+  blue: "#286DF6",
+  cyan: "#087FAF",
+
   white: "#FFFFFF",
-  text: "#142238",
-  secondary: "#718096",
-  border: "#E5EAF1",
+  gray: "#496681",
+
+  glass: "rgba(255, 255, 255, 0.48)",
+  glassLight: "rgba(255, 255, 255, 0.48)",
+  glassBorder: "rgba(255, 255, 255, 0.90)",
+  glassStrong: "rgba(255, 255, 255, 0.58)",
+
+  text: "#081B33",
+  secondaryText: "#263F59",
+
+  paleBlue: "rgba(90, 149, 252, 0.14)",
+
   green: "#16A34A",
   greenLight: "#DCFCE7",
+
   orange: "#D97706",
   orangeLight: "#FEF3C7",
+
   red: "#DC2626",
   redLight: "#FEE2E2",
 };
 
 let busListChannelCounter = 0;
+
+// ========================================
+// GLASS REFLECTION
+// ========================================
+
+function GlassReflection() {
+  return (
+    <View
+      pointerEvents="none"
+      style={StyleSheet.absoluteFill}
+    >
+      <View style={styles.glassReflection} />
+      <View style={styles.glassTopHighlight} />
+      <View style={styles.glassSideHighlight} />
+      <View style={styles.glassShine} />
+      <View style={styles.glassBottomHighlight} />
+    </View>
+  );
+}
+
+// ========================================
+// REUSABLE GLASS CARD
+// ========================================
+
+function GlassCard({ children, style }) {
+  return (
+    <View style={[styles.glassCard, style]}>
+      <GlassReflection />
+
+      <View style={styles.glassContent}>
+        {children}
+      </View>
+    </View>
+  );
+}
+
+// ========================================
+// BUS LIST SCREEN
+// ========================================
 
 export default function BusListScreen({ navigation, route }) {
   const company = route?.params?.company || "";
@@ -47,7 +105,10 @@ export default function BusListScreen({ navigation, route }) {
   const [selectingBus, setSelectingBus] = useState(null);
   const [search, setSearch] = useState("");
 
+  // ========================================
   // CUSTOM ALERT STATE
+  // ========================================
+
   const [alertData, setAlertData] = useState({
     visible: false,
     title: "",
@@ -55,7 +116,6 @@ export default function BusListScreen({ navigation, route }) {
     type: "error",
   });
 
-  // SHOW CUSTOM ALERT
   const showAlert = (title, message, type = "error") => {
     setAlertData({
       visible: true,
@@ -65,7 +125,6 @@ export default function BusListScreen({ navigation, route }) {
     });
   };
 
-  // CLOSE CUSTOM ALERT
   const closeAlert = () => {
     setAlertData((previous) => ({
       ...previous,
@@ -73,14 +132,16 @@ export default function BusListScreen({ navigation, route }) {
     }));
   };
 
-  // GET CURRENT TRIPS THROUGH DOCKING RECORDS
+  // ========================================
+  // GET ACTIVE TRIP
+  // ========================================
+
   const getActiveTrip = async (busIds) => {
     if (!busIds || busIds.length === 0) {
       return new Map();
     }
 
     try {
-      // Get current docking records
       const { data: dockingData, error: dockingError } =
         await supabase
           .from("bus_docking")
@@ -91,7 +152,6 @@ export default function BusListScreen({ navigation, route }) {
 
       if (dockingError) throw dockingError;
 
-      // Get unique trip IDs
       const tripIds = [
         ...new Set(
           (dockingData || [])
@@ -104,7 +164,6 @@ export default function BusListScreen({ navigation, route }) {
         return new Map();
       }
 
-      // Retrieve corresponding trips
       const { data: tripData, error: tripError } =
         await supabase
           .from("bus_trips")
@@ -117,11 +176,9 @@ export default function BusListScreen({ navigation, route }) {
 
       const tripMap = new Map();
 
-      // Match each bus with its docking trip
       (dockingData || []).forEach((docking) => {
         const busKey = String(docking.bus_id);
 
-        // Keep the latest docking record for each bus
         if (tripMap.has(busKey)) return;
 
         const trip = (tripData || []).find(
@@ -141,7 +198,10 @@ export default function BusListScreen({ navigation, route }) {
     }
   };
 
+  // ========================================
   // LOAD BUSES
+  // ========================================
+
   const loadBuses = useCallback(async () => {
     try {
       if (!company) {
@@ -168,10 +228,8 @@ export default function BusListScreen({ navigation, route }) {
       if (error) throw error;
 
       const busData = data || [];
-
       const busIds = busData.map((bus) => bus.bus_id);
 
-      // Get destinations using current docking records
       const tripMap = await getActiveTrip(busIds);
 
       const updatedBuses = busData.map((bus) => ({
@@ -194,7 +252,10 @@ export default function BusListScreen({ navigation, route }) {
     }
   }, [company]);
 
+  // ========================================
   // REALTIME UPDATES
+  // ========================================
+
   useEffect(() => {
     let mounted = true;
     let refreshTimeout;
@@ -264,13 +325,19 @@ export default function BusListScreen({ navigation, route }) {
     };
   }, [loadBuses]);
 
+  // ========================================
   // REFRESH
+  // ========================================
+
   const handleRefresh = () => {
     setRefreshing(true);
     loadBuses();
   };
 
+  // ========================================
   // SELECT BUS
+  // ========================================
+
   const selectBus = async (bus) => {
     if (bus.availability_status !== "available") {
       showAlert(
@@ -287,7 +354,6 @@ export default function BusListScreen({ navigation, route }) {
     try {
       setSelectingBus(bus.bus_id);
 
-      // VERIFY CURRENT BUS INFORMATION
       const { data: currentBus, error: busError } =
         await supabase
           .from("buses")
@@ -339,7 +405,6 @@ export default function BusListScreen({ navigation, route }) {
         return;
       }
 
-      // GET LATEST DOCKING INFORMATION
       const { data: docking, error: dockingError } =
         await supabase
           .from("bus_docking")
@@ -371,7 +436,6 @@ export default function BusListScreen({ navigation, route }) {
         return;
       }
 
-      // NAVIGATE TO TERMINAL BOOKING
       navigation.navigate("TerminalBooking", {
         busId: currentBus.bus_id,
         dockingId: docking.docking_id,
@@ -390,7 +454,10 @@ export default function BusListScreen({ navigation, route }) {
     }
   };
 
+  // ========================================
   // BUS STATUS
+  // ========================================
+
   const getStatus = (status) => {
     if (status === "available") {
       return {
@@ -418,7 +485,10 @@ export default function BusListScreen({ navigation, route }) {
     };
   };
 
+  // ========================================
   // SEARCH FILTER
+  // ========================================
+
   const filteredBuses = buses.filter((bus) => {
     const keyword = search.trim().toLowerCase();
 
@@ -432,7 +502,10 @@ export default function BusListScreen({ navigation, route }) {
     );
   });
 
+  // ========================================
   // BUS CARD
+  // ========================================
+
   const renderBus = ({ item }) => {
     const status = getStatus(item.availability_status);
 
@@ -442,14 +515,15 @@ export default function BusListScreen({ navigation, route }) {
     const isSelecting = selectingBus === item.bus_id;
 
     return (
-      <View style={styles.busCard}>
+      <GlassCard style={styles.busCard}>
         {/* BUS HEADER */}
+
         <View style={styles.busTopRow}>
           <View style={styles.busIconContainer}>
             <MaterialCommunityIcons
               name="bus"
               size={27}
-              color={COLORS.primary}
+              color={COLORS.navy}
             />
           </View>
 
@@ -489,16 +563,19 @@ export default function BusListScreen({ navigation, route }) {
         <View style={styles.busDivider} />
 
         {/* BUS DETAILS */}
+
         <View style={styles.detailsRow}>
           <View style={styles.detailItem}>
             <Ionicons
               name="bus-outline"
               size={17}
-              color={COLORS.secondary}
+              color={COLORS.navy}
             />
 
             <View>
-              <Text style={styles.detailLabel}>Bus Type</Text>
+              <Text style={styles.detailLabel}>
+                Bus Type
+              </Text>
 
               <Text style={styles.detailValue}>
                 {item.bus_type || "Not specified"}
@@ -510,11 +587,13 @@ export default function BusListScreen({ navigation, route }) {
             <Ionicons
               name="people-outline"
               size={17}
-              color={COLORS.secondary}
+              color={COLORS.navy}
             />
 
             <View>
-              <Text style={styles.detailLabel}>Capacity</Text>
+              <Text style={styles.detailLabel}>
+                Capacity
+              </Text>
 
               <Text style={styles.detailValue}>
                 {item.capacity || "N/A"} seats
@@ -524,12 +603,13 @@ export default function BusListScreen({ navigation, route }) {
         </View>
 
         {/* CURRENT DESTINATION */}
+
         <View style={styles.tripContainer}>
           <View style={styles.tripIcon}>
             <Ionicons
               name="navigate"
               size={15}
-              color={COLORS.primary}
+              color={COLORS.navy}
             />
           </View>
 
@@ -547,6 +627,7 @@ export default function BusListScreen({ navigation, route }) {
         </View>
 
         {/* BOOK BUTTON */}
+
         <TouchableOpacity
           style={[
             styles.bookButton,
@@ -580,28 +661,31 @@ export default function BusListScreen({ navigation, route }) {
                 color={
                   isAvailable
                     ? COLORS.white
-                    : COLORS.secondary
+                    : COLORS.gray
                 }
               />
             </>
           )}
         </TouchableOpacity>
-      </View>
+      </GlassCard>
     );
   };
 
+  // ========================================
   // LOADING SCREEN
+  // ========================================
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
         <StatusBar
-          backgroundColor={COLORS.white}
+          backgroundColor={COLORS.background}
           barStyle="dark-content"
         />
 
         <ActivityIndicator
           size="large"
-          color={COLORS.primary}
+          color={COLORS.blue}
         />
 
         <Text style={styles.loadingText}>
@@ -611,23 +695,29 @@ export default function BusListScreen({ navigation, route }) {
     );
   }
 
+  // ========================================
+  // MAIN UI
+  // ========================================
+
   return (
     <View style={styles.container}>
       <StatusBar
-        backgroundColor={COLORS.white}
+        backgroundColor={COLORS.background}
         barStyle="dark-content"
       />
 
       {/* COMPANY HEADER */}
+
       <View style={styles.companyHeader}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => navigation.goBack()}
+          activeOpacity={0.8}
         >
           <Ionicons
             name="arrow-back"
             size={22}
-            color={COLORS.text}
+            color={COLORS.navy}
           />
         </TouchableOpacity>
 
@@ -642,7 +732,7 @@ export default function BusListScreen({ navigation, route }) {
             <MaterialCommunityIcons
               name="bus"
               size={25}
-              color={COLORS.primary}
+              color={COLORS.navy}
             />
           </View>
         )}
@@ -663,14 +753,17 @@ export default function BusListScreen({ navigation, route }) {
         <TouchableOpacity
           style={styles.refreshButton}
           onPress={handleRefresh}
+          activeOpacity={0.8}
         >
           <Ionicons
             name="refresh"
             size={20}
-            color={COLORS.primary}
+            color={COLORS.navy}
           />
         </TouchableOpacity>
       </View>
+
+      {/* BUS LIST */}
 
       <FlatList
         data={filteredBuses}
@@ -682,42 +775,49 @@ export default function BusListScreen({ navigation, route }) {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            colors={[COLORS.primary]}
-            tintColor={COLORS.primary}
+            colors={[COLORS.blue]}
+            tintColor={COLORS.blue}
           />
         }
         ListHeaderComponent={
           <View>
             {/* SEARCH */}
+
             <View style={styles.searchContainer}>
-              <Ionicons
-                name="search"
-                size={20}
-                color={COLORS.secondary}
-              />
+              <GlassReflection />
 
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Search bus name, plate number..."
-                placeholderTextColor="#9AA6B5"
-                value={search}
-                onChangeText={setSearch}
-              />
+              <View style={styles.searchContent}>
+                <Ionicons
+                  name="search"
+                  size={20}
+                  color={COLORS.gray}
+                />
 
-              {search.length > 0 && (
-                <TouchableOpacity
-                  onPress={() => setSearch("")}
-                >
-                  <Ionicons
-                    name="close-circle"
-                    size={19}
-                    color={COLORS.secondary}
-                  />
-                </TouchableOpacity>
-              )}
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search bus name, plate number..."
+                  placeholderTextColor="#647C94"
+                  value={search}
+                  onChangeText={setSearch}
+                  autoCapitalize="none"
+                />
+
+                {search.length > 0 && (
+                  <TouchableOpacity
+                    onPress={() => setSearch("")}
+                  >
+                    <Ionicons
+                      name="close-circle"
+                      size={19}
+                      color={COLORS.gray}
+                    />
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
 
-            {/* SECTION TITLE */}
+            {/* SECTION HEADER */}
+
             <View style={styles.sectionHeader}>
               <View>
                 <Text style={styles.sectionTitle}>
@@ -738,12 +838,12 @@ export default function BusListScreen({ navigation, route }) {
           </View>
         }
         ListEmptyComponent={
-          <View style={styles.emptyContainer}>
+          <GlassCard style={styles.emptyCard}>
             <View style={styles.emptyIcon}>
               <MaterialCommunityIcons
                 name="bus-alert"
                 size={38}
-                color={COLORS.secondary}
+                color={COLORS.navy}
               />
             </View>
 
@@ -760,12 +860,13 @@ export default function BusListScreen({ navigation, route }) {
             <TouchableOpacity
               style={styles.emptyButton}
               onPress={search ? () => setSearch("") : handleRefresh}
+              activeOpacity={0.8}
             >
               <Text style={styles.emptyButtonText}>
                 {search ? "Clear Search" : "Refresh List"}
               </Text>
             </TouchableOpacity>
-          </View>
+          </GlassCard>
         }
         ListFooterComponent={
           buses.length > 0 ? (
@@ -773,7 +874,7 @@ export default function BusListScreen({ navigation, route }) {
               <Ionicons
                 name="sync-circle-outline"
                 size={17}
-                color={COLORS.secondary}
+                color={COLORS.gray}
               />
 
               <Text style={styles.footerText}>
@@ -785,6 +886,7 @@ export default function BusListScreen({ navigation, route }) {
       />
 
       {/* CUSTOM ALERT */}
+
       <CustomAlert
         visible={alertData.visible}
         title={alertData.title}
@@ -796,8 +898,17 @@ export default function BusListScreen({ navigation, route }) {
   );
 }
 
+// ========================================
 // STYLES
+// SAME GLASSMORPHISM AS BOOKING SCREEN
+// ========================================
+
 const styles = StyleSheet.create({
+
+  // ========================================
+  // MAIN CONTAINER
+  // ========================================
+
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
@@ -813,44 +924,60 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 14,
     fontSize: 14,
-    color: COLORS.secondary,
-    fontWeight: "500",
+    color: COLORS.secondaryText,
+    fontWeight: "600",
   },
 
+  // ========================================
   // COMPANY HEADER
+  // ========================================
+
   companyHeader: {
-    backgroundColor: COLORS.white,
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 18,
     paddingTop: 15,
     paddingBottom: 17,
-    flexDirection: "row",
-    alignItems: "center",
+    backgroundColor: COLORS.background,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: "rgba(255,255,255,0.35)",
   },
 
   backButton: {
     width: 42,
     height: 42,
-    borderRadius: 13,
-    backgroundColor: COLORS.primaryLight,
+    borderRadius: 14,
+    backgroundColor: COLORS.glass,
+    borderWidth: 1.2,
+    borderColor: COLORS.glassBorder,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
+
+    elevation: 5,
+    shadowColor: "#FFFFFF",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 9,
   },
 
   companyHeaderLogo: {
     width: 48,
     height: 48,
-    borderRadius: 12,
-    backgroundColor: COLORS.white,
+    borderRadius: 14,
+    backgroundColor: COLORS.glass,
     marginLeft: 12,
+    borderWidth: 1,
+    borderColor: COLORS.glassBorder,
   },
 
   companyHeaderLogoPlaceholder: {
     width: 48,
     height: 48,
-    borderRadius: 12,
-    backgroundColor: COLORS.primaryLight,
+    borderRadius: 14,
+    backgroundColor: COLORS.glass,
+    borderWidth: 1.2,
+    borderColor: COLORS.glassBorder,
     marginLeft: 12,
     alignItems: "center",
     justifyContent: "center",
@@ -863,98 +990,213 @@ const styles = StyleSheet.create({
 
   companyTitle: {
     fontSize: 17,
-    fontWeight: "800",
+    fontWeight: "900",
     color: COLORS.text,
   },
 
   companySubtitle: {
     fontSize: 11,
-    color: COLORS.secondary,
+    color: COLORS.secondaryText,
     marginTop: 3,
   },
 
   refreshButton: {
     width: 40,
     height: 40,
-    borderRadius: 12,
-    backgroundColor: COLORS.primaryLight,
+    borderRadius: 13,
+    backgroundColor: COLORS.glass,
+    borderWidth: 1.2,
+    borderColor: COLORS.glassBorder,
     alignItems: "center",
     justifyContent: "center",
     marginLeft: 8,
+    overflow: "hidden",
+
+    elevation: 5,
+    shadowColor: "#FFFFFF",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 9,
   },
 
+  // ========================================
+  // LIST
+  // ========================================
+
   listContent: {
-    paddingHorizontal: 17,
-    paddingTop: 17,
-    paddingBottom: 30,
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 35,
     flexGrow: 1,
   },
 
+  // ========================================
+  // GLASS REFLECTION LAYERS
+  // ========================================
+
+  glassReflection: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: "38%",
+    backgroundColor: "rgba(255, 255, 255, 0.10)",
+  },
+
+  glassTopHighlight: {
+    position: "absolute",
+    top: 1,
+    left: 1,
+    right: 1,
+    height: 1.5,
+    backgroundColor: "rgba(255, 255, 255, 1)",
+  },
+
+  glassSideHighlight: {
+    position: "absolute",
+    top: 3,
+    left: 1,
+    bottom: 3,
+    width: 1,
+    backgroundColor: "rgba(255, 255, 255, 0.55)",
+  },
+
+  glassShine: {
+    position: "absolute",
+    top: 0,
+    left: 12,
+    width: "30%",
+    height: "100%",
+    backgroundColor: "rgba(255, 255, 255, 0.045)",
+  },
+
+  glassBottomHighlight: {
+    position: "absolute",
+    bottom: 1,
+    left: 12,
+    right: 12,
+    height: 1,
+    backgroundColor: "rgba(255, 255, 255, 0.35)",
+  },
+
+  // ========================================
+  // REUSABLE GLASS CARD
+  // ========================================
+
+  glassCard: {
+    backgroundColor: COLORS.glass,
+    borderRadius: 22,
+    borderWidth: 1.3,
+    borderColor: COLORS.glassBorder,
+    overflow: "hidden",
+
+    elevation: 7,
+    shadowColor: "#FFFFFF",
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+  },
+
+  glassContent: {
+    position: "relative",
+    zIndex: 2,
+    backgroundColor: "transparent",
+  },
+
+  // ========================================
   // SEARCH
+  // ========================================
+
   searchContainer: {
-    height: 51,
-    backgroundColor: COLORS.white,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    height: 53,
+    backgroundColor: COLORS.glass,
+    borderRadius: 17,
+    borderWidth: 1.2,
+    borderColor: COLORS.glassBorder,
+    marginBottom: 20,
+    overflow: "hidden",
+
+    elevation: 5,
+    shadowColor: "#FFFFFF",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+  },
+
+  searchContent: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 14,
-    marginBottom: 22,
+    paddingHorizontal: 15,
+    zIndex: 2,
+    backgroundColor: "transparent",
   },
 
   searchInput: {
     flex: 1,
     marginLeft: 10,
-    fontSize: 13,
     color: COLORS.text,
-    paddingVertical: 0,
+    fontSize: 13,
+    paddingVertical: 10,
+    backgroundColor: "transparent",
   },
 
+  // ========================================
   // SECTION HEADER
+  // ========================================
+
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 13,
+    marginBottom: 15,
   },
 
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: "800",
+    fontSize: 20,
+    fontWeight: "900",
     color: COLORS.text,
   },
 
   sectionSubtitle: {
     fontSize: 12,
-    color: COLORS.secondary,
-    marginTop: 4,
+    color: COLORS.secondaryText,
+    marginTop: 5,
   },
 
   countBadge: {
-    minWidth: 32,
-    height: 32,
-    paddingHorizontal: 9,
-    borderRadius: 10,
-    backgroundColor: COLORS.primaryLight,
+    width: 38,
+    height: 38,
+    borderRadius: 14,
+    backgroundColor: COLORS.glass,
+    borderWidth: 1.2,
+    borderColor: COLORS.glassBorder,
     alignItems: "center",
     justifyContent: "center",
+    marginLeft: 12,
+    overflow: "hidden",
+
+    elevation: 5,
+    shadowColor: "#FFFFFF",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 9,
   },
 
   countText: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: COLORS.primary,
+    color: COLORS.navy,
+    fontWeight: "900",
+    fontSize: 15,
   },
 
+  // ========================================
   // BUS CARD
+  // ========================================
+
   busCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: 17,
-    padding: 15,
+    borderRadius: 22,
     marginBottom: 14,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    padding: 15,
   },
 
   busTopRow: {
@@ -963,29 +1205,33 @@ const styles = StyleSheet.create({
   },
 
   busIconContainer: {
-    width: 49,
-    height: 49,
-    borderRadius: 14,
-    backgroundColor: COLORS.primaryLight,
+    width: 53,
+    height: 53,
+    borderRadius: 17,
+    backgroundColor: "rgba(255,255,255,0.25)",
+    borderWidth: 1.2,
+    borderColor: "rgba(255,255,255,0.75)",
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
   },
 
   busTitleContainer: {
     flex: 1,
-    marginLeft: 11,
+    marginLeft: 12,
   },
 
   busName: {
     fontSize: 15,
-    fontWeight: "800",
+    fontWeight: "900",
     color: COLORS.text,
   },
 
   plateNumber: {
     fontSize: 12,
-    color: COLORS.secondary,
+    color: COLORS.secondaryText,
     marginTop: 4,
+    fontWeight: "500",
   },
 
   statusBadge: {
@@ -993,60 +1239,75 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 8,
     paddingVertical: 6,
-    borderRadius: 8,
+    borderRadius: 9,
     gap: 4,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.65)",
   },
 
   statusText: {
     fontSize: 9,
-    fontWeight: "800",
+    fontWeight: "900",
   },
 
   busDivider: {
     height: 1,
-    backgroundColor: COLORS.border,
-    marginVertical: 14,
+    backgroundColor: "rgba(255,255,255,0.75)",
+    marginVertical: 15,
   },
+
+  // ========================================
+  // BUS DETAILS
+  // ========================================
 
   detailsRow: {
     flexDirection: "row",
-    marginBottom: 14,
+    marginBottom: 15,
   },
 
   detailItem: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 9,
   },
 
   detailLabel: {
     fontSize: 10,
-    color: COLORS.secondary,
+    color: COLORS.secondaryText,
+    fontWeight: "500",
   },
 
   detailValue: {
     fontSize: 12,
-    fontWeight: "700",
+    fontWeight: "800",
     color: COLORS.text,
     marginTop: 3,
   },
 
+  // ========================================
   // CURRENT DESTINATION
+  // TRANSPARENT INNER SURFACE
+  // ========================================
+
   tripContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#F5F8FC",
-    borderRadius: 11,
+    backgroundColor: "rgba(255,255,255,0.25)",
+    borderWidth: 1.2,
+    borderColor: "rgba(255,255,255,0.75)",
+    borderRadius: 14,
     padding: 11,
-    marginBottom: 13,
+    marginBottom: 14,
   },
 
   tripIcon: {
-    width: 31,
-    height: 31,
-    borderRadius: 9,
-    backgroundColor: COLORS.primaryLight,
+    width: 34,
+    height: 34,
+    borderRadius: 11,
+    backgroundColor: "rgba(255,255,255,0.30)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.75)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1058,90 +1319,117 @@ const styles = StyleSheet.create({
 
   tripLabel: {
     fontSize: 9,
-    fontWeight: "700",
-    color: COLORS.secondary,
-    letterSpacing: 0.5,
+    fontWeight: "800",
+    color: COLORS.secondaryText,
+    letterSpacing: 0.6,
   },
 
   tripDestination: {
     fontSize: 12,
-    fontWeight: "700",
+    fontWeight: "800",
     color: COLORS.text,
     marginTop: 3,
   },
 
+  // ========================================
   // BOOK BUTTON
+  // ========================================
+
   bookButton: {
-    height: 45,
-    backgroundColor: COLORS.primary,
-    borderRadius: 11,
+    height: 46,
+    backgroundColor: COLORS.blue,
+    borderRadius: 14,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 9,
+
+    elevation: 4,
+    shadowColor: "#5A95FC",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.20,
+    shadowRadius: 7,
   },
 
   bookButtonText: {
     fontSize: 13,
-    fontWeight: "700",
+    fontWeight: "900",
     color: COLORS.white,
   },
 
   disabledBookButton: {
-    backgroundColor: "#EDF0F4",
+    backgroundColor: "rgba(255,255,255,0.55)",
+    borderWidth: 1,
+    borderColor: COLORS.glassBorder,
+    elevation: 0,
+    shadowOpacity: 0,
   },
 
   disabledBookButtonText: {
-    color: COLORS.secondary,
+    color: COLORS.gray,
   },
 
+  // ========================================
   // EMPTY STATE
-  emptyContainer: {
-    alignItems: "center",
-    justifyContent: "center",
+  // ========================================
+
+  emptyCard: {
     paddingHorizontal: 25,
-    paddingVertical: 40,
+    paddingVertical: 35,
+    alignItems: "center",
   },
 
   emptyIcon: {
     width: 75,
     height: 75,
-    borderRadius: 23,
-    backgroundColor: "#E9EEF5",
-    alignItems: "center",
+    borderRadius: 24,
+    backgroundColor: "rgba(255,255,255,0.25)",
+    borderWidth: 1.2,
+    borderColor: "rgba(255,255,255,0.75)",
     justifyContent: "center",
-    marginBottom: 16,
+    alignItems: "center",
   },
 
   emptyTitle: {
-    fontSize: 17,
-    fontWeight: "800",
     color: COLORS.text,
+    fontSize: 17,
+    fontWeight: "900",
+    marginTop: 17,
+    textAlign: "center",
   },
 
   emptySubtitle: {
-    fontSize: 12,
-    color: COLORS.secondary,
+    color: COLORS.secondaryText,
+    fontSize: 13,
     textAlign: "center",
-    lineHeight: 19,
-    marginTop: 7,
+    lineHeight: 20,
+    marginTop: 8,
   },
 
   emptyButton: {
-    backgroundColor: COLORS.primaryLight,
-    paddingHorizontal: 19,
-    paddingVertical: 11,
-    borderRadius: 10,
-    marginTop: 17,
+    backgroundColor: COLORS.blue,
+    paddingHorizontal: 22,
+    paddingVertical: 12,
+    borderRadius: 14,
+    marginTop: 20,
+
+    elevation: 4,
+    shadowColor: "#5A95FC",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.20,
+    shadowRadius: 7,
   },
 
   emptyButtonText: {
-    color: COLORS.primary,
-    fontSize: 12,
-    fontWeight: "700",
+    color: COLORS.white,
+    fontSize: 13,
+    fontWeight: "900",
   },
 
+  // ========================================
   // FOOTER
+  // ========================================
+
   footer: {
     flexDirection: "row",
     alignItems: "center",
@@ -1153,6 +1441,7 @@ const styles = StyleSheet.create({
 
   footerText: {
     fontSize: 11,
-    color: COLORS.secondary,
+    color: COLORS.secondaryText,
+    fontWeight: "500",
   },
 });

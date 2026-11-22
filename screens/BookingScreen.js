@@ -19,16 +19,71 @@ import { useFocusEffect } from "@react-navigation/native";
 import { supabase } from "../config/supabase";
 import CustomAlert from "../components/CustomAlert";
 
+// =====================================
+// WHITE GLASS COLOR PALETTE
+// =====================================
+
 const COLORS = {
-  primary: "#1677D2",
-  primaryDark: "#105BA8",
-  primaryLight: "#E8F3FF",
-  background: "#F4F7FB",
+  background: "#D6E6F3",
+  background2: "#C9DEEF",
+
+  navy: "#145DA8",
+  blue: "#286DF6",
+  cyan: "#087FAF",
+
   white: "#FFFFFF",
-  text: "#142238",
-  secondaryText: "#718096",
-  border: "#E5EAF1",
+  gray: "#496681",
+
+  // White glass
+  glass: "rgba(255, 255, 255, 0.48)",
+  glassLight: "rgba(255, 255, 255, 0.48)",
+  glassBorder: "rgba(255, 255, 255, 0.90)",
+  glassStrong: "rgba(255, 255, 255, 0.58)",
+
+  text: "#081B33",
+  secondaryText: "#263F59",
+
+  paleBlue: "rgba(90, 149, 252, 0.14)",
 };
+
+// =====================================
+// GLASS REFLECTION
+// =====================================
+
+function GlassReflection() {
+  return (
+    <View
+      pointerEvents="none"
+      style={StyleSheet.absoluteFill}
+    >
+      <View style={styles.glassReflection} />
+      <View style={styles.glassTopHighlight} />
+      <View style={styles.glassSideHighlight} />
+      <View style={styles.glassShine} />
+      <View style={styles.glassBottomHighlight} />
+    </View>
+  );
+}
+
+// =====================================
+// REUSABLE GLASS CARD
+// =====================================
+
+function GlassCard({ children, style }) {
+  return (
+    <View style={[styles.glassCard, style]}>
+      <GlassReflection />
+
+      <View style={styles.glassContent}>
+        {children}
+      </View>
+    </View>
+  );
+}
+
+// =====================================
+// BOOKING SCREEN
+// =====================================
 
 export default function BookingScreen({ navigation }) {
   const [companies, setCompanies] = useState([]);
@@ -59,23 +114,25 @@ export default function BookingScreen({ navigation }) {
     }));
   };
 
+  // =====================================
   // LOAD ACTIVE COMPANIES AND DOCKED BUSES
+  // =====================================
+
   const loadCompanies = useCallback(async (showLoader = false) => {
     try {
       if (showLoader) {
         setLoading(true);
       }
 
-      // Get active companies
-      const { data: companyData, error: companyError } = await supabase
-        .from("companies")
-        .select("company_id, company_name, is_active, logo_url")
-        .eq("is_active", true)
-        .order("company_name", { ascending: true });
+      const { data: companyData, error: companyError } =
+        await supabase
+          .from("companies")
+          .select("company_id, company_name, is_active, logo_url")
+          .eq("is_active", true)
+          .order("company_name", { ascending: true });
 
       if (companyError) throw companyError;
 
-      // Get only currently docked buses
       const { data: busData, error: busError } = await supabase
         .from("buses")
         .select("bus_id, company, bus_status")
@@ -83,7 +140,6 @@ export default function BookingScreen({ navigation }) {
 
       if (busError) throw busError;
 
-      // Count docked buses for each company
       const companyList = (companyData || []).map((company) => {
         const companyName = company.company_name?.trim() || "";
 
@@ -116,14 +172,20 @@ export default function BookingScreen({ navigation }) {
     }
   }, []);
 
+  // =====================================
   // LOAD WHEN SCREEN OPENS
+  // =====================================
+
   useFocusEffect(
     useCallback(() => {
       loadCompanies();
     }, [loadCompanies])
   );
 
+  // =====================================
   // REALTIME UPDATES
+  // =====================================
+
   useEffect(() => {
     let isActive = true;
 
@@ -167,13 +229,19 @@ export default function BookingScreen({ navigation }) {
     };
   }, [loadCompanies]);
 
+  // =====================================
   // PULL TO REFRESH
+  // =====================================
+
   const handleRefresh = () => {
     setRefreshing(true);
     loadCompanies();
   };
 
+  // =====================================
   // OPEN COMPANY
+  // =====================================
+
   const openCompany = (company) => {
     navigation.navigate("BusList", {
       company: company.name,
@@ -181,10 +249,17 @@ export default function BookingScreen({ navigation }) {
     });
   };
 
+  // =====================================
   // SEARCH FILTER
+  // =====================================
+
   const filteredCompanies = companies.filter((company) =>
     company.name.toLowerCase().includes(search.trim().toLowerCase())
   );
+
+  // =====================================
+  // MAIN UI
+  // =====================================
 
   return (
     <View style={styles.container}>
@@ -201,12 +276,13 @@ export default function BookingScreen({ navigation }) {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            colors={[COLORS.primary]}
-            tintColor={COLORS.primary}
+            colors={[COLORS.blue]}
+            tintColor={COLORS.blue}
           />
         }
       >
         {/* HEADER */}
+
         <View style={styles.pageHeader}>
           <View style={styles.headerTextContainer}>
             <Text style={styles.pageTitle}>Book a Bus</Text>
@@ -220,12 +296,14 @@ export default function BookingScreen({ navigation }) {
             <MaterialCommunityIcons
               name="bus-multiple"
               size={25}
-              color={COLORS.primary}
+              color={COLORS.navy}
             />
+            <View style={styles.smallIconHighlight} />
           </View>
         </View>
 
         {/* SECTION HEADER */}
+
         <View style={styles.sectionHeader}>
           <View style={styles.sectionTitleContainer}>
             <Text style={styles.sectionTitle}>
@@ -245,39 +323,45 @@ export default function BookingScreen({ navigation }) {
         </View>
 
         {/* SEARCH */}
+
         <View style={styles.searchContainer}>
-          <Ionicons
-            name="search"
-            size={20}
-            color={COLORS.secondaryText}
-          />
+          <GlassReflection />
 
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search bus company..."
-            placeholderTextColor="#9AA7B8"
-            value={search}
-            onChangeText={setSearch}
-            autoCapitalize="none"
-          />
+          <View style={styles.searchContent}>
+            <Ionicons
+              name="search"
+              size={20}
+              color={COLORS.gray}
+            />
 
-          {search.length > 0 && (
-            <TouchableOpacity onPress={() => setSearch("")}>
-              <Ionicons
-                name="close-circle"
-                size={20}
-                color={COLORS.secondaryText}
-              />
-            </TouchableOpacity>
-          )}
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search bus company..."
+              placeholderTextColor="#647C94"
+              value={search}
+              onChangeText={setSearch}
+              autoCapitalize="none"
+            />
+
+            {search.length > 0 && (
+              <TouchableOpacity onPress={() => setSearch("")}>
+                <Ionicons
+                  name="close-circle"
+                  size={20}
+                  color={COLORS.gray}
+                />
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
 
         {/* COMPANY LIST */}
+
         {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator
               size="large"
-              color={COLORS.primary}
+              color={COLORS.blue}
             />
 
             <Text style={styles.loadingText}>
@@ -285,12 +369,12 @@ export default function BookingScreen({ navigation }) {
             </Text>
           </View>
         ) : filteredCompanies.length === 0 ? (
-          <View style={styles.emptyCard}>
+          <GlassCard style={styles.emptyCard}>
             <View style={styles.emptyIcon}>
               <MaterialCommunityIcons
                 name="bus-alert"
                 size={38}
-                color={COLORS.primary}
+                color={COLORS.navy}
               />
             </View>
 
@@ -310,6 +394,7 @@ export default function BookingScreen({ navigation }) {
               <TouchableOpacity
                 style={styles.retryButton}
                 onPress={() => setSearch("")}
+                activeOpacity={0.8}
               >
                 <Text style={styles.retryText}>
                   Clear Search
@@ -319,6 +404,7 @@ export default function BookingScreen({ navigation }) {
               <TouchableOpacity
                 style={styles.retryButton}
                 onPress={() => loadCompanies(true)}
+                activeOpacity={0.8}
               >
                 <Ionicons
                   name="refresh"
@@ -331,73 +417,80 @@ export default function BookingScreen({ navigation }) {
                 </Text>
               </TouchableOpacity>
             )}
-          </View>
+          </GlassCard>
         ) : (
           filteredCompanies.map((company) => (
             <TouchableOpacity
               key={company.id}
-              activeOpacity={0.8}
+              activeOpacity={0.85}
               style={styles.companyCard}
               onPress={() => openCompany(company)}
             >
-              {/* COMPANY LOGO */}
-              <View style={styles.companyLogoContainer}>
-                {company.logoUrl ? (
-                  <Image
-                    source={{ uri: company.logoUrl }}
-                    style={styles.companyLogo}
-                    resizeMode="contain"
-                    onError={() => {
-                      setCompanies((previous) =>
-                        previous.map((item) =>
-                          item.id === company.id
-                            ? { ...item, logoUrl: null }
-                            : item
-                        )
-                      );
-                    }}
-                  />
-                ) : (
-                  <MaterialCommunityIcons
-                    name="bus"
-                    size={34}
-                    color={COLORS.primary}
-                  />
-                )}
-              </View>
+              <GlassReflection />
 
-              {/* COMPANY INFORMATION */}
-              <View style={styles.companyInfo}>
-                <View style={styles.companyNameRow}>
-                  <Text
-                    style={styles.companyName}
-                    numberOfLines={1}
-                  >
-                    {company.name}
-                  </Text>
+              <View style={styles.companyCardContent}>
+                {/* COMPANY LOGO */}
 
-                  <Ionicons
-                    name="chevron-forward"
-                    size={19}
-                    color="#94A3B8"
-                  />
+                <View style={styles.companyLogoContainer}>
+                  {company.logoUrl ? (
+                    <Image
+                      source={{ uri: company.logoUrl }}
+                      style={styles.companyLogo}
+                      resizeMode="contain"
+                      onError={() => {
+                        setCompanies((previous) =>
+                          previous.map((item) =>
+                            item.id === company.id
+                              ? { ...item, logoUrl: null }
+                              : item
+                          )
+                        );
+                      }}
+                    />
+                  ) : (
+                    <MaterialCommunityIcons
+                      name="bus"
+                      size={34}
+                      color={COLORS.navy}
+                    />
+                  )}
                 </View>
 
-                {/* DOCKED BUS COUNT */}
-                <View style={styles.dockedInfo}>
-                  <MaterialCommunityIcons
-                    name="bus-stop"
-                    size={16}
-                    color={COLORS.primary}
-                  />
+                {/* COMPANY INFORMATION */}
 
-                  <Text style={styles.dockedText}>
-                    {company.dockedCount}{" "}
-                    {company.dockedCount === 1
-                      ? "bus"
-                      : "buses"}{" "}
-                    currently docked
-                  </Text>
+                <View style={styles.companyInfo}>
+                  <View style={styles.companyNameRow}>
+                    <Text
+                      style={styles.companyName}
+                      numberOfLines={1}
+                    >
+                      {company.name}
+                    </Text>
+
+                    <Ionicons
+                      name="chevron-forward"
+                      size={19}
+                      color="#52718E"
+                    />
+                  </View>
+
+                  {/* DOCKED BUS COUNT */}
+
+                  <View style={styles.dockedInfo}>
+                    <MaterialCommunityIcons
+                      name="bus-stop"
+                      size={16}
+                      color={COLORS.navy}
+                    />
+
+                    <Text style={styles.dockedText}>
+                      {company.dockedCount}{" "}
+                      {company.dockedCount === 1
+                        ? "bus"
+                        : "buses"}{" "}
+                      currently docked
+                    </Text>
+                  </View>
                 </View>
               </View>
             </TouchableOpacity>
@@ -405,27 +498,34 @@ export default function BookingScreen({ navigation }) {
         )}
 
         {/* INFORMATION CARD */}
+
         <View style={styles.infoCard}>
-          <View style={styles.infoIcon}>
-            <Ionicons
-              name="information-circle"
-              size={22}
-              color={COLORS.primary}
-            />
-          </View>
+          <GlassReflection />
 
           <View style={styles.infoContent}>
-            <Text style={styles.infoTitle}>
-              Booking Information
-            </Text>
+            <View style={styles.infoIcon}>
+              <Ionicons
+                name="information-circle"
+                size={22}
+                color={COLORS.navy}
+              />
+            </View>
 
-            <Text style={styles.infoText}>
-              Select a company to view its docked buses and
-              continue with your reservation. Only buses
-              available for booking can be selected.
-            </Text>
+            <View style={styles.infoTextContainer}>
+              <Text style={styles.infoTitle}>
+                Booking Information
+              </Text>
+
+              <Text style={styles.infoText}>
+                Select a company to view its docked buses and
+                continue with your reservation. Only buses
+                available for booking can be selected.
+              </Text>
+            </View>
           </View>
         </View>
+
+        {/* FOOTER */}
 
         <Text style={styles.footerText}>
           RouteX • Smart Bus Booking & Tracking
@@ -433,6 +533,7 @@ export default function BookingScreen({ navigation }) {
       </ScrollView>
 
       {/* CUSTOM ALERT */}
+
       <CustomAlert
         visible={alertData.visible}
         title={alertData.title}
@@ -444,7 +545,10 @@ export default function BookingScreen({ navigation }) {
   );
 }
 
+// =====================================
 // STYLES
+// =====================================
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -458,6 +562,7 @@ const styles = StyleSheet.create({
   },
 
   // HEADER
+
   pageHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -484,14 +589,33 @@ const styles = StyleSheet.create({
   headerIcon: {
     width: 48,
     height: 48,
-    borderRadius: 15,
-    backgroundColor: COLORS.primaryLight,
+    borderRadius: 16,
+    backgroundColor: COLORS.glass,
+    borderWidth: 1.2,
+    borderColor: COLORS.glassBorder,
     justifyContent: "center",
     alignItems: "center",
     marginLeft: 12,
+    overflow: "hidden",
+
+    elevation: 6,
+    shadowColor: "#FFFFFF",
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+  },
+
+  smallIconHighlight: {
+    position: "absolute",
+    top: 1,
+    left: 5,
+    right: 5,
+    height: 1.5,
+    backgroundColor: "rgba(255,255,255,0.98)",
   },
 
   // SECTION HEADER
+
   sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -516,32 +640,124 @@ const styles = StyleSheet.create({
   },
 
   countBadge: {
-    backgroundColor: COLORS.primaryLight,
+    backgroundColor: COLORS.glass,
+    borderWidth: 1.2,
+    borderColor: COLORS.glassBorder,
     width: 38,
     height: 38,
-    borderRadius: 13,
+    borderRadius: 14,
     justifyContent: "center",
     alignItems: "center",
     marginLeft: 12,
+    overflow: "hidden",
+
+    elevation: 5,
+    shadowColor: "#FFFFFF",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 9,
   },
 
   countText: {
-    color: COLORS.primaryDark,
+    color: COLORS.navy,
     fontWeight: "900",
     fontSize: 15,
   },
 
+  // GLASS REFLECTION LAYERS
+
+  glassReflection: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: "38%",
+    backgroundColor: "rgba(255, 255, 255, 0.10)",
+  },
+
+  glassTopHighlight: {
+    position: "absolute",
+    top: 1,
+    left: 1,
+    right: 1,
+    height: 1.5,
+    backgroundColor: "rgba(255, 255, 255, 1)",
+  },
+
+  glassSideHighlight: {
+    position: "absolute",
+    top: 3,
+    left: 1,
+    bottom: 3,
+    width: 1,
+    backgroundColor: "rgba(255, 255, 255, 0.55)",
+  },
+
+  glassShine: {
+    position: "absolute",
+    top: 0,
+    left: 12,
+    width: "30%",
+    height: "100%",
+    backgroundColor: "rgba(255, 255, 255, 0.045)",
+  },
+
+  glassBottomHighlight: {
+    position: "absolute",
+    bottom: 1,
+    left: 12,
+    right: 12,
+    height: 1,
+    backgroundColor: "rgba(255, 255, 255, 0.35)",
+  },
+
+  // REUSABLE GLASS CARD
+
+  glassCard: {
+    backgroundColor: COLORS.glass,
+    borderRadius: 22,
+    borderWidth: 1.3,
+    borderColor: COLORS.glassBorder,
+    overflow: "hidden",
+
+    elevation: 7,
+    shadowColor: "#FFFFFF",
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+  },
+
+  glassContent: {
+    position: "relative",
+    zIndex: 2,
+    backgroundColor: "transparent",
+  },
+
   // SEARCH
+
   searchContainer: {
     height: 53,
-    backgroundColor: COLORS.white,
-    borderRadius: 15,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    backgroundColor: COLORS.glass,
+    borderRadius: 17,
+    borderWidth: 1.2,
+    borderColor: COLORS.glassBorder,
+    marginBottom: 17,
+    overflow: "hidden",
+
+    elevation: 5,
+    shadowColor: "#FFFFFF",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+  },
+
+  searchContent: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 15,
-    marginBottom: 17,
+    zIndex: 2,
+    backgroundColor: "transparent",
   },
 
   searchInput: {
@@ -550,30 +766,41 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     fontSize: 13,
     paddingVertical: 10,
+    backgroundColor: "transparent",
   },
 
   // COMPANY CARD
+
   companyCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: 19,
-    padding: 15,
+    backgroundColor: COLORS.glass,
+    borderRadius: 22,
     marginBottom: 13,
+    borderWidth: 1.3,
+    borderColor: COLORS.glassBorder,
+    overflow: "hidden",
+
+    elevation: 8,
+    shadowColor: "#FFFFFF",
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.20,
+    shadowRadius: 12,
+  },
+
+  companyCardContent: {
     flexDirection: "row",
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    elevation: 2,
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.035,
-    shadowRadius: 5,
+    padding: 15,
+    backgroundColor: "transparent",
+    zIndex: 2,
   },
 
   companyLogoContainer: {
     width: 69,
     height: 69,
-    borderRadius: 18,
-    backgroundColor: COLORS.primaryLight,
+    borderRadius: 19,
+    backgroundColor: "transparent",
+    borderWidth: 1.2,
+    borderColor: "rgba(255, 255, 255, 0.75)",
     justifyContent: "center",
     alignItems: "center",
     overflow: "hidden",
@@ -587,11 +814,13 @@ const styles = StyleSheet.create({
   companyInfo: {
     flex: 1,
     marginLeft: 14,
+    backgroundColor: "transparent",
   },
 
   companyNameRow: {
     flexDirection: "row",
     alignItems: "center",
+    backgroundColor: "transparent",
   },
 
   companyName: {
@@ -603,10 +832,12 @@ const styles = StyleSheet.create({
   },
 
   // DOCKED BUS COUNT
+
   dockedInfo: {
     flexDirection: "row",
     alignItems: "center",
     marginTop: 9,
+    backgroundColor: "transparent",
   },
 
   dockedText: {
@@ -617,6 +848,7 @@ const styles = StyleSheet.create({
   },
 
   // LOADING
+
   loadingContainer: {
     paddingVertical: 55,
     alignItems: "center",
@@ -629,21 +861,20 @@ const styles = StyleSheet.create({
   },
 
   // EMPTY STATE
+
   emptyCard: {
-    backgroundColor: COLORS.white,
     paddingHorizontal: 25,
     paddingVertical: 35,
-    borderRadius: 22,
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: COLORS.border,
   },
 
   emptyIcon: {
     width: 75,
     height: 75,
     borderRadius: 24,
-    backgroundColor: COLORS.primaryLight,
+    backgroundColor: "transparent",
+    borderWidth: 1.2,
+    borderColor: "rgba(255, 255, 255, 0.75)",
     justifyContent: "center",
     alignItems: "center",
   },
@@ -665,61 +896,85 @@ const styles = StyleSheet.create({
   },
 
   retryButton: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: COLORS.blue,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 23,
     paddingVertical: 12,
-    borderRadius: 12,
+    borderRadius: 14,
     marginTop: 20,
     gap: 8,
+
+    elevation: 4,
+    shadowColor: "#5A95FC",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 7,
   },
 
   retryText: {
-    color: COLORS.white,
+    color: "#FFFFFF",
     fontWeight: "800",
     fontSize: 13,
   },
 
   // INFORMATION CARD
+
   infoCard: {
-    backgroundColor: "#EAF3FD",
-    borderRadius: 17,
+    backgroundColor: COLORS.glass,
+    borderRadius: 19,
     padding: 16,
+    marginTop: 12,
+    borderWidth: 1.2,
+    borderColor: COLORS.glassBorder,
+    overflow: "hidden",
+
+    elevation: 5,
+    shadowColor: "#FFFFFF",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+  },
+
+  infoContent: {
     flexDirection: "row",
     alignItems: "flex-start",
-    marginTop: 12,
-    borderWidth: 1,
-    borderColor: "#D7E9FC",
+    zIndex: 2,
+    backgroundColor: "transparent",
   },
 
   infoIcon: {
     width: 35,
     height: 35,
-    borderRadius: 11,
-    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    backgroundColor: "transparent",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.75)",
     justifyContent: "center",
     alignItems: "center",
   },
 
-  infoContent: {
+  infoTextContainer: {
     flex: 1,
     marginLeft: 11,
+    backgroundColor: "transparent",
   },
 
   infoTitle: {
-    color: COLORS.primaryDark,
+    color: COLORS.navy,
     fontSize: 13,
     fontWeight: "900",
     marginBottom: 5,
   },
 
   infoText: {
-    color: "#475569",
+    color: COLORS.secondaryText,
     fontSize: 12,
     lineHeight: 19,
   },
+
+  // FOOTER
 
   footerText: {
     textAlign: "center",
@@ -728,3 +983,4 @@ const styles = StyleSheet.create({
     marginTop: 25,
   },
 });
+  

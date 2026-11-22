@@ -1,5 +1,17 @@
 import React from "react";
-import { View, Text, StyleSheet, Image } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  Image,
+} from "react-native";
+
+const C = {
+  blue: "#286DF6",
+  cyan: "#087FAF",
+  glassBorder: "rgba(255, 255, 255, 0.25)",
+  white: "#FFFFFF",
+};
 
 export default function AppHeader() {
   return (
@@ -17,26 +29,39 @@ export default function AppHeader() {
 
 const styles = StyleSheet.create({
   header: {
-    height: 90, // Reduced from 60
-    backgroundColor: "#1A8AE5",
+    height: 90,
+    backgroundColor: C.blue,
+
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 16,
+
+    borderBottomWidth: 1,
+    borderBottomColor: C.glassBorder,
+
+    elevation: 5,
+    shadowColor: "#081B33",
+    shadowOffset: {
+      width: 0,
+      height: 3,
+    },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
   },
+
   logo: {
-    width: 60,
-    height: 60,
-    marginRight: 8,
+    width: 70,
+    height: 70,
+    marginRight: -5,
     marginTop: 20,
-    marginBottom: -10,
-    marginLeft: -10
+    marginLeft: -12,
   },
+
   title: {
-    color: "#FFFFFF",
+    color: C.white,
     fontSize: 25,
-    fontWeight: "bold",
+    fontWeight: "900",
+    letterSpacing: 0.5,
     marginTop: 20,
-    marginLeft: -10,
-    marginBottom: -10,
   },
 });
