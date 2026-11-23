@@ -1,4 +1,3 @@
-
 import React, { useCallback, useEffect, useState } from "react";
 
 import {
@@ -18,68 +17,13 @@ import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { supabase } from "../config/supabase";
 import CustomAlert from "../components/CustomAlert";
-
-// =====================================
-// WHITE GLASS COLOR PALETTE
-// =====================================
-
-const COLORS = {
-  background: "#D6E6F3",
-  background2: "#C9DEEF",
-
-  navy: "#145DA8",
-  blue: "#286DF6",
-  cyan: "#087FAF",
-
-  white: "#FFFFFF",
-  gray: "#496681",
-
-  // White glass
-  glass: "rgba(255, 255, 255, 0.48)",
-  glassLight: "rgba(255, 255, 255, 0.48)",
-  glassBorder: "rgba(255, 255, 255, 0.90)",
-  glassStrong: "rgba(255, 255, 255, 0.58)",
-
-  text: "#081B33",
-  secondaryText: "#263F59",
-
-  paleBlue: "rgba(90, 149, 252, 0.14)",
-};
-
-// =====================================
-// GLASS REFLECTION
-// =====================================
-
-function GlassReflection() {
-  return (
-    <View
-      pointerEvents="none"
-      style={StyleSheet.absoluteFill}
-    >
-      <View style={styles.glassReflection} />
-      <View style={styles.glassTopHighlight} />
-      <View style={styles.glassSideHighlight} />
-      <View style={styles.glassShine} />
-      <View style={styles.glassBottomHighlight} />
-    </View>
-  );
-}
-
-// =====================================
-// REUSABLE GLASS CARD
-// =====================================
-
-function GlassCard({ children, style }) {
-  return (
-    <View style={[styles.glassCard, style]}>
-      <GlassReflection />
-
-      <View style={styles.glassContent}>
-        {children}
-      </View>
-    </View>
-  );
-}
+import {
+  C,
+  NeuView,
+  NeuTouchable,
+  NeuCard,
+  blueGlow,
+} from "../theme/theme";
 
 // =====================================
 // BOOKING SCREEN
@@ -124,12 +68,11 @@ export default function BookingScreen({ navigation }) {
         setLoading(true);
       }
 
-      const { data: companyData, error: companyError } =
-        await supabase
-          .from("companies")
-          .select("company_id, company_name, is_active, logo_url")
-          .eq("is_active", true)
-          .order("company_name", { ascending: true });
+      const { data: companyData, error: companyError } = await supabase
+        .from("companies")
+        .select("company_id, company_name, is_active, logo_url")
+        .eq("is_active", true)
+        .order("company_name", { ascending: true });
 
       if (companyError) throw companyError;
 
@@ -145,8 +88,7 @@ export default function BookingScreen({ navigation }) {
 
         const dockedBuses = (busData || []).filter(
           (bus) =>
-            bus.company?.trim().toLowerCase() ===
-            companyName.toLowerCase()
+            bus.company?.trim().toLowerCase() === companyName.toLowerCase()
         );
 
         return {
@@ -263,10 +205,7 @@ export default function BookingScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <StatusBar
-        barStyle="dark-content"
-        backgroundColor={COLORS.background}
-      />
+      <StatusBar barStyle="dark-content" backgroundColor={C.background} />
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -276,8 +215,8 @@ export default function BookingScreen({ navigation }) {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            colors={[COLORS.blue]}
-            tintColor={COLORS.blue}
+            colors={[C.blue]}
+            tintColor={C.blue}
           />
         }
       >
@@ -285,6 +224,8 @@ export default function BookingScreen({ navigation }) {
 
         <View style={styles.pageHeader}>
           <View style={styles.headerTextContainer}>
+            <Text style={styles.greeting}>BOOKING</Text>
+
             <Text style={styles.pageTitle}>Book a Bus</Text>
 
             <Text style={styles.pageSubtitle}>
@@ -296,9 +237,8 @@ export default function BookingScreen({ navigation }) {
             <MaterialCommunityIcons
               name="bus-multiple"
               size={25}
-              color={COLORS.navy}
+              color={C.white}
             />
-            <View style={styles.smallIconHighlight} />
           </View>
         </View>
 
@@ -306,62 +246,54 @@ export default function BookingScreen({ navigation }) {
 
         <View style={styles.sectionHeader}>
           <View style={styles.sectionTitleContainer}>
-            <Text style={styles.sectionTitle}>
-              Bus Companies
-            </Text>
+            <Text style={styles.sectionTitle}>Bus Companies</Text>
 
             <Text style={styles.sectionSubtitle}>
               Select a company to view its docked buses
             </Text>
           </View>
 
-          <View style={styles.countBadge}>
-            <Text style={styles.countText}>
-              {companies.length}
-            </Text>
-          </View>
+          <NeuView small style={styles.countBadge}>
+            <Text style={styles.countText}>{companies.length}</Text>
+          </NeuView>
         </View>
 
         {/* SEARCH */}
 
-        <View style={styles.searchContainer}>
-          <GlassReflection />
+        <NeuView inset style={styles.searchContainer}>
+          <Ionicons name="search" size={20} color={C.muted} />
 
-          <View style={styles.searchContent}>
-            <Ionicons
-              name="search"
-              size={20}
-              color={COLORS.gray}
-            />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search bus company..."
+            placeholderTextColor={C.muted}
+            value={search}
+            onChangeText={setSearch}
+            autoCapitalize="none"
+          />
 
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search bus company..."
-              placeholderTextColor="#647C94"
-              value={search}
-              onChangeText={setSearch}
-              autoCapitalize="none"
-            />
-
-            {search.length > 0 && (
-              <TouchableOpacity onPress={() => setSearch("")}>
-                <Ionicons
-                  name="close-circle"
-                  size={20}
-                  color={COLORS.gray}
-                />
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
+          {search.length > 0 && (
+            <TouchableOpacity
+              onPress={() => setSearch("")}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="close-circle" size={20} color={C.muted} />
+            </TouchableOpacity>
+          )}
+        </NeuView>
 
         {/* COMPANY LIST */}
 
         {loading ? (
           <View style={styles.loadingContainer}>
+            <NeuView style={styles.loadingLogo}>
+              <MaterialCommunityIcons name="bus" size={34} color={C.blue} />
+            </NeuView>
+
             <ActivityIndicator
               size="large"
-              color={COLORS.blue}
+              color={C.blue}
+              style={{ marginTop: 20 }}
             />
 
             <Text style={styles.loadingText}>
@@ -369,19 +301,17 @@ export default function BookingScreen({ navigation }) {
             </Text>
           </View>
         ) : filteredCompanies.length === 0 ? (
-          <GlassCard style={styles.emptyCard}>
-            <View style={styles.emptyIcon}>
+          <NeuCard style={styles.emptyCard}>
+            <NeuView small style={styles.emptyIcon}>
               <MaterialCommunityIcons
                 name="bus-alert"
-                size={38}
-                color={COLORS.navy}
+                size={36}
+                color={C.blue}
               />
-            </View>
+            </NeuView>
 
             <Text style={styles.emptyTitle}>
-              {search
-                ? "No Matching Company"
-                : "No Companies Available"}
+              {search ? "No Matching Company" : "No Companies Available"}
             </Text>
 
             <Text style={styles.emptyText}>
@@ -394,142 +324,114 @@ export default function BookingScreen({ navigation }) {
               <TouchableOpacity
                 style={styles.retryButton}
                 onPress={() => setSearch("")}
-                activeOpacity={0.8}
+                activeOpacity={0.85}
               >
-                <Text style={styles.retryText}>
-                  Clear Search
-                </Text>
+                <Text style={styles.retryText}>Clear Search</Text>
               </TouchableOpacity>
             ) : (
               <TouchableOpacity
                 style={styles.retryButton}
                 onPress={() => loadCompanies(true)}
-                activeOpacity={0.8}
+                activeOpacity={0.85}
               >
-                <Ionicons
-                  name="refresh"
-                  size={17}
-                  color={COLORS.white}
-                />
+                <Ionicons name="refresh" size={17} color={C.white} />
 
-                <Text style={styles.retryText}>
-                  Try Again
-                </Text>
+                <Text style={styles.retryText}>Try Again</Text>
               </TouchableOpacity>
             )}
-          </GlassCard>
+          </NeuCard>
         ) : (
           filteredCompanies.map((company) => (
-            <TouchableOpacity
+            <NeuTouchable
               key={company.id}
-              activeOpacity={0.85}
               style={styles.companyCard}
               onPress={() => openCompany(company)}
             >
-              <GlassReflection />
+              {/* COMPANY LOGO */}
 
-              <View style={styles.companyCardContent}>
-                {/* COMPANY LOGO */}
+              <NeuView inset style={styles.companyLogoContainer}>
+                {company.logoUrl ? (
+                  <Image
+                    source={{ uri: company.logoUrl }}
+                    style={styles.companyLogo}
+                    resizeMode="contain"
+                    onError={() => {
+                      setCompanies((previous) =>
+                        previous.map((item) =>
+                          item.id === company.id
+                            ? { ...item, logoUrl: null }
+                            : item
+                        )
+                      );
+                    }}
+                  />
+                ) : (
+                  <MaterialCommunityIcons
+                    name="bus"
+                    size={32}
+                    color={C.blue}
+                  />
+                )}
+              </NeuView>
 
-                <View style={styles.companyLogoContainer}>
-                  {company.logoUrl ? (
-                    <Image
-                      source={{ uri: company.logoUrl }}
-                      style={styles.companyLogo}
-                      resizeMode="contain"
-                      onError={() => {
-                        setCompanies((previous) =>
-                          previous.map((item) =>
-                            item.id === company.id
-                              ? { ...item, logoUrl: null }
-                              : item
-                          )
-                        );
-                      }}
-                    />
-                  ) : (
-                    <MaterialCommunityIcons
-                      name="bus"
-                      size={34}
-                      color={COLORS.navy}
-                    />
-                  )}
-                </View>
+              {/* COMPANY INFORMATION */}
 
-                {/* COMPANY INFORMATION */}
+              <View style={styles.companyInfo}>
+                <Text style={styles.companyName} numberOfLines={1}>
+                  {company.name}
+                </Text>
 
-                <View style={styles.companyInfo}>
-                  <View style={styles.companyNameRow}>
-                    <Text
-                      style={styles.companyName}
-                      numberOfLines={1}
-                    >
-                      {company.name}
-                    </Text>
+                <View style={styles.dockedInfo}>
+                  <MaterialCommunityIcons
+                    name="bus-stop"
+                    size={16}
+                    color={C.blue}
+                  />
 
-                    <Ionicons
-                      name="chevron-forward"
-                      size={19}
-                      color="#52718E"
-                    />
-                  </View>
-
-                  {/* DOCKED BUS COUNT */}
-
-                  <View style={styles.dockedInfo}>
-                    <MaterialCommunityIcons
-                      name="bus-stop"
-                      size={16}
-                      color={COLORS.navy}
-                    />
-
-                    <Text style={styles.dockedText}>
-                      {company.dockedCount}{" "}
-                      {company.dockedCount === 1
-                        ? "bus"
-                        : "buses"}{" "}
-                      currently docked
-                    </Text>
-                  </View>
+                  <Text style={styles.dockedText}>
+                    {company.dockedCount}{" "}
+                    {company.dockedCount === 1 ? "bus" : "buses"} currently
+                    docked
+                  </Text>
                 </View>
               </View>
-            </TouchableOpacity>
+
+              <Ionicons name="chevron-forward" size={20} color={C.muted} />
+            </NeuTouchable>
           ))
         )}
 
         {/* INFORMATION CARD */}
 
-        <View style={styles.infoCard}>
-          <GlassReflection />
+        <NeuView style={styles.infoCard}>
+          <Ionicons
+            name="information-circle-outline"
+            size={23}
+            color={C.blue}
+          />
 
-          <View style={styles.infoContent}>
-            <View style={styles.infoIcon}>
-              <Ionicons
-                name="information-circle"
-                size={22}
-                color={COLORS.navy}
-              />
-            </View>
+          <View style={styles.infoTextContainer}>
+            <Text style={styles.infoTitle}>Booking Information</Text>
 
-            <View style={styles.infoTextContainer}>
-              <Text style={styles.infoTitle}>
-                Booking Information
-              </Text>
-
-              <Text style={styles.infoText}>
-                Select a company to view its docked buses and
-                continue with your reservation. Only buses
-                available for booking can be selected.
-              </Text>
-            </View>
+            <Text style={styles.infoText}>
+              Select a company to view its docked buses and continue with
+              your reservation. Only buses available for booking can be
+              selected.
+            </Text>
           </View>
-        </View>
+        </NeuView>
 
         {/* FOOTER */}
 
-        <Text style={styles.footerText}>
-          RouteX • Smart Bus Booking & Tracking
-        </Text>
+        <View style={styles.footer}>
+          <View style={styles.footerLine} />
+
+          <Text style={styles.footerText}>RouteX</Text>
+
+          <Text style={styles.footerSubtitle}>
+            Smart Bus Booking & Tracking
+          </Text>
+        </View>
       </ScrollView>
 
       {/* CUSTOM ALERT */}
@@ -552,13 +454,12 @@ export default function BookingScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: C.background,
   },
 
   scrollContent: {
-    paddingHorizontal: 18,
-    paddingTop: 20,
-    paddingBottom: 35,
+    padding: 22,
+    paddingBottom: 40,
   },
 
   // HEADER
@@ -567,51 +468,43 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 27,
+    marginTop: 10,
+    marginBottom: 26,
   },
 
   headerTextContainer: {
     flex: 1,
   },
 
-  pageTitle: {
-    fontSize: 25,
+  greeting: {
+    color: C.blue,
+    fontSize: 10,
     fontWeight: "900",
-    color: COLORS.text,
+    letterSpacing: 1.5,
   },
 
-  pageSubtitle: {
-    fontSize: 13,
-    color: COLORS.secondaryText,
+  pageTitle: {
+    fontSize: 26,
+    fontWeight: "900",
+    color: C.text,
     marginTop: 5,
   },
 
+  pageSubtitle: {
+    fontSize: 12,
+    color: C.textSecondary,
+    marginTop: 6,
+  },
+
   headerIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
-    backgroundColor: COLORS.glass,
-    borderWidth: 1.2,
-    borderColor: COLORS.glassBorder,
+    width: 50,
+    height: 50,
+    borderRadius: 17,
+    backgroundColor: C.blue,
     justifyContent: "center",
     alignItems: "center",
     marginLeft: 12,
-    overflow: "hidden",
-
-    elevation: 6,
-    shadowColor: "#FFFFFF",
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.18,
-    shadowRadius: 12,
-  },
-
-  smallIconHighlight: {
-    position: "absolute",
-    top: 1,
-    left: 5,
-    right: 5,
-    height: 1.5,
-    backgroundColor: "rgba(255,255,255,0.98)",
+    ...blueGlow,
   },
 
   // SECTION HEADER
@@ -620,7 +513,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 15,
+    marginBottom: 16,
+    marginTop: 12,
   },
 
   sectionTitleContainer: {
@@ -628,143 +522,49 @@ const styles = StyleSheet.create({
   },
 
   sectionTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "900",
-    color: COLORS.text,
+    color: C.text,
   },
 
   sectionSubtitle: {
-    color: COLORS.secondaryText,
-    fontSize: 12,
+    color: C.textSecondary,
+    fontSize: 11,
     marginTop: 5,
   },
 
   countBadge: {
-    backgroundColor: COLORS.glass,
-    borderWidth: 1.2,
-    borderColor: COLORS.glassBorder,
-    width: 38,
-    height: 38,
-    borderRadius: 14,
+    width: 40,
+    height: 40,
+    borderRadius: 13,
     justifyContent: "center",
     alignItems: "center",
     marginLeft: 12,
-    overflow: "hidden",
-
-    elevation: 5,
-    shadowColor: "#FFFFFF",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.18,
-    shadowRadius: 9,
   },
 
   countText: {
-    color: COLORS.navy,
+    color: C.blue,
     fontWeight: "900",
     fontSize: 15,
-  },
-
-  // GLASS REFLECTION LAYERS
-
-  glassReflection: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    height: "38%",
-    backgroundColor: "rgba(255, 255, 255, 0.10)",
-  },
-
-  glassTopHighlight: {
-    position: "absolute",
-    top: 1,
-    left: 1,
-    right: 1,
-    height: 1.5,
-    backgroundColor: "rgba(255, 255, 255, 1)",
-  },
-
-  glassSideHighlight: {
-    position: "absolute",
-    top: 3,
-    left: 1,
-    bottom: 3,
-    width: 1,
-    backgroundColor: "rgba(255, 255, 255, 0.55)",
-  },
-
-  glassShine: {
-    position: "absolute",
-    top: 0,
-    left: 12,
-    width: "30%",
-    height: "100%",
-    backgroundColor: "rgba(255, 255, 255, 0.045)",
-  },
-
-  glassBottomHighlight: {
-    position: "absolute",
-    bottom: 1,
-    left: 12,
-    right: 12,
-    height: 1,
-    backgroundColor: "rgba(255, 255, 255, 0.35)",
-  },
-
-  // REUSABLE GLASS CARD
-
-  glassCard: {
-    backgroundColor: COLORS.glass,
-    borderRadius: 22,
-    borderWidth: 1.3,
-    borderColor: COLORS.glassBorder,
-    overflow: "hidden",
-
-    elevation: 7,
-    shadowColor: "#FFFFFF",
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.18,
-    shadowRadius: 12,
-  },
-
-  glassContent: {
-    position: "relative",
-    zIndex: 2,
-    backgroundColor: "transparent",
   },
 
   // SEARCH
 
   searchContainer: {
-    height: 53,
-    backgroundColor: COLORS.glass,
-    borderRadius: 17,
-    borderWidth: 1.2,
-    borderColor: COLORS.glassBorder,
-    marginBottom: 17,
-    overflow: "hidden",
-
-    elevation: 5,
-    shadowColor: "#FFFFFF",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.18,
-    shadowRadius: 10,
-  },
-
-  searchContent: {
-    flex: 1,
+    height: 54,
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 15,
-    zIndex: 2,
-    backgroundColor: "transparent",
+    borderRadius: 16,
+    marginBottom: 20,
   },
 
   searchInput: {
     flex: 1,
     marginLeft: 10,
-    color: COLORS.text,
+    color: C.text,
     fontSize: 13,
+    fontWeight: "600",
     paddingVertical: 10,
     backgroundColor: "transparent",
   },
@@ -772,77 +572,48 @@ const styles = StyleSheet.create({
   // COMPANY CARD
 
   companyCard: {
-    backgroundColor: COLORS.glass,
-    borderRadius: 22,
-    marginBottom: 13,
-    borderWidth: 1.3,
-    borderColor: COLORS.glassBorder,
-    overflow: "hidden",
-
-    elevation: 8,
-    shadowColor: "#FFFFFF",
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.20,
-    shadowRadius: 12,
-  },
-
-  companyCardContent: {
     flexDirection: "row",
     alignItems: "center",
+    borderRadius: 20,
     padding: 15,
-    backgroundColor: "transparent",
-    zIndex: 2,
+    marginBottom: 16,
   },
 
   companyLogoContainer: {
-    width: 69,
-    height: 69,
+    width: 66,
+    height: 66,
     borderRadius: 19,
-    backgroundColor: "transparent",
-    borderWidth: 1.2,
-    borderColor: "rgba(255, 255, 255, 0.75)",
     justifyContent: "center",
     alignItems: "center",
     overflow: "hidden",
   },
 
   companyLogo: {
-    width: "85%",
-    height: "85%",
+    width: "80%",
+    height: "80%",
   },
 
   companyInfo: {
     flex: 1,
     marginLeft: 14,
-    backgroundColor: "transparent",
-  },
-
-  companyNameRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "transparent",
+    marginRight: 6,
   },
 
   companyName: {
-    flex: 1,
     fontSize: 15,
-    fontWeight: "800",
-    color: COLORS.text,
-    marginRight: 5,
+    fontWeight: "900",
+    color: C.text,
   },
-
-  // DOCKED BUS COUNT
 
   dockedInfo: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 9,
-    backgroundColor: "transparent",
+    marginTop: 8,
   },
 
   dockedText: {
-    color: COLORS.secondaryText,
-    fontSize: 12,
+    color: C.textSecondary,
+    fontSize: 11,
     fontWeight: "600",
     marginLeft: 6,
   },
@@ -850,137 +621,129 @@ const styles = StyleSheet.create({
   // LOADING
 
   loadingContainer: {
-    paddingVertical: 55,
+    paddingVertical: 50,
     alignItems: "center",
   },
 
+  loadingLogo: {
+    width: 80,
+    height: 80,
+    borderRadius: 26,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
   loadingText: {
-    color: COLORS.secondaryText,
-    marginTop: 13,
+    color: C.textSecondary,
+    marginTop: 12,
     fontSize: 13,
   },
 
   // EMPTY STATE
 
   emptyCard: {
-    paddingHorizontal: 25,
-    paddingVertical: 35,
+    padding: 26,
     alignItems: "center",
+    marginBottom: 10,
   },
 
   emptyIcon: {
-    width: 75,
-    height: 75,
-    borderRadius: 24,
-    backgroundColor: "transparent",
-    borderWidth: 1.2,
-    borderColor: "rgba(255, 255, 255, 0.75)",
+    width: 70,
+    height: 70,
+    borderRadius: 23,
     justifyContent: "center",
     alignItems: "center",
   },
 
   emptyTitle: {
-    color: COLORS.text,
-    fontSize: 17,
+    color: C.text,
+    fontSize: 16,
     fontWeight: "900",
-    marginTop: 17,
+    marginTop: 16,
     textAlign: "center",
   },
 
   emptyText: {
-    color: COLORS.secondaryText,
-    fontSize: 13,
+    color: C.textSecondary,
+    fontSize: 12,
     textAlign: "center",
-    lineHeight: 20,
+    lineHeight: 19,
     marginTop: 8,
   },
 
   retryButton: {
-    backgroundColor: COLORS.blue,
+    backgroundColor: C.blue,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 23,
+    paddingHorizontal: 22,
     paddingVertical: 12,
     borderRadius: 14,
-    marginTop: 20,
+    marginTop: 18,
     gap: 8,
-
-    elevation: 4,
-    shadowColor: "#5A95FC",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.2,
-    shadowRadius: 7,
+    ...blueGlow,
   },
 
   retryText: {
-    color: "#FFFFFF",
-    fontWeight: "800",
-    fontSize: 13,
+    color: C.white,
+    fontWeight: "900",
+    fontSize: 12,
   },
 
   // INFORMATION CARD
 
   infoCard: {
-    backgroundColor: COLORS.glass,
-    borderRadius: 19,
-    padding: 16,
-    marginTop: 12,
-    borderWidth: 1.2,
-    borderColor: COLORS.glassBorder,
-    overflow: "hidden",
-
-    elevation: 5,
-    shadowColor: "#FFFFFF",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.18,
-    shadowRadius: 10,
-  },
-
-  infoContent: {
+    borderRadius: 20,
+    padding: 17,
     flexDirection: "row",
     alignItems: "flex-start",
-    zIndex: 2,
-    backgroundColor: "transparent",
-  },
-
-  infoIcon: {
-    width: 35,
-    height: 35,
-    borderRadius: 12,
-    backgroundColor: "transparent",
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.75)",
-    justifyContent: "center",
-    alignItems: "center",
+    marginTop: 12,
+    gap: 11,
   },
 
   infoTextContainer: {
     flex: 1,
-    marginLeft: 11,
-    backgroundColor: "transparent",
   },
 
   infoTitle: {
-    color: COLORS.navy,
+    color: C.text,
     fontSize: 13,
     fontWeight: "900",
-    marginBottom: 5,
   },
 
   infoText: {
-    color: COLORS.secondaryText,
-    fontSize: 12,
-    lineHeight: 19,
+    color: C.textSecondary,
+    fontSize: 11,
+    lineHeight: 18,
+    marginTop: 5,
   },
 
   // FOOTER
 
+  footer: {
+    alignItems: "center",
+    marginTop: 28,
+    marginBottom: 10,
+  },
+
+  footerLine: {
+    width: 45,
+    height: 4,
+    borderRadius: 5,
+    backgroundColor: C.secondary,
+    marginBottom: 12,
+  },
+
   footerText: {
-    textAlign: "center",
-    color: COLORS.secondaryText,
-    fontSize: 11,
-    marginTop: 25,
+    color: C.blue,
+    fontSize: 14,
+    fontWeight: "900",
+    letterSpacing: 1,
+  },
+
+  footerSubtitle: {
+    color: C.textSecondary,
+    fontSize: 10,
+    marginTop: 5,
   },
 });
-  

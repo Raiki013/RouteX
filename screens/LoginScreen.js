@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from "react";
 
 import {
@@ -21,34 +20,31 @@ import * as Linking from "expo-linking";
 
 import { supabase } from "../config/supabase";
 import { registerPushToken } from "../services/pushNotifications";
+import {
+  C,
+  NeuView,
+  NeuTouchable,
+  NeuCard,
+  blueGlow,
+} from "../theme/theme";
 
-const C = {
-  navy: "#0F2747",
-  blue: "#2563EB",
-  cyan: "#06B6D4",
-  background: "#DCEAF6",
-  white: "#FFFFFF",
-  text: "#172B4D",
-  gray: "#7B8798",
+// ========================================
+// CUSTOM ALERT
+// ========================================
 
-  // SAME SOLID COLOR FOR CARD AND TEXTBOXES
-  glass: "#F3F8FD",
-  glassBorder: "#FFFFFF",
-};
-
-// CUSTOM SWEET ALERT
 function SweetAlert({
   visible,
   title,
   message,
   type = "info",
+  confirmText = "OK",
   onConfirm,
 }) {
   const alertColors = {
-    success: "#16A34A",
-    error: "#DC2626",
-    warning: "#F59E0B",
-    info: "#2563EB",
+    success: C.blue,
+    error: C.red,
+    warning: C.secondary,
+    info: C.blue,
   };
 
   const alertIcons = {
@@ -57,6 +53,8 @@ function SweetAlert({
     warning: "warning",
     info: "information-circle",
   };
+
+  const color = alertColors[type] || C.blue;
 
   return (
     <Modal
@@ -67,58 +65,53 @@ function SweetAlert({
       onRequestClose={onConfirm}
     >
       <View style={styles.modalOverlay}>
-        <View style={styles.alertBox}>
-          <View
-            style={[
-              styles.alertIcon,
-              {
-                backgroundColor: `${alertColors[type]}15`,
-              },
-            ]}
-          >
+        <NeuView style={styles.alertBox}>
+          <NeuView style={styles.alertIcon}>
             <Ionicons
-              name={alertIcons[type]}
-              size={55}
-              color={alertColors[type]}
+              name={alertIcons[type] || "information-circle"}
+              size={50}
+              color={color}
             />
-          </View>
+          </NeuView>
 
           <Text style={styles.alertTitle}>{title}</Text>
-
           <Text style={styles.alertMessage}>{message}</Text>
 
           <TouchableOpacity
-            style={[
-              styles.alertButton,
-              { backgroundColor: alertColors[type] },
-            ]}
+            style={[styles.alertButton, { backgroundColor: color }]}
             onPress={onConfirm}
             activeOpacity={0.85}
           >
-            <Text style={styles.alertButtonText}>OK</Text>
+            <Text style={styles.alertButtonText}>{confirmText}</Text>
           </TouchableOpacity>
-        </View>
+        </NeuView>
       </View>
     </Modal>
   );
 }
 
+// ========================================
+// LOGIN SCREEN
+// ========================================
+
 export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
-
-  // PASSWORD RESET COOLDOWN
   const [resetCooldown, setResetCooldown] = useState(0);
 
-  // SWEET ALERT STATE
   const [alertConfig, setAlertConfig] = useState({
     visible: false,
     title: "",
     message: "",
     type: "info",
   });
+
+  // ========================================
+  // ALERT FUNCTIONS
+  // ========================================
 
   const showAlert = (title, message, type = "info") => {
     setAlertConfig({
@@ -136,7 +129,10 @@ export default function LoginScreen({ navigation }) {
     }));
   };
 
+  // ========================================
   // PASSWORD RESET COUNTDOWN
+  // ========================================
+
   useEffect(() => {
     if (resetCooldown <= 0) return;
 
@@ -147,7 +143,10 @@ export default function LoginScreen({ navigation }) {
     return () => clearTimeout(timer);
   }, [resetCooldown]);
 
+  // ========================================
   // LOGIN
+  // ========================================
+
   const handleLogin = async () => {
     if (loading) return;
 
@@ -163,11 +162,10 @@ export default function LoginScreen({ navigation }) {
     setLoading(true);
 
     try {
-      const { data, error } =
-        await supabase.auth.signInWithPassword({
-          email: email.trim(),
-          password: password,
-        });
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
 
       if (error) {
         showAlert("Login Failed", error.message, "error");
@@ -175,14 +173,10 @@ export default function LoginScreen({ navigation }) {
       }
 
       if (data.user) {
-        // REGISTER PUSH NOTIFICATION TOKEN
         try {
           await registerPushToken(data.user.id);
         } catch (pushError) {
-          console.log(
-            "Push registration failed:",
-            pushError.message
-          );
+          console.log("Push registration failed:", pushError.message);
         }
 
         navigation.replace("MainTabs");
@@ -200,7 +194,10 @@ export default function LoginScreen({ navigation }) {
     }
   };
 
+  // ========================================
   // FORGOT PASSWORD
+  // ========================================
+
   const handleForgotPassword = async () => {
     const cleanEmail = email.trim().toLowerCase();
 
@@ -229,32 +226,16 @@ export default function LoginScreen({ navigation }) {
     try {
       const redirectUrl = Linking.createURL("reset-password");
 
-      console.log(
-        "========== PASSWORD RESET DEBUG =========="
+      const { data, error } = await supabase.auth.resetPasswordForEmail(
+        cleanEmail,
+        {
+          redirectTo: redirectUrl,
+        }
       );
-
-      console.log(
-        "Supabase URL:",
-        "https://xtwzhsftzhidhzdvmkaf.supabase.co"
-      );
-
-      console.log("Redirect URL:", redirectUrl);
-
-      const { data, error } =
-        await supabase.auth.resetPasswordForEmail(
-          cleanEmail,
-          {
-            redirectTo: redirectUrl,
-          }
-        );
 
       if (error) {
         console.log("RESET PASSWORD ERROR:", error);
-        console.log("Error message:", error.message);
-        console.log("Error status:", error.status);
-        console.log("Error code:", error.code);
 
-        // HANDLE EMAIL RATE LIMIT
         if (
           error.code === "over_email_send_rate_limit" ||
           error.status === 429
@@ -281,7 +262,6 @@ export default function LoginScreen({ navigation }) {
 
       console.log("RESET PASSWORD SUCCESS:", data);
 
-      // START COOLDOWN AFTER SUCCESS
       setResetCooldown(60);
 
       showAlert(
@@ -302,15 +282,16 @@ export default function LoginScreen({ navigation }) {
     }
   };
 
+  // ========================================
+  // UI
+  // ========================================
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
-      <StatusBar
-        backgroundColor={C.background}
-        barStyle="dark-content"
-      />
+      <StatusBar backgroundColor={C.background} barStyle="dark-content" />
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
@@ -318,23 +299,27 @@ export default function LoginScreen({ navigation }) {
         showsVerticalScrollIndicator={false}
       >
         {/* HEADER */}
+
         <View style={styles.topHeader}>
-          <Image
-            source={require("../assets/routex-logo-blue.png")}
-            style={styles.logo}
-            resizeMode="contain"
-          />
+          <NeuView style={styles.logoContainer}>
+            <Image
+              source={require("../assets/routex-logo-blue.png")}
+              style={styles.logo}
+              resizeMode="contain"
+            />
+          </NeuView>
 
           <Text style={styles.appName}>RouteX</Text>
 
-          <Text style={styles.headerSubtitle}>
-            YOUR JOURNEY, CONNECTED.
-          </Text>
+          <Text style={styles.headerSubtitle}>YOUR JOURNEY, CONNECTED.</Text>
         </View>
 
         {/* LOGIN CARD */}
-        <View style={styles.card}>
+
+        <NeuCard style={styles.card}>
           <View style={styles.welcomeContainer}>
+            <Text style={styles.greeting}>SIGN IN</Text>
+
             <Text style={styles.title}>Welcome Back!</Text>
 
             <Text style={styles.subtitle}>
@@ -343,18 +328,20 @@ export default function LoginScreen({ navigation }) {
           </View>
 
           {/* EMAIL */}
+
           <Text style={styles.inputLabel}>Email Address</Text>
 
-          <View style={styles.inputBox}>
+          <NeuView inset style={styles.inputBox}>
             <Ionicons
               name="mail-outline"
-              size={21}
+              size={20}
               color={C.blue}
+              style={styles.inputIcon}
             />
 
             <TextInput
               placeholder="Enter your email"
-              placeholderTextColor="#91A2B5"
+              placeholderTextColor={C.muted}
               style={styles.input}
               value={email}
               onChangeText={setEmail}
@@ -363,21 +350,23 @@ export default function LoginScreen({ navigation }) {
               autoCorrect={false}
               returnKeyType="next"
             />
-          </View>
+          </NeuView>
 
           {/* PASSWORD */}
+
           <Text style={styles.inputLabel}>Password</Text>
 
-          <View style={styles.inputBox}>
+          <NeuView inset style={styles.inputBox}>
             <Ionicons
               name="lock-closed-outline"
-              size={21}
+              size={20}
               color={C.blue}
+              style={styles.inputIcon}
             />
 
             <TextInput
               placeholder="Enter your password"
-              placeholderTextColor="#91A2B5"
+              placeholderTextColor={C.muted}
               secureTextEntry={!showPass}
               style={styles.input}
               value={password}
@@ -387,23 +376,21 @@ export default function LoginScreen({ navigation }) {
               onSubmitEditing={handleLogin}
             />
 
-            <TouchableOpacity
+            <NeuTouchable
+              small
               onPress={() => setShowPass(!showPass)}
-              activeOpacity={0.7}
+              style={styles.eyeButton}
             >
               <Ionicons
-                name={
-                  showPass
-                    ? "eye-off-outline"
-                    : "eye-outline"
-                }
-                size={21}
-                color={C.gray}
+                name={showPass ? "eye-off-outline" : "eye-outline"}
+                size={19}
+                color={C.muted}
               />
-            </TouchableOpacity>
-          </View>
+            </NeuTouchable>
+          </NeuView>
 
           {/* FORGOT PASSWORD */}
+
           <View style={styles.forgotPasswordContainer}>
             <TouchableOpacity
               onPress={handleForgotPassword}
@@ -426,11 +413,9 @@ export default function LoginScreen({ navigation }) {
           </View>
 
           {/* LOGIN BUTTON */}
+
           <TouchableOpacity
-            style={[
-              styles.loginButton,
-              loading && styles.buttonDisabled,
-            ]}
+            style={[styles.loginButton, loading && styles.buttonDisabled]}
             onPress={handleLogin}
             disabled={loading}
             activeOpacity={0.85}
@@ -441,35 +426,32 @@ export default function LoginScreen({ navigation }) {
               <View style={styles.buttonContent}>
                 <Text style={styles.buttonText}>Login</Text>
 
-                <Ionicons
-                  name="arrow-forward"
-                  size={20}
-                  color={C.white}
-                />
+                <Ionicons name="arrow-forward" size={19} color={C.white} />
               </View>
             )}
           </TouchableOpacity>
 
           {/* SIGNUP */}
+
           <View style={styles.signupContainer}>
-            <Text style={styles.signupText}>
-              Don't have an account?
-            </Text>
+            <Text style={styles.signupText}>Don't have an account?</Text>
 
             <TouchableOpacity
               onPress={() => navigation.navigate("Signup")}
+              activeOpacity={0.7}
             >
               <Text style={styles.signupLink}>Sign Up</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </NeuCard>
 
         {/* FOOTER */}
+
         <View style={styles.footer}>
           <Ionicons
             name="shield-checkmark-outline"
-            size={15}
-            color={C.gray}
+            size={16}
+            color={C.muted}
           />
 
           <Text style={styles.footerText}>
@@ -478,7 +460,8 @@ export default function LoginScreen({ navigation }) {
         </View>
       </ScrollView>
 
-      {/* SWEET ALERT MODAL */}
+      {/* ALERT */}
+
       <SweetAlert
         visible={alertConfig.visible}
         title={alertConfig.title}
@@ -490,7 +473,13 @@ export default function LoginScreen({ navigation }) {
   );
 }
 
+// ========================================
+// STYLES
+// ========================================
+
 const styles = StyleSheet.create({
+  // MAIN BACKGROUND
+
   container: {
     flex: 1,
     backgroundColor: C.background,
@@ -499,148 +488,146 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     justifyContent: "center",
-    paddingHorizontal: 24,
+    padding: 22,
     paddingVertical: 35,
   },
 
   // HEADER
+
   topHeader: {
     alignItems: "center",
-    marginBottom: 30,
+    marginBottom: 32,
+  },
+
+  logoContainer: {
+    width: 112,
+    height: 112,
+    borderRadius: 56,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 18,
   },
 
   logo: {
-    width: 145,
-    height: 130,
-    marginBottom: -20,
+    width: 84,
+    height: 84,
   },
 
   appName: {
-    fontSize: 32,
+    fontSize: 30,
     fontWeight: "900",
-    color: C.navy,
+    color: C.blue,
     letterSpacing: 1,
   },
 
   headerSubtitle: {
     fontSize: 9,
-    fontWeight: "800",
-    color: "#6483A5",
+    fontWeight: "900",
+    color: C.textSecondary,
     letterSpacing: 2.5,
-    marginTop: 6,
+    marginTop: 7,
   },
 
-  // LOGIN CARD
+  // MAIN CARD
+
   card: {
-    backgroundColor: C.glass,
-    borderRadius: 27,
-    padding: 25,
-
-    borderWidth: 1.5,
-    borderColor: C.glassBorder,
-
-    elevation: 8,
-    shadowColor: "#52799E",
-    shadowOffset: {
-      width: 0,
-      height: 8,
-    },
-    shadowOpacity: 0.10,
-    shadowRadius: 15,
-
-    overflow: "hidden",
+    borderRadius: 28,
+    padding: 24,
   },
 
   welcomeContainer: {
-    marginBottom: 28,
+    marginBottom: 24,
+    alignItems: "center",
+  },
+
+  greeting: {
+    color: C.blue,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1.5,
   },
 
   title: {
     fontSize: 26,
-    fontWeight: "800",
-    color: C.navy,
+    fontWeight: "900",
+    color: C.text,
     textAlign: "center",
+    marginTop: 5,
   },
 
   subtitle: {
-    fontSize: 13,
-    color: "#71849B",
+    fontSize: 12,
+    color: C.textSecondary,
     textAlign: "center",
-    marginTop: 9,
-    lineHeight: 20,
+    marginTop: 8,
+    lineHeight: 19,
   },
 
   // INPUTS
+
   inputLabel: {
-    fontSize: 13,
-    fontWeight: "700",
+    fontSize: 12,
+    fontWeight: "900",
     color: C.text,
-    marginBottom: 9,
+    marginBottom: 10,
     marginTop: 5,
   },
 
   inputBox: {
     flexDirection: "row",
     alignItems: "center",
-
-    // EXACT SAME COLOR AS OUTER CARD
-    backgroundColor: C.glass,
-
-    borderWidth: 1.5,
-    borderColor: C.glassBorder,
-    borderRadius: 14,
-
+    borderRadius: 16,
+    height: 56,
     paddingHorizontal: 15,
-    height: 55,
-    marginBottom: 19,
+    marginBottom: 20,
+  },
 
-    elevation: 0,
-    shadowOpacity: 0,
+  inputIcon: {
+    marginRight: 12,
   },
 
   input: {
     flex: 1,
     fontSize: 14,
+    fontWeight: "600",
     color: C.text,
-    marginLeft: 12,
     height: "100%",
-    backgroundColor: "transparent",
     paddingVertical: 0,
+    backgroundColor: "transparent",
+  },
+
+  eyeButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
   },
 
   // FORGOT PASSWORD
+
   forgotPasswordContainer: {
     alignItems: "flex-end",
-    marginTop: -10,
-    marginBottom: 12,
+    marginTop: -5,
+    marginBottom: 20,
   },
 
   forgotPasswordText: {
-    fontSize: 13,
-    fontWeight: "700",
+    fontSize: 12,
+    fontWeight: "900",
     color: C.blue,
   },
 
   // LOGIN BUTTON
+
   loginButton: {
     backgroundColor: C.blue,
-    height: 55,
-    borderRadius: 14,
+    height: 56,
+    borderRadius: 16,
     justifyContent: "center",
     alignItems: "center",
-    marginTop: 10,
-
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.45)",
-
-    elevation: 5,
-    shadowColor: C.blue,
-    shadowOffset: {
-      width: 0,
-      height: 5,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 9,
+    marginTop: 5,
+    ...blueGlow,
   },
 
   buttonDisabled: {
@@ -655,49 +642,53 @@ const styles = StyleSheet.create({
   },
 
   buttonText: {
-    fontSize: 16,
-    fontWeight: "800",
+    fontSize: 15,
+    fontWeight: "900",
     color: C.white,
   },
 
   // SIGNUP
+
   signupContainer: {
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    marginTop: 25,
+    marginTop: 26,
   },
 
   signupText: {
-    fontSize: 13,
-    color: C.gray,
+    fontSize: 12,
+    color: C.textSecondary,
   },
 
   signupLink: {
-    fontSize: 13,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "900",
     color: C.blue,
     marginLeft: 5,
   },
 
   // FOOTER
+
   footer: {
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    marginTop: 25,
-    gap: 7,
+    marginTop: 30,
+    gap: 8,
   },
 
   footerText: {
     fontSize: 11,
-    color: "#71849B",
+    color: C.muted,
+    fontWeight: "600",
   },
 
-  // SWEET ALERT
+  // ALERT MODAL
+
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(15, 23, 42, 0.55)",
+    backgroundColor: "rgba(22, 52, 107, 0.45)",
     justifyContent: "center",
     alignItems: "center",
     padding: 25,
@@ -706,28 +697,15 @@ const styles = StyleSheet.create({
   alertBox: {
     width: "100%",
     maxWidth: 360,
-    backgroundColor: C.white,
-    borderRadius: 22,
+    borderRadius: 26,
     padding: 24,
     alignItems: "center",
-
-    borderWidth: 1.5,
-    borderColor: C.glassBorder,
-
-    elevation: 12,
-    shadowColor: "#102B4C",
-    shadowOffset: {
-      width: 0,
-      height: 8,
-    },
-    shadowOpacity: 0.2,
-    shadowRadius: 15,
   },
 
   alertIcon: {
     width: 85,
     height: 85,
-    borderRadius: 45,
+    borderRadius: 43,
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 15,
@@ -735,14 +713,14 @@ const styles = StyleSheet.create({
 
   alertTitle: {
     fontSize: 21,
-    fontWeight: "bold",
-    color: C.navy,
+    fontWeight: "900",
+    color: C.text,
     textAlign: "center",
   },
 
   alertMessage: {
-    fontSize: 14,
-    color: C.gray,
+    fontSize: 13,
+    color: C.textSecondary,
     textAlign: "center",
     lineHeight: 21,
     marginTop: 10,
@@ -751,14 +729,15 @@ const styles = StyleSheet.create({
   alertButton: {
     width: "100%",
     padding: 14,
-    borderRadius: 12,
+    borderRadius: 14,
     alignItems: "center",
     marginTop: 23,
+    ...blueGlow,
   },
 
   alertButtonText: {
     color: C.white,
-    fontWeight: "bold",
+    fontWeight: "900",
     fontSize: 14,
   },
 });

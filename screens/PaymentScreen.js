@@ -14,28 +14,38 @@ import {
   ScrollView,
   StatusBar,
   RefreshControl,
+  Modal,
+  Alert,
 } from "react-native";
 
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import QRCode from "react-native-qrcode-svg";
 
 import { supabase } from "../config/supabase";
 
+import {
+  C,
+  NeuView,
+  NeuTouchable,
+  NeuCard,
+} from "../theme/theme";
+
 const COLORS = {
-  primary: "#1677D2",
-  primaryDark: "#105BA8",
-  primaryLight: "#E8F3FF",
-  background: "#F4F7FB",
-  white: "#FFFFFF",
-  text: "#142238",
-  secondary: "#718096",
-  border: "#E5EAF1",
+  primary: C.blue || "#286DF6",
+  primaryDark: "#1D55C7",
+  primaryLight: "#DCEBFF",
+  background: C.background || "#DDE6F4",
+  white: C.surface || "#EFF4FC",
+  text: C.text || "#16346B",
+  secondary: C.secondaryText || "#2F4F86",
+  muted: C.muted || "#5F7FB3",
   green: "#16A34A",
-  greenLight: "#DCFCE7",
+  greenLight: "#DDF5E5",
   orange: "#D97706",
-  orangeLight: "#FEF3C7",
+  orangeLight: "#FFF0D1",
   red: "#DC2626",
-  redLight: "#FEE2E2",
+  redLight: "#FCE2E2",
 };
 
 export default function PaymentScreen({ route, navigation }) {
@@ -44,8 +54,13 @@ export default function PaymentScreen({ route, navigation }) {
   const [booking, setBooking] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
 
+  const [showCancelModal, setShowCancelModal] = useState(false);
+
+  // =====================================
   // LOAD BOOKING
+  // =====================================
   const loadBooking = useCallback(async (showLoader = true) => {
     try {
       if (!bookingId) {
@@ -88,13 +103,16 @@ export default function PaymentScreen({ route, navigation }) {
       setBooking(data);
     } catch (error) {
       console.log("Payment screen error:", error.message);
+      setBooking(null);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   }, [bookingId]);
 
+  // =====================================
   // INITIAL LOAD AND REALTIME
+  // =====================================
   useEffect(() => {
     if (!bookingId) {
       setLoading(false);
@@ -135,30 +153,165 @@ export default function PaymentScreen({ route, navigation }) {
     };
   }, [bookingId, loadBooking]);
 
+  // =====================================
   // PAYMENT STATUS
+  // =====================================
   const isPaid =
-    booking?.payment_status === "paid" &&
-    booking?.booking_status === "confirmed" &&
+    String(booking?.payment_status || "").toLowerCase() === "paid" &&
+    String(booking?.booking_status || "").toLowerCase() === "confirmed" &&
     !!booking?.ticket_code;
+
+  const isCancelled =
+    String(booking?.booking_status || "").toLowerCase() === "cancelled";
 
   const isExpired =
     !!booking?.expires_at &&
     new Date(booking.expires_at).getTime() < Date.now() &&
-    !isPaid;
+    !isPaid &&
+    !isCancelled;
 
+  // =====================================
   // QR CODE
+  // =====================================
   const bookingQR = booking?.booking_reference
     ? `ROUTEX-BOOKING:${booking.booking_reference}`
     : "";
 
+  // =====================================
   // VIEW TICKET
+  // =====================================
   const viewTicket = () => {
     navigation.navigate("Ticket", {
       bookingId: booking.booking_id,
     });
   };
 
+  // =====================================
+  // OPEN CANCEL CONFIRMATION
+  // =====================================
+  const cancelBooking = () => {
+    if (!booking || isPaid || isExpired || isCancelled || cancelling) {
+      return;
+    }
+
+    setShowCancelModal(true);
+  };
+
+  // =====================================
+  // CONFIRM CANCEL BOOKING
+  // =====================================
+  const confirmCancelBooking = async () => {
+    if (!booking || cancelling) return;
+
+    try {
+      setCancelling(true);
+      setShowCancelModal(false);
+
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError) throw userError;
+      if (!user) throw new Error("Please sign in again.");
+
+      // FETCH LATEST BOOKING STATUS
+      const {
+        data: currentBooking,
+        error: fetchError,
+      } = await supabase
+        .from("bookings")
+        .select(`
+          booking_id,
+          user_id,
+          booking_status,
+          payment_status,
+          expires_at
+        `)
+        .eq("booking_id", booking.booking_id)
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (fetchError) throw fetchError;
+
+      if (!currentBooking) {
+        throw new Error(
+          "Booking not found. Please refresh your booking."
+        );
+      }
+
+      const currentPaymentStatus = String(
+        currentBooking.payment_status || ""
+      ).toLowerCase();
+
+      const currentBookingStatus = String(
+        currentBooking.booking_status || ""
+      ).toLowerCase();
+
+      if (currentPaymentStatus === "paid") {
+        await loadBooking(false);
+
+        throw new Error(
+          "This booking has already been paid and cannot be cancelled here."
+        );
+      }
+
+      if (currentBookingStatus === "cancelled") {
+        await loadBooking(false);
+
+        throw new Error(
+          "This booking has already been cancelled."
+        );
+      }
+
+      if (
+        currentBooking.expires_at &&
+        new Date(currentBooking.expires_at).getTime() < Date.now()
+      ) {
+        await loadBooking(false);
+
+        throw new Error(
+          "This booking has expired and can no longer be cancelled."
+        );
+      }
+
+      // UPDATE BOOKING STATUS
+      const { error: updateError } = await supabase
+        .from("bookings")
+        .update({
+          booking_status: "cancelled",
+        })
+        .eq("booking_id", currentBooking.booking_id)
+        .eq("user_id", user.id)
+        .eq("booking_status", currentBooking.booking_status)
+        .eq("payment_status", currentBooking.payment_status);
+
+      if (updateError) throw updateError;
+
+      // RELOAD BOOKING
+      await loadBooking(false);
+
+      Alert.alert(
+        "Booking Cancelled",
+        "Your booking has been successfully cancelled.",
+        [{ text: "OK" }]
+      );
+
+    } catch (error) {
+      console.log("Cancel booking error:", error.message);
+
+      Alert.alert(
+        "Cancellation Failed",
+        error.message || "Unable to cancel your booking."
+      );
+    } finally {
+      setCancelling(false);
+    }
+  };
+
+  // =====================================
   // FORMAT AMOUNT
+  // =====================================
   const formattedAmount = Number(
     booking?.total_amount || 0
   ).toLocaleString("en-PH", {
@@ -166,7 +319,9 @@ export default function PaymentScreen({ route, navigation }) {
     maximumFractionDigits: 2,
   });
 
+  // =====================================
   // STATUS CONFIGURATION
+  // =====================================
   const getStatusConfig = () => {
     if (isPaid) {
       return {
@@ -175,6 +330,16 @@ export default function PaymentScreen({ route, navigation }) {
         icon: "checkmark-circle",
         color: COLORS.green,
         background: COLORS.greenLight,
+      };
+    }
+
+    if (isCancelled) {
+      return {
+        title: "Booking Cancelled",
+        subtitle: "This booking has been cancelled.",
+        icon: "close-circle",
+        color: COLORS.red,
+        background: COLORS.redLight,
       };
     }
 
@@ -199,11 +364,19 @@ export default function PaymentScreen({ route, navigation }) {
 
   const statusConfig = getStatusConfig();
 
+  // =====================================
   // LOADING
+  // =====================================
   if (loading) {
     return (
-      <View style={styles.center}>
-        <StatusBar barStyle="dark-content" backgroundColor={COLORS.white} />
+      <SafeAreaView
+        style={styles.center}
+        edges={["top", "left", "right"]}
+      >
+        <StatusBar
+          barStyle="dark-content"
+          backgroundColor={COLORS.background}
+        />
 
         <ActivityIndicator
           size="large"
@@ -213,23 +386,31 @@ export default function PaymentScreen({ route, navigation }) {
         <Text style={styles.loadingText}>
           Loading your booking...
         </Text>
-      </View>
+      </SafeAreaView>
     );
   }
 
+  // =====================================
   // BOOKING NOT FOUND
+  // =====================================
   if (!booking) {
     return (
-      <View style={styles.center}>
-        <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
+      <SafeAreaView
+        style={styles.center}
+        edges={["top", "left", "right"]}
+      >
+        <StatusBar
+          barStyle="dark-content"
+          backgroundColor={COLORS.background}
+        />
 
-        <View style={styles.emptyIcon}>
+        <NeuView style={styles.emptyIcon}>
           <Ionicons
             name="document-text-outline"
             size={42}
             color={COLORS.red}
           />
-        </View>
+        </NeuView>
 
         <Text style={styles.emptyTitle}>
           Booking Not Found
@@ -239,25 +420,88 @@ export default function PaymentScreen({ route, navigation }) {
           We couldn't retrieve your booking information.
         </Text>
 
-        <TouchableOpacity
+        <NeuTouchable
           style={styles.primaryButton}
           onPress={() => navigation.goBack()}
-          activeOpacity={0.8}
         >
           <Text style={styles.primaryButtonText}>
             Go Back
           </Text>
-        </TouchableOpacity>
-      </View>
+        </NeuTouchable>
+      </SafeAreaView>
     );
   }
 
+  // =====================================
+  // MAIN SCREEN
+  // =====================================
   return (
-    <View style={styles.screen}>
+    <SafeAreaView
+      style={styles.screen}
+      edges={["top", "left", "right"]}
+    >
       <StatusBar
         barStyle="dark-content"
-        backgroundColor={COLORS.white}
+        backgroundColor={COLORS.background}
       />
+
+      {/* CANCELLATION CONFIRMATION MODAL */}
+      <Modal
+        visible={showCancelModal}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => setShowCancelModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.alertContainer}>
+            <NeuView small style={styles.alertIcon}>
+              <Ionicons
+                name="alert-circle-outline"
+                size={43}
+                color={COLORS.red}
+              />
+            </NeuView>
+
+            <Text style={styles.alertTitle}>
+              Cancel Booking?
+            </Text>
+
+            <Text style={styles.alertMessage}>
+              Are you sure you want to cancel this booking?
+              This action cannot be undone.
+            </Text>
+
+            <View style={styles.alertButtons}>
+              <TouchableOpacity
+                style={styles.keepButton}
+                onPress={() => setShowCancelModal(false)}
+                disabled={cancelling}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.keepButtonText}>
+                  Keep Booking
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.confirmCancelButton}
+                onPress={confirmCancelBooking}
+                disabled={cancelling}
+                activeOpacity={0.8}
+              >
+                {cancelling ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.confirmCancelText}>
+                    Yes, Cancel
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -273,7 +517,7 @@ export default function PaymentScreen({ route, navigation }) {
       >
         {/* HEADER */}
         <View style={styles.header}>
-          <TouchableOpacity
+          <NeuTouchable
             style={styles.backButton}
             onPress={() => {
               if (navigation.canGoBack()) {
@@ -282,14 +526,13 @@ export default function PaymentScreen({ route, navigation }) {
                 navigation.navigate("MainTabs");
               }
             }}
-            activeOpacity={0.8}
           >
             <Ionicons
               name="arrow-back"
-              size={22}
-              color={COLORS.text}
+              size={21}
+              color={COLORS.primary}
             />
-          </TouchableOpacity>
+          </NeuTouchable>
 
           <View style={styles.headerTextContainer}>
             <Text style={styles.headerTitle}>
@@ -303,19 +546,14 @@ export default function PaymentScreen({ route, navigation }) {
         </View>
 
         {/* STATUS CARD */}
-        <View style={styles.statusCard}>
-          <View
-            style={[
-              styles.statusIcon,
-              { backgroundColor: statusConfig.background },
-            ]}
-          >
+        <NeuCard style={styles.statusCard}>
+          <NeuView small style={styles.statusIcon}>
             <Ionicons
               name={statusConfig.icon}
-              size={32}
+              size={30}
               color={statusConfig.color}
             />
-          </View>
+          </NeuView>
 
           <Text
             style={[
@@ -329,19 +567,19 @@ export default function PaymentScreen({ route, navigation }) {
           <Text style={styles.statusSubtitle}>
             {statusConfig.subtitle}
           </Text>
-        </View>
+        </NeuCard>
 
         {/* QR CODE CARD */}
-        {!isPaid && !isExpired && (
-          <View style={styles.card}>
+        {!isPaid && !isExpired && !isCancelled && (
+          <NeuCard style={styles.card}>
             <View style={styles.cardHeader}>
-              <View style={styles.cardHeaderIcon}>
+              <NeuView small style={styles.cardHeaderIcon}>
                 <Ionicons
                   name="qr-code-outline"
                   size={20}
                   color={COLORS.primary}
                 />
-              </View>
+              </NeuView>
 
               <View style={styles.cardHeaderText}>
                 <Text style={styles.cardTitle}>
@@ -354,7 +592,7 @@ export default function PaymentScreen({ route, navigation }) {
               </View>
             </View>
 
-            <View style={styles.qrWrapper}>
+            <NeuView inset style={styles.qrWrapper}>
               {bookingQR ? (
                 <QRCode
                   value={bookingQR}
@@ -367,12 +605,12 @@ export default function PaymentScreen({ route, navigation }) {
                   Booking reference unavailable.
                 </Text>
               )}
-            </View>
+            </NeuView>
 
-            <View style={styles.qrNote}>
+            <NeuView style={styles.qrNote}>
               <Ionicons
                 name="scan-outline"
-                size={18}
+                size={19}
                 color={COLORS.primary}
               />
 
@@ -380,18 +618,20 @@ export default function PaymentScreen({ route, navigation }) {
                 Let the cashier scan this QR code to retrieve
                 your booking details.
               </Text>
-            </View>
-          </View>
+            </NeuView>
+          </NeuCard>
         )}
 
         {/* PAID MESSAGE */}
         {isPaid && (
-          <View style={styles.successCard}>
-            <Ionicons
-              name="ticket-outline"
-              size={30}
-              color={COLORS.green}
-            />
+          <NeuCard style={styles.successCard}>
+            <NeuView small style={styles.successIcon}>
+              <Ionicons
+                name="ticket-outline"
+                size={29}
+                color={COLORS.green}
+              />
+            </NeuView>
 
             <Text style={styles.successTitle}>
               Your ticket is ready!
@@ -402,32 +642,33 @@ export default function PaymentScreen({ route, navigation }) {
               view your boarding ticket.
             </Text>
 
-            <TouchableOpacity
+            <NeuTouchable
               style={styles.ticketButton}
               onPress={viewTicket}
-              activeOpacity={0.85}
             >
               <Ionicons
                 name="ticket-outline"
                 size={19}
-                color={COLORS.white}
+                color="#FFFFFF"
               />
 
               <Text style={styles.primaryButtonText}>
                 View Boarding Ticket
               </Text>
-            </TouchableOpacity>
-          </View>
+            </NeuTouchable>
+          </NeuCard>
         )}
 
         {/* EXPIRED MESSAGE */}
         {isExpired && (
-          <View style={styles.expiredCard}>
-            <Ionicons
-              name="alert-circle-outline"
-              size={30}
-              color={COLORS.red}
-            />
+          <NeuCard style={styles.expiredCard}>
+            <NeuView small style={styles.expiredIcon}>
+              <Ionicons
+                name="alert-circle-outline"
+                size={29}
+                color={COLORS.red}
+              />
+            </NeuView>
 
             <Text style={styles.expiredTitle}>
               Payment Deadline Passed
@@ -437,19 +678,41 @@ export default function PaymentScreen({ route, navigation }) {
               Your booking has expired. Please contact the
               terminal cashier or make a new booking.
             </Text>
-          </View>
+          </NeuCard>
+        )}
+
+        {/* CANCELLED MESSAGE */}
+        {isCancelled && (
+          <NeuCard style={styles.expiredCard}>
+            <NeuView small style={styles.expiredIcon}>
+              <Ionicons
+                name="close-circle-outline"
+                size={29}
+                color={COLORS.red}
+              />
+            </NeuView>
+
+            <Text style={styles.expiredTitle}>
+              Booking Cancelled
+            </Text>
+
+            <Text style={styles.expiredSubtitle}>
+              You have cancelled this booking. No further
+              payment is required for this reservation.
+            </Text>
+          </NeuCard>
         )}
 
         {/* BOOKING DETAILS */}
-        <View style={styles.card}>
+        <NeuCard style={styles.card}>
           <View style={styles.cardHeader}>
-            <View style={styles.cardHeaderIcon}>
+            <NeuView small style={styles.cardHeaderIcon}>
               <Ionicons
                 name="receipt-outline"
                 size={20}
                 color={COLORS.primary}
               />
-            </View>
+            </NeuView>
 
             <View style={styles.cardHeaderText}>
               <Text style={styles.cardTitle}>
@@ -462,8 +725,7 @@ export default function PaymentScreen({ route, navigation }) {
             </View>
           </View>
 
-          {/* REFERENCE */}
-          <View style={styles.referenceBox}>
+          <NeuView inset style={styles.referenceBox}>
             <Text style={styles.referenceLabel}>
               BOOKING REFERENCE
             </Text>
@@ -471,9 +733,8 @@ export default function PaymentScreen({ route, navigation }) {
             <Text style={styles.referenceValue}>
               {booking.booking_reference || "Unavailable"}
             </Text>
-          </View>
+          </NeuView>
 
-          {/* AMOUNT */}
           <View style={styles.amountBox}>
             <Text style={styles.amountLabel}>
               Total Amount
@@ -486,7 +747,6 @@ export default function PaymentScreen({ route, navigation }) {
 
           <View style={styles.detailDivider} />
 
-          {/* STATUS DETAILS */}
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>
               Booking Status
@@ -508,7 +768,7 @@ export default function PaymentScreen({ route, navigation }) {
                 {
                   color: isPaid
                     ? COLORS.green
-                    : isExpired
+                    : isCancelled || isExpired
                     ? COLORS.red
                     : COLORS.orange,
                 },
@@ -541,18 +801,16 @@ export default function PaymentScreen({ route, navigation }) {
               </Text>
             </View>
           )}
-        </View>
+        </NeuCard>
 
         {/* PAYMENT INSTRUCTIONS */}
-        {!isPaid && !isExpired && (
-          <View style={styles.instructionCard}>
-            <View style={styles.instructionIcon}>
-              <Ionicons
-                name="information-circle"
-                size={22}
-                color={COLORS.primary}
-              />
-            </View>
+        {!isPaid && !isExpired && !isCancelled && (
+          <NeuView style={styles.instructionCard}>
+            <Ionicons
+              name="information-circle"
+              size={23}
+              color={COLORS.primary}
+            />
 
             <View style={styles.instructionContent}>
               <Text style={styles.instructionTitle}>
@@ -565,16 +823,15 @@ export default function PaymentScreen({ route, navigation }) {
                 become available once your payment is confirmed.
               </Text>
             </View>
-          </View>
+          </NeuView>
         )}
 
         {/* REFRESH PAYMENT */}
-        {!isPaid && (
-          <TouchableOpacity
+        {!isPaid && !isCancelled && (
+          <NeuTouchable
             style={styles.refreshButton}
             onPress={() => loadBooking(false)}
-            disabled={refreshing}
-            activeOpacity={0.8}
+            disabled={refreshing || cancelling}
           >
             {refreshing ? (
               <ActivityIndicator color={COLORS.primary} />
@@ -591,10 +848,35 @@ export default function PaymentScreen({ route, navigation }) {
                 </Text>
               </>
             )}
-          </TouchableOpacity>
+          </NeuTouchable>
         )}
 
-        {/* BACK TO HOME */}
+        {/* CANCEL BOOKING - RED BUTTON */}
+        {!isPaid && !isExpired && !isCancelled && (
+          <NeuTouchable
+            style={styles.cancelButton}
+            onPress={cancelBooking}
+            disabled={cancelling || refreshing}
+          >
+            {cancelling ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <>
+                <Ionicons
+                  name="close-circle-outline"
+                  size={19}
+                  color="#FFFFFF"
+                />
+
+                <Text style={styles.cancelButtonText}>
+                  Cancel Booking
+                </Text>
+              </>
+            )}
+          </NeuTouchable>
+        )}
+
+        {/* BACK TO HOME - BLUE BUTTON */}
         <TouchableOpacity
           style={styles.homeButton}
           onPress={() => {
@@ -609,20 +891,21 @@ export default function PaymentScreen({ route, navigation }) {
           <Ionicons
             name="home-outline"
             size={18}
-            color={COLORS.secondary}
+            color="#FFFFFF"
           />
 
           <Text style={styles.homeButtonText}>
             Back to Home
           </Text>
         </TouchableOpacity>
-
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
+// =====================================
 // STYLES
+// =====================================
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
@@ -631,7 +914,7 @@ const styles = StyleSheet.create({
 
   container: {
     padding: 17,
-    paddingBottom: 35,
+    paddingBottom: 45,
   },
 
   center: {
@@ -646,24 +929,23 @@ const styles = StyleSheet.create({
     color: COLORS.secondary,
     marginTop: 12,
     fontSize: 13,
+    fontWeight: "600",
   },
 
   // HEADER
   header: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 22,
+    marginBottom: 20,
   },
 
   backButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 13,
-    backgroundColor: COLORS.primaryLight,
+    width: 43,
+    height: 43,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
     marginRight: 13,
-    marginTop: 20
   },
 
   headerTextContainer: {
@@ -671,7 +953,6 @@ const styles = StyleSheet.create({
   },
 
   headerTitle: {
-    marginTop: 20,
     fontSize: 22,
     fontWeight: "900",
     color: COLORS.text,
@@ -685,60 +966,52 @@ const styles = StyleSheet.create({
 
   // STATUS CARD
   statusCard: {
-  backgroundColor: COLORS.white,
-  borderRadius: 16,
-  borderWidth: 1,
-  borderColor: COLORS.border,
-  paddingVertical: 15,
-  paddingHorizontal: 18,
-  alignItems: "center",
-  marginBottom: 15,
-},
+    padding: 18,
+    alignItems: "center",
+    marginBottom: 16,
+    borderRadius: 18,
+  },
 
   statusIcon: {
-  width: 48,
-  height: 48,
-  borderRadius: 15,
-  alignItems: "center",
-  justifyContent: "center",
-  marginBottom: 8,
-},
+    width: 55,
+    height: 55,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 10,
+  },
 
-statusTitle: {
-  fontSize: 17,
-  fontWeight: "900",
-  textAlign: "center",
-},
+  statusTitle: {
+    fontSize: 17,
+    fontWeight: "900",
+    textAlign: "center",
+  },
 
-statusSubtitle: {
-  fontSize: 11,
-  color: COLORS.secondary,
-  marginTop: 4,
-  textAlign: "center",
-  lineHeight: 16,
-},
+  statusSubtitle: {
+    fontSize: 11,
+    color: COLORS.secondary,
+    marginTop: 5,
+    textAlign: "center",
+    lineHeight: 17,
+  },
 
   // GENERAL CARD
   card: {
-    backgroundColor: COLORS.white,
+    padding: 17,
+    marginBottom: 16,
     borderRadius: 18,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    padding: 18,
-    marginBottom: 15,
   },
 
   cardHeader: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 18,
+    marginBottom: 17,
   },
 
   cardHeaderIcon: {
     width: 42,
     height: 42,
-    borderRadius: 13,
-    backgroundColor: COLORS.primaryLight,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
@@ -750,7 +1023,7 @@ statusSubtitle: {
 
   cardTitle: {
     fontSize: 15,
-    fontWeight: "800",
+    fontWeight: "900",
     color: COLORS.text,
   },
 
@@ -763,11 +1036,8 @@ statusSubtitle: {
   // QR CODE
   qrWrapper: {
     alignSelf: "center",
-    padding: 17,
-    backgroundColor: COLORS.white,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 15,
+    padding: 19,
+    borderRadius: 17,
     marginVertical: 5,
   },
 
@@ -779,15 +1049,14 @@ statusSubtitle: {
   qrNote: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: COLORS.primaryLight,
     padding: 13,
-    borderRadius: 12,
+    borderRadius: 13,
     marginTop: 17,
   },
 
   qrNoteText: {
     flex: 1,
-    color: COLORS.primaryDark,
+    color: COLORS.secondary,
     fontSize: 11,
     lineHeight: 18,
     marginLeft: 9,
@@ -795,15 +1064,14 @@ statusSubtitle: {
 
   // BOOKING REFERENCE
   referenceBox: {
-    backgroundColor: COLORS.primaryLight,
     padding: 15,
-    borderRadius: 13,
+    borderRadius: 14,
   },
 
   referenceLabel: {
     fontSize: 10,
-    color: COLORS.secondary,
-    fontWeight: "800",
+    color: COLORS.muted,
+    fontWeight: "900",
     letterSpacing: 0.8,
   },
 
@@ -822,6 +1090,7 @@ statusSubtitle: {
   amountLabel: {
     fontSize: 12,
     color: COLORS.secondary,
+    fontWeight: "600",
   },
 
   amountValue: {
@@ -833,7 +1102,7 @@ statusSubtitle: {
 
   detailDivider: {
     height: 1,
-    backgroundColor: COLORS.border,
+    backgroundColor: "#C8D7ED",
     marginBottom: 7,
   },
 
@@ -853,7 +1122,7 @@ statusSubtitle: {
 
   detailValue: {
     fontSize: 12,
-    fontWeight: "800",
+    fontWeight: "900",
     color: COLORS.text,
     textAlign: "right",
     flex: 1,
@@ -861,7 +1130,7 @@ statusSubtitle: {
 
   deadlineValue: {
     fontSize: 11,
-    fontWeight: "600",
+    fontWeight: "700",
     color: COLORS.text,
     textAlign: "right",
     flex: 1,
@@ -870,42 +1139,44 @@ statusSubtitle: {
   // PAYMENT INSTRUCTIONS
   instructionCard: {
     flexDirection: "row",
-    backgroundColor: COLORS.primaryLight,
-    borderRadius: 15,
     padding: 15,
-    marginBottom: 15,
-  },
-
-  instructionIcon: {
-    marginRight: 10,
+    borderRadius: 15,
+    marginBottom: 16,
+    alignItems: "flex-start",
   },
 
   instructionContent: {
     flex: 1,
+    marginLeft: 10,
   },
 
   instructionTitle: {
     color: COLORS.primaryDark,
     fontSize: 13,
-    fontWeight: "800",
+    fontWeight: "900",
     marginBottom: 5,
   },
 
   instructionText: {
-    color: "#315B7E",
+    color: COLORS.secondary,
     fontSize: 11,
     lineHeight: 18,
   },
 
   // SUCCESS
   successCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: 18,
-    padding: 22,
+    padding: 21,
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#BBF7D0",
-    marginBottom: 15,
+    marginBottom: 16,
+    borderRadius: 18,
+  },
+
+  successIcon: {
+    width: 55,
+    height: 55,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   successTitle: {
@@ -927,22 +1198,27 @@ statusSubtitle: {
     backgroundColor: COLORS.primary,
     width: "100%",
     padding: 15,
-    borderRadius: 12,
+    borderRadius: 14,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     marginTop: 20,
   },
 
-  // EXPIRED
+  // EXPIRED AND CANCELLED
   expiredCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: 18,
-    padding: 22,
+    padding: 21,
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#FECACA",
-    marginBottom: 15,
+    marginBottom: 16,
+    borderRadius: 18,
+  },
+
+  expiredIcon: {
+    width: 55,
+    height: 55,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   expiredTitle: {
@@ -965,23 +1241,20 @@ statusSubtitle: {
     backgroundColor: COLORS.primary,
     paddingHorizontal: 30,
     paddingVertical: 14,
-    borderRadius: 12,
+    borderRadius: 14,
     marginTop: 20,
   },
 
   primaryButtonText: {
-    color: COLORS.white,
-    fontWeight: "800",
+    color: "#FFFFFF",
+    fontWeight: "900",
     fontSize: 13,
     marginLeft: 8,
   },
 
   refreshButton: {
-    backgroundColor: COLORS.white,
-    borderWidth: 1,
-    borderColor: COLORS.border,
     padding: 15,
-    borderRadius: 13,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
@@ -991,23 +1264,128 @@ statusSubtitle: {
   refreshButtonText: {
     color: COLORS.primary,
     fontSize: 13,
-    fontWeight: "800",
+    fontWeight: "900",
     marginLeft: 8,
   },
 
-  homeButton: {
+  // RED CANCEL BUTTON
+  cancelButton: {
+    backgroundColor: COLORS.red,
     padding: 15,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
-    marginTop: 2,
+    marginBottom: 10,
+    elevation: 3,
+  },
+
+  cancelButtonText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "900",
+    marginLeft: 8,
+  },
+
+  // BLUE HOME BUTTON
+  homeButton: {
+    backgroundColor: COLORS.primary,
+    padding: 15,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    marginTop: 8,
+    marginBottom: 15,
+    elevation: 3,
   },
 
   homeButtonText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "900",
+    marginLeft: 8,
+  },
+
+  // SWEET ALERT MODAL
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(15, 35, 70, 0.45)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 25,
+  },
+
+  alertContainer: {
+    width: "100%",
+    maxWidth: 360,
+    backgroundColor: COLORS.background,
+    borderRadius: 24,
+    padding: 24,
+    alignItems: "center",
+    elevation: 10,
+  },
+
+  alertIcon: {
+    width: 75,
+    height: 75,
+    borderRadius: 25,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+  },
+
+  alertTitle: {
+    fontSize: 21,
+    fontWeight: "900",
+    color: COLORS.text,
+    textAlign: "center",
+  },
+
+  alertMessage: {
+    fontSize: 13,
+    color: COLORS.secondary,
+    textAlign: "center",
+    lineHeight: 21,
+    marginTop: 10,
+    marginBottom: 24,
+  },
+
+  alertButtons: {
+    flexDirection: "row",
+    width: "100%",
+    gap: 10,
+  },
+
+  keepButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: COLORS.background,
+    elevation: 3,
+  },
+
+  keepButtonText: {
     color: COLORS.secondary,
     fontSize: 12,
-    fontWeight: "700",
-    marginLeft: 7,
+    fontWeight: "900",
+  },
+
+  confirmCancelButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: COLORS.red,
+  },
+
+  confirmCancelText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "900",
   },
 
   // EMPTY STATE
@@ -1015,7 +1393,6 @@ statusSubtitle: {
     width: 80,
     height: 80,
     borderRadius: 25,
-    backgroundColor: COLORS.redLight,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 17,

@@ -23,35 +23,33 @@ import {
   stopOperatorBackgroundGPS,
 } from "../tasks/backgroundLocation";
 
+import {
+  C,
+  NeuView,
+  NeuTouchable,
+  NeuCard,
+} from "../theme/theme";
+
 // ==========================================
-// THEME
+// COLORS
 // ==========================================
 
 const COLORS = {
-  background: "#EDF3F8",
+  background: C.background,
+  surface: C.surface,
+  inset: C.inset,
+  lightShadow: C.lightShadow,
+  darkShadow: C.darkShadow,
 
-  // Outer glass cards
-  glass: "#FFFFFF",
-  glassBorder: "#FFFFFF",
+  primary: C.blue,
+  primaryDark: C.text,
 
-  // Inner surfaces
-  surface: "#F5F8FC",
-  surfaceBorder: "#E5ECF4",
+  text: C.text,
+  secondary: C.textSecondary,
+  muted: C.muted,
+  white: C.white,
 
-  // Interactive controls
-  interactive: "#EAF3FD",
-  interactiveBorder: "#C5D9EF",
-  interactivePressed: "#DCEBFA",
-
-  primary: "#286DF6",
-  primaryDark: "#145DA8",
-
-  text: "#14243A",
-  secondary: "#64748B",
-  muted: "#94A3B8",
-
-  white: "#FFFFFF",
-
+  // Preserve bus availability colors
   green: "#16A34A",
   lightGreen: "#ECFDF3",
   greenBorder: "#BBF7D0",
@@ -234,9 +232,7 @@ export default function BusManagementScreen({ navigation, route }) {
     const normalizedTerminal = terminalName.trim().toLowerCase();
 
     const filteredStops = (data || []).filter((stop) => {
-      return (
-        stop.stop_name?.trim().toLowerCase() !== normalizedTerminal
-      );
+      return stop.stop_name?.trim().toLowerCase() !== normalizedTerminal;
     });
 
     setRouteStops(filteredStops);
@@ -1059,10 +1055,7 @@ export default function BusManagementScreen({ navigation, route }) {
         bus?.bus_name || bus?.plate_number || "this bus"
       }?`,
       [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
+        { text: "Cancel", style: "cancel" },
         {
           text: "End Trip",
           style: "destructive",
@@ -1102,7 +1095,6 @@ export default function BusManagementScreen({ navigation, route }) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color={COLORS.primary} />
-
         <Text style={styles.loadingText}>
           Loading bus information...
         </Text>
@@ -1134,13 +1126,12 @@ export default function BusManagementScreen({ navigation, route }) {
           This bus is not assigned to your account.
         </Text>
 
-        <TouchableOpacity
-          activeOpacity={0.75}
+        <NeuTouchable
           style={styles.primaryButton}
           onPress={() => navigation.goBack()}
         >
           <Text style={styles.primaryButtonText}>Go Back</Text>
-        </TouchableOpacity>
+        </NeuTouchable>
 
         <CustomAlert
           visible={alertData.visible}
@@ -1179,8 +1170,8 @@ export default function BusManagementScreen({ navigation, route }) {
         {/* HEADER */}
 
         <View style={styles.header}>
-          <TouchableOpacity
-            activeOpacity={0.7}
+          <NeuTouchable
+            small
             style={styles.headerButton}
             onPress={() => navigation.goBack()}
           >
@@ -1189,15 +1180,15 @@ export default function BusManagementScreen({ navigation, route }) {
               size={22}
               color={COLORS.primary}
             />
-          </TouchableOpacity>
+          </NeuTouchable>
 
           <View style={{ flex: 1 }}>
             <Text style={styles.eyebrow}>ROUTEX OPERATOR</Text>
             <Text style={styles.title}>Bus Management</Text>
           </View>
 
-          <TouchableOpacity
-            activeOpacity={0.7}
+          <NeuTouchable
+            small
             style={styles.headerButton}
             onPress={onRefresh}
           >
@@ -1206,20 +1197,20 @@ export default function BusManagementScreen({ navigation, route }) {
               size={21}
               color={COLORS.primary}
             />
-          </TouchableOpacity>
+          </NeuTouchable>
         </View>
 
         {/* BUS INFORMATION */}
 
-        <View style={styles.busCard}>
+        <NeuCard style={styles.busCard}>
           <View style={styles.busTopRow}>
-            <View style={styles.busIcon}>
+            <NeuView small style={styles.busIcon}>
               <Ionicons
                 name="bus"
                 size={30}
                 color={COLORS.primary}
               />
-            </View>
+            </NeuView>
 
             <View style={{ flex: 1 }}>
               <Text style={styles.busName}>
@@ -1231,11 +1222,11 @@ export default function BusManagementScreen({ navigation, route }) {
               </Text>
             </View>
 
-            <View style={styles.busTypeBadge}>
+            <NeuView small style={styles.busTypeBadge}>
               <Text style={styles.busTypeBadgeText}>
                 {bus.bus_type || "BUS"}
               </Text>
-            </View>
+            </NeuView>
           </View>
 
           <View style={styles.detailsRow}>
@@ -1245,7 +1236,6 @@ export default function BusManagementScreen({ navigation, route }) {
                 size={17}
                 color={COLORS.secondary}
               />
-
               <Text style={styles.detailText}>
                 {bus.bus_type || "Bus"}
               </Text>
@@ -1257,7 +1247,6 @@ export default function BusManagementScreen({ navigation, route }) {
                 size={17}
                 color={COLORS.secondary}
               />
-
               <Text style={styles.detailText}>
                 {bus.capacity ?? "N/A"} seats
               </Text>
@@ -1273,25 +1262,24 @@ export default function BusManagementScreen({ navigation, route }) {
               {(bus.bus_status || "offline").replace(/_/g, " ")}
             </Text>
           </View>
-        </View>
+        </NeuCard>
 
         {/* AVAILABILITY */}
 
-        <View style={styles.card}>
+        <NeuCard style={styles.card}>
           <View style={styles.cardHeading}>
-            <View style={styles.headingIcon}>
+            <NeuView small style={styles.headingIcon}>
               <Ionicons
                 name="radio-button-on"
                 size={20}
                 color={COLORS.primary}
               />
-            </View>
+            </NeuView>
 
             <View style={{ flex: 1 }}>
               <Text style={styles.sectionTitle}>
                 Bus Availability
               </Text>
-
               <Text style={styles.sectionSubtitle}>
                 Set passenger availability for this bus
               </Text>
@@ -1384,25 +1372,22 @@ export default function BusManagementScreen({ navigation, route }) {
               {getAvailabilityLabel(bus.availability_status)}
             </Text>
           </View>
-        </View>
+        </NeuCard>
 
         {/* CURRENT OR PLANNED TRIP */}
 
-        <View style={styles.card}>
+        <NeuCard style={styles.card}>
           <View style={styles.cardHeading}>
-            <View style={styles.headingIcon}>
+            <NeuView small style={styles.headingIcon}>
               <Ionicons
                 name="navigate"
                 size={20}
                 color={COLORS.primary}
               />
-            </View>
+            </NeuView>
 
             <View style={{ flex: 1 }}>
-              <Text style={styles.sectionTitle}>
-                Trip Status
-              </Text>
-
+              <Text style={styles.sectionTitle}>Trip Status</Text>
               <Text style={styles.sectionSubtitle}>
                 Current trip assigned to this bus
               </Text>
@@ -1411,7 +1396,7 @@ export default function BusManagementScreen({ navigation, route }) {
 
           {currentTrip ? (
             <>
-              <View style={styles.tripInfoBox}>
+              <NeuView inset style={styles.tripInfoBox}>
                 <Text style={styles.tripLabel}>
                   {currentTrip.status === "active"
                     ? "CURRENT TRIP"
@@ -1452,32 +1437,31 @@ export default function BusManagementScreen({ navigation, route }) {
                       : "Scheduled"}
                   </Text>
                 </View>
-              </View>
+              </NeuView>
 
               {currentTrip.status === "planned" && (
-                <TouchableOpacity
-                  activeOpacity={0.75}
-                  style={styles.dockingButton}
-                  disabled={saving}
-                  onPress={openDocking}
-                >
-                  <Ionicons
-                    name="business-outline"
-                    size={20}
-                    color={COLORS.primary}
-                  />
+                  <NeuTouchable
+                    style={styles.dockingButton}
+                    disabled={saving}
+                    onPress={openDocking}
+                  >
+                    <Ionicons
+                      name="business-outline"
+                      size={20}
+                      color={COLORS.white}
+                    />
 
-                  <Text style={styles.dockingButtonText}>
-                    Continue to Operator Docking
-                  </Text>
+                    <Text style={styles.dockingButtonText}>
+                      Continue to Operator Docking
+                    </Text>
 
-                  <Ionicons
-                    name="chevron-forward"
-                    size={17}
-                    color={COLORS.primary}
-                  />
-                </TouchableOpacity>
-              )}
+                    <Ionicons
+                      name="chevron-forward"
+                      size={17}
+                      color={COLORS.white}
+                    />
+                  </NeuTouchable>
+                )}
 
               {currentTrip.status === "active" && (
                 <TouchableOpacity
@@ -1498,7 +1482,6 @@ export default function BusManagementScreen({ navigation, route }) {
                         size={22}
                         color={COLORS.white}
                       />
-
                       <Text style={styles.endTripButtonText}>
                         End Current Trip
                       </Text>
@@ -1508,7 +1491,7 @@ export default function BusManagementScreen({ navigation, route }) {
               )}
             </>
           ) : (
-            <View style={styles.emptyTripBox}>
+            <NeuView inset style={styles.emptyTripBox}>
               <Ionicons
                 name="information-circle-outline"
                 size={22}
@@ -1519,28 +1502,25 @@ export default function BusManagementScreen({ navigation, route }) {
                 This bus has no planned or active trip. You can create
                 a new trip below.
               </Text>
-            </View>
+            </NeuView>
           )}
-        </View>
+        </NeuCard>
 
         {/* CREATE TRIP */}
 
         {!currentTrip && (
-          <View style={styles.card}>
+          <NeuCard style={styles.card}>
             <View style={styles.cardHeading}>
-              <View style={styles.headingIcon}>
+              <NeuView small style={styles.headingIcon}>
                 <Ionicons
                   name="add-circle-outline"
                   size={20}
                   color={COLORS.primary}
                 />
-              </View>
+              </NeuView>
 
               <View style={{ flex: 1 }}>
-                <Text style={styles.sectionTitle}>
-                  Create a Trip
-                </Text>
-
+                <Text style={styles.sectionTitle}>Create a Trip</Text>
                 <Text style={styles.sectionSubtitle}>
                   Select a route and destination
                 </Text>
@@ -1549,18 +1529,15 @@ export default function BusManagementScreen({ navigation, route }) {
 
             {/* ROUTE */}
 
-            <Text style={styles.inputLabel}>
-              Select Route
-            </Text>
+            <Text style={styles.inputLabel}>Select Route</Text>
 
             {routeLoading ? (
-              <View style={styles.loadingBox}>
+              <NeuView inset style={styles.loadingBox}>
                 <ActivityIndicator color={COLORS.primary} />
-
                 <Text style={styles.loadingBoxText}>
                   Loading company routes...
                 </Text>
-              </View>
+              </NeuView>
             ) : routes.length === 0 ? (
               <View style={styles.warningBox}>
                 <Ionicons
@@ -1577,20 +1554,19 @@ export default function BusManagementScreen({ navigation, route }) {
               </View>
             ) : (
               <>
-                <TouchableOpacity
-                  activeOpacity={0.7}
+                <NeuTouchable
                   style={styles.dropdown}
                   onPress={() => setRouteOpen(!routeOpen)}
                   disabled={saving}
                 >
                   <View style={styles.dropdownLeft}>
-                    <View style={styles.dropdownIcon}>
+                    <NeuView inset style={styles.dropdownIcon}>
                       <Ionicons
                         name="map-outline"
                         size={19}
                         color={COLORS.primary}
                       />
-                    </View>
+                    </NeuView>
 
                     <Text style={styles.dropdownText}>
                       {selectedRoute?.route_name || "Choose a route"}
@@ -1602,10 +1578,10 @@ export default function BusManagementScreen({ navigation, route }) {
                     size={20}
                     color={COLORS.primary}
                   />
-                </TouchableOpacity>
+                </NeuTouchable>
 
                 {routeOpen && (
-                  <View style={styles.dropdownList}>
+                  <NeuView inset style={styles.dropdownList}>
                     {routes.map((item) => (
                       <TouchableOpacity
                         activeOpacity={0.7}
@@ -1633,17 +1609,12 @@ export default function BusManagementScreen({ navigation, route }) {
                         )}
                       </TouchableOpacity>
                     ))}
-                  </View>
+                  </NeuView>
                 )}
 
                 {/* DESTINATION */}
 
-                <Text
-                  style={[
-                    styles.inputLabel,
-                    { marginTop: 14 },
-                  ]}
-                >
+                <Text style={[styles.inputLabel, { marginTop: 14 }]}>
                   Select Destination
                 </Text>
 
@@ -1662,8 +1633,7 @@ export default function BusManagementScreen({ navigation, route }) {
                   </View>
                 ) : (
                   <>
-                    <TouchableOpacity
-                      activeOpacity={0.7}
+                    <NeuTouchable
                       style={styles.dropdown}
                       onPress={() =>
                         setDestinationOpen(!destinationOpen)
@@ -1671,13 +1641,13 @@ export default function BusManagementScreen({ navigation, route }) {
                       disabled={saving}
                     >
                       <View style={styles.dropdownLeft}>
-                        <View style={styles.dropdownIcon}>
+                        <NeuView inset style={styles.dropdownIcon}>
                           <Ionicons
                             name="location-outline"
                             size={19}
                             color={COLORS.primary}
                           />
-                        </View>
+                        </NeuView>
 
                         <Text
                           style={[
@@ -1698,10 +1668,10 @@ export default function BusManagementScreen({ navigation, route }) {
                         size={20}
                         color={COLORS.primary}
                       />
-                    </TouchableOpacity>
+                    </NeuTouchable>
 
                     {destinationOpen && (
-                      <View style={styles.dropdownList}>
+                      <NeuView inset style={styles.dropdownList}>
                         <ScrollView
                           nestedScrollEnabled
                           style={{ maxHeight: 210 }}
@@ -1731,7 +1701,7 @@ export default function BusManagementScreen({ navigation, route }) {
                             </TouchableOpacity>
                           ))}
                         </ScrollView>
-                      </View>
+                      </NeuView>
                     )}
                   </>
                 )}
@@ -1769,7 +1739,6 @@ export default function BusManagementScreen({ navigation, route }) {
                     size={22}
                     color={COLORS.white}
                   />
-
                   <Text style={styles.primaryButtonText}>
                     Start Transit Now
                   </Text>
@@ -1777,8 +1746,7 @@ export default function BusManagementScreen({ navigation, route }) {
               )}
             </TouchableOpacity>
 
-            <TouchableOpacity
-              activeOpacity={0.7}
+            <NeuTouchable
               style={[
                 styles.secondaryButton,
                 (saving ||
@@ -1806,9 +1774,9 @@ export default function BusManagementScreen({ navigation, route }) {
               <Text style={styles.secondaryButtonText}>
                 Manage Docking First
               </Text>
-            </TouchableOpacity>
+            </NeuTouchable>
 
-            <View style={styles.infoBox}>
+            <NeuView inset style={styles.infoBox}>
               <Ionicons
                 name="information-circle-outline"
                 size={17}
@@ -1820,14 +1788,12 @@ export default function BusManagementScreen({ navigation, route }) {
                 Manage Docking First creates a planned trip and opens
                 the docking screen.
               </Text>
-            </View>
-          </View>
+            </NeuView>
+          </NeuCard>
         )}
 
         <View style={{ height: 35 }} />
       </ScrollView>
-
-      {/* CUSTOM ALERT */}
 
       <CustomAlert
         visible={alertData.visible}
@@ -1887,16 +1853,9 @@ const styles = StyleSheet.create({
     width: 43,
     height: 43,
     borderRadius: 14,
-    backgroundColor: COLORS.glass,
-    borderWidth: 1,
-    borderColor: COLORS.glassBorder,
+    backgroundColor: COLORS.surface,
     justifyContent: "center",
     alignItems: "center",
-    shadowColor: "#64748B",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.07,
-    shadowRadius: 7,
-    elevation: 2,
   },
 
   eyebrow: {
@@ -1913,20 +1872,13 @@ const styles = StyleSheet.create({
     color: COLORS.text,
   },
 
-  // BUS INFORMATION CARD
+  // BUS INFORMATION
 
   busCard: {
-    backgroundColor: COLORS.glass,
-    borderRadius: 20,
+    backgroundColor: COLORS.surface,
+    borderRadius: 22,
     padding: 19,
-    marginBottom: 15,
-    borderWidth: 1,
-    borderColor: COLORS.glassBorder,
-    shadowColor: "#64748B",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    elevation: 3,
+    marginBottom: 18,
   },
 
   busTopRow: {
@@ -1938,9 +1890,7 @@ const styles = StyleSheet.create({
     width: 53,
     height: 53,
     borderRadius: 16,
-    backgroundColor: COLORS.interactive,
-    borderWidth: 1,
-    borderColor: COLORS.interactiveBorder,
+    backgroundColor: COLORS.surface,
     justifyContent: "center",
     alignItems: "center",
     marginRight: 13,
@@ -1959,9 +1909,7 @@ const styles = StyleSheet.create({
   },
 
   busTypeBadge: {
-    backgroundColor: COLORS.interactive,
-    borderWidth: 1,
-    borderColor: COLORS.interactiveBorder,
+    backgroundColor: COLORS.inset,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 9,
@@ -1996,7 +1944,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     borderTopWidth: 1,
-    borderTopColor: COLORS.surfaceBorder,
+    borderTopColor: COLORS.darkShadow,
     paddingTop: 13,
     marginTop: 16,
   },
@@ -2013,20 +1961,13 @@ const styles = StyleSheet.create({
     textTransform: "capitalize",
   },
 
-  // OUTER GLASS CARDS
+  // SECTION CARDS
 
   card: {
-    backgroundColor: COLORS.glass,
-    borderRadius: 19,
+    backgroundColor: COLORS.surface,
+    borderRadius: 22,
     padding: 17,
-    marginBottom: 15,
-    borderWidth: 1,
-    borderColor: COLORS.glassBorder,
-    shadowColor: "#64748B",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.07,
-    shadowRadius: 9,
-    elevation: 2,
+    marginBottom: 18,
   },
 
   cardHeading: {
@@ -2040,9 +1981,7 @@ const styles = StyleSheet.create({
     width: 39,
     height: 39,
     borderRadius: 12,
-    backgroundColor: COLORS.interactive,
-    borderWidth: 1,
-    borderColor: COLORS.interactiveBorder,
+    backgroundColor: COLORS.surface,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -2059,7 +1998,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 
-  // AVAILABILITY
+  // AVAILABILITY - PRESERVED COLORS
 
   availabilityOptions: {
     flexDirection: "row",
@@ -2133,7 +2072,7 @@ const styles = StyleSheet.create({
     marginTop: 15,
     paddingTop: 13,
     borderTopWidth: 1,
-    borderTopColor: COLORS.surfaceBorder,
+    borderTopColor: COLORS.darkShadow,
   },
 
   currentAvailabilityLabel: {
@@ -2150,11 +2089,9 @@ const styles = StyleSheet.create({
   // TRIP INFORMATION
 
   tripInfoBox: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 13,
+    backgroundColor: COLORS.inset,
+    borderRadius: 15,
     padding: 14,
-    borderWidth: 1,
-    borderColor: COLORS.surfaceBorder,
   },
 
   tripLabel: {
@@ -2225,11 +2162,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 9,
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.inset,
     padding: 13,
-    borderRadius: 11,
-    borderWidth: 1,
-    borderColor: COLORS.surfaceBorder,
+    borderRadius: 13,
   },
 
   emptyTripText: {
@@ -2248,24 +2183,17 @@ const styles = StyleSheet.create({
     marginBottom: 9,
   },
 
-  // DROPDOWN CONTROLS
+  // DROPDOWNS
 
   dropdown: {
     minHeight: 54,
-    borderRadius: 13,
-    backgroundColor: COLORS.interactive,
-    borderWidth: 1.3,
-    borderColor: COLORS.interactiveBorder,
+    borderRadius: 14,
+    backgroundColor: COLORS.surface,
     paddingHorizontal: 12,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: 10,
-    shadowColor: "#286DF6",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 1,
   },
 
   dropdownLeft: {
@@ -2279,9 +2207,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 10,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: COLORS.interactiveBorder,
+    backgroundColor: COLORS.inset,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -2299,10 +2225,8 @@ const styles = StyleSheet.create({
   },
 
   dropdownList: {
-    borderWidth: 1.2,
-    borderColor: COLORS.interactiveBorder,
-    borderRadius: 13,
-    backgroundColor: COLORS.glass,
+    backgroundColor: COLORS.inset,
+    borderRadius: 14,
     marginBottom: 13,
     overflow: "hidden",
     paddingHorizontal: 5,
@@ -2316,8 +2240,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.surfaceBorder,
-    backgroundColor: COLORS.glass,
+    borderBottomColor: COLORS.darkShadow,
+    backgroundColor: COLORS.inset,
   },
 
   dropdownItemText: {
@@ -2340,10 +2264,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 10,
-    backgroundColor: COLORS.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.surfaceBorder,
+    backgroundColor: COLORS.inset,
+    borderRadius: 13,
     marginBottom: 13,
   },
 
@@ -2376,7 +2298,7 @@ const styles = StyleSheet.create({
 
   primaryButton: {
     minHeight: 53,
-    borderRadius: 14,
+    borderRadius: 15,
     backgroundColor: COLORS.primary,
     flexDirection: "row",
     alignItems: "center",
@@ -2384,10 +2306,10 @@ const styles = StyleSheet.create({
     gap: 9,
     marginTop: 12,
     shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.17,
-    shadowRadius: 6,
-    elevation: 3,
+    shadowOffset: { width: 3, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 7,
+    elevation: 4,
   },
 
   primaryButtonText: {
@@ -2400,10 +2322,8 @@ const styles = StyleSheet.create({
 
   secondaryButton: {
     minHeight: 52,
-    borderRadius: 13,
-    backgroundColor: COLORS.interactive,
-    borderWidth: 1.3,
-    borderColor: COLORS.interactiveBorder,
+    borderRadius: 14,
+    backgroundColor: COLORS.surface,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -2420,26 +2340,24 @@ const styles = StyleSheet.create({
   // DOCKING BUTTON
 
   dockingButton: {
-    minHeight: 51,
-    borderRadius: 13,
-    backgroundColor: COLORS.interactive,
-    borderWidth: 1.3,
-    borderColor: COLORS.interactiveBorder,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 9,
-    marginTop: 13,
-    paddingHorizontal: 12,
-  },
+  minHeight: 51,
+  borderRadius: 14,
+  backgroundColor: COLORS.primary,
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 9,
+  marginTop: 13,
+  paddingHorizontal: 12,
+},
 
   dockingButtonText: {
-    color: COLORS.primaryDark,
-    fontWeight: "800",
-    fontSize: 12,
-    flex: 1,
-    textAlign: "center",
-  },
+  color: COLORS.white,
+  fontWeight: "800",
+  fontSize: 12,
+  flex: 1,
+  textAlign: "center",
+},
 
   // END TRIP
 
@@ -2473,10 +2391,8 @@ const styles = StyleSheet.create({
     gap: 7,
     marginTop: 14,
     padding: 12,
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.surfaceBorder,
-    borderRadius: 11,
+    backgroundColor: COLORS.inset,
+    borderRadius: 13,
   },
 
   infoText: {

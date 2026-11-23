@@ -19,7 +19,39 @@ import {
   MaterialCommunityIcons,
 } from "@expo/vector-icons";
 
+import { SafeAreaView } from "react-native-safe-area-context";
+
 import { supabase } from "../config/supabase";
+
+import {
+  C,
+  NeuView,
+  NeuTouchable,
+  NeuCard,
+} from "../theme/theme";
+
+// =====================================
+// ROUTEX CASHIER DASHBOARD
+// SOFT NEUMORPHIC BLUE THEME
+// =====================================
+
+const COLORS = {
+  primary: C?.blue || "#286DF6",
+  secondary: C?.secondary || "#5A95FC",
+  lightBlue: C?.lightBlue || "#9DC6FB",
+  background: C?.background || "#DDE6F4",
+  surface: C?.surface || "#EFF4FC",
+  inset: C?.inset || "#E1E9F6",
+  text: C?.text || "#16346B",
+  secondaryText: C?.secondaryText || "#2F4F86",
+  muted: C?.muted || "#5F7FB3",
+  green: "#16A34A",
+  greenLight: "#DDF5E5",
+  orange: "#D97706",
+  orangeLight: "#FFF0D6",
+  red: "#DC2626",
+  redLight: "#FCE4E4",
+};
 
 export default function CashierDashboardScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
@@ -88,7 +120,6 @@ export default function CashierDashboardScreen({ navigation }) {
     }
 
     try {
-      // CHECK LOGGED-IN USER
       const {
         data: { user },
         error: authError,
@@ -206,7 +237,6 @@ export default function CashierDashboardScreen({ navigation }) {
       if (paidResult.error) throw paidResult.error;
       if (recentResult.error) throw recentResult.error;
 
-      // UPDATE DASHBOARD
       setAssignedBuses(busResult.count || 0);
       setPendingBookings(pendingResult.count || 0);
       setPaidBookings(paidResult.count || 0);
@@ -246,18 +276,13 @@ export default function CashierDashboardScreen({ navigation }) {
 
     return (
       <View style={styles.bookingItem}>
-        <View
-          style={[
-            styles.bookingIcon,
-            isPaid ? styles.bookingPaidIcon : styles.bookingPendingIcon,
-          ]}
-        >
+        <NeuView small style={styles.bookingIcon}>
           <Ionicons
             name={isPaid ? "checkmark-circle" : "time-outline"}
-            size={22}
-            color={isPaid ? "#16A34A" : "#D97706"}
+            size={21}
+            color={isPaid ? COLORS.green : COLORS.orange}
           />
-        </View>
+        </NeuView>
 
         <View style={styles.bookingInfo}>
           <Text style={styles.bookingReference}>
@@ -303,18 +328,39 @@ export default function CashierDashboardScreen({ navigation }) {
   // LOADING SCREEN
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#2563EB" />
+      <SafeAreaView style={styles.loadingContainer} edges={["top", "left", "right"]}>
+        <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
+
+        <NeuView small style={styles.loadingIcon}>
+          <MaterialCommunityIcons
+            name="cash-register"
+            size={30}
+            color={COLORS.primary}
+          />
+        </NeuView>
+
+        <ActivityIndicator
+          size="large"
+          color={COLORS.primary}
+          style={{ marginTop: 20 }}
+        />
+
         <Text style={styles.loadingText}>
           Opening cashier dashboard...
         </Text>
-      </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
+    <SafeAreaView
+      style={styles.container}
+      edges={["top", "left", "right"]}
+    >
+      <StatusBar
+        barStyle="dark-content"
+        backgroundColor={COLORS.background}
+      />
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
@@ -323,55 +369,57 @@ export default function CashierDashboardScreen({ navigation }) {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            colors={["#2563EB"]}
-            tintColor="#2563EB"
+            colors={[COLORS.primary]}
+            tintColor={COLORS.primary}
           />
         }
       >
         {/* HEADER */}
         <View style={styles.header}>
           <View style={styles.headerInfo}>
-            <Text style={styles.greeting}>Welcome back,</Text>
+            <Text style={styles.greeting}>
+              Welcome back,
+            </Text>
 
             <Text style={styles.cashierName}>
               {cashierName}
             </Text>
 
-            <View style={styles.companyBadge}>
+            <NeuView small style={styles.companyBadge}>
               <Ionicons
                 name="business-outline"
-                size={13}
-                color="#1D4ED8"
+                size={14}
+                color={COLORS.primary}
               />
 
               <Text style={styles.companyText}>
                 {companyName}
               </Text>
-            </View>
+            </NeuView>
 
             <Text style={styles.headerSubtitle}>
               Cashier Dashboard
             </Text>
           </View>
 
-          <View style={styles.headerIcon}>
+          <NeuView small style={styles.headerIcon}>
             <MaterialCommunityIcons
               name="cash-register"
               size={29}
-              color="#2563EB"
+              color={COLORS.primary}
             />
-          </View>
+          </NeuView>
         </View>
 
         {/* ASSIGNED BUSES */}
-        <View style={styles.busOverview}>
-          <View style={styles.busOverviewIcon}>
+        <NeuCard style={styles.busOverview}>
+          <NeuView small style={styles.busOverviewIcon}>
             <MaterialCommunityIcons
               name="bus-multiple"
               size={25}
-              color="#2563EB"
+              color={COLORS.primary}
             />
-          </View>
+          </NeuView>
 
           <View style={styles.busOverviewInfo}>
             <Text style={styles.busOverviewTitle}>
@@ -386,7 +434,7 @@ export default function CashierDashboardScreen({ navigation }) {
           <Text style={styles.busCount}>
             {assignedBuses}
           </Text>
-        </View>
+        </NeuCard>
 
         {/* PAYMENT OVERVIEW */}
         <View style={styles.sectionHeader}>
@@ -394,25 +442,29 @@ export default function CashierDashboardScreen({ navigation }) {
             Payment Overview
           </Text>
 
-          <TouchableOpacity onPress={onRefresh} disabled={refreshing}>
+          <NeuTouchable
+            small
+            style={styles.refreshButton}
+            onPress={onRefresh}
+          >
             <Ionicons
               name="refresh-outline"
-              size={21}
-              color="#2563EB"
+              size={20}
+              color={COLORS.primary}
             />
-          </TouchableOpacity>
+          </NeuTouchable>
         </View>
 
         <View style={styles.statsContainer}>
           {/* UNPAID */}
-          <View style={styles.statCard}>
-            <View style={[styles.statIcon, styles.pendingIcon]}>
+          <NeuCard style={styles.statCard}>
+            <NeuView small style={styles.pendingIcon}>
               <Ionicons
                 name="time-outline"
                 size={23}
-                color="#D97706"
+                color={COLORS.orange}
               />
-            </View>
+            </NeuView>
 
             <Text style={styles.statNumber}>
               {pendingBookings}
@@ -425,17 +477,17 @@ export default function CashierDashboardScreen({ navigation }) {
             <Text style={styles.statDescription}>
               Awaiting payment
             </Text>
-          </View>
+          </NeuCard>
 
           {/* PAID */}
-          <View style={styles.statCard}>
-            <View style={[styles.statIcon, styles.paidIcon]}>
+          <NeuCard style={styles.statCard}>
+            <NeuView small style={styles.paidIcon}>
               <Ionicons
                 name="checkmark-circle-outline"
                 size={23}
-                color="#16A34A"
+                color={COLORS.green}
               />
-            </View>
+            </NeuView>
 
             <Text style={styles.statNumber}>
               {paidBookings}
@@ -448,7 +500,7 @@ export default function CashierDashboardScreen({ navigation }) {
             <Text style={styles.statDescription}>
               Successfully paid
             </Text>
-          </View>
+          </NeuCard>
         </View>
 
         {/* PAYMENT MANAGEMENT */}
@@ -457,15 +509,14 @@ export default function CashierDashboardScreen({ navigation }) {
         </Text>
 
         {/* QR SCANNER */}
-        <TouchableOpacity
+        <NeuTouchable
           style={styles.mainAction}
           onPress={() => openScreen("CashierQRScanner")}
-          activeOpacity={0.85}
         >
           <View style={styles.mainActionIcon}>
             <Ionicons
               name="qr-code-outline"
-              size={29}
+              size={28}
               color="#FFFFFF"
             />
           </View>
@@ -485,21 +536,20 @@ export default function CashierDashboardScreen({ navigation }) {
             size={22}
             color="#FFFFFF"
           />
-        </TouchableOpacity>
+        </NeuTouchable>
 
         {/* MANUAL PAYMENT */}
-        <TouchableOpacity
+        <NeuTouchable
           style={styles.secondaryAction}
           onPress={() => openScreen("CashierPayment")}
-          activeOpacity={0.85}
         >
-          <View style={styles.secondaryActionIcon}>
+          <NeuView small style={styles.secondaryActionIcon}>
             <MaterialCommunityIcons
               name="cash"
-              size={27}
-              color="#2563EB"
+              size={26}
+              color={COLORS.primary}
             />
-          </View>
+          </NeuView>
 
           <View style={styles.actionInfo}>
             <Text style={styles.secondaryActionTitle}>
@@ -514,9 +564,9 @@ export default function CashierDashboardScreen({ navigation }) {
           <Ionicons
             name="chevron-forward"
             size={21}
-            color="#64748B"
+            color={COLORS.muted}
           />
-        </TouchableOpacity>
+        </NeuTouchable>
 
         {/* RECENT BOOKINGS */}
         <View style={styles.recentHeader}>
@@ -532,7 +582,7 @@ export default function CashierDashboardScreen({ navigation }) {
         </View>
 
         {recentBookings.length > 0 ? (
-          <View style={styles.recentCard}>
+          <NeuCard style={styles.recentCard}>
             <FlatList
               data={recentBookings}
               keyExtractor={(item) => String(item.booking_id)}
@@ -542,14 +592,16 @@ export default function CashierDashboardScreen({ navigation }) {
                 <View style={styles.listSeparator} />
               )}
             />
-          </View>
+          </NeuCard>
         ) : (
-          <View style={styles.emptyCard}>
-            <Ionicons
-              name="receipt-outline"
-              size={40}
-              color="#94A3B8"
-            />
+          <NeuCard style={styles.emptyCard}>
+            <NeuView small style={styles.emptyIcon}>
+              <Ionicons
+                name="receipt-outline"
+                size={32}
+                color={COLORS.muted}
+              />
+            </NeuView>
 
             <Text style={styles.emptyTitle}>
               No Recent Bookings
@@ -558,7 +610,7 @@ export default function CashierDashboardScreen({ navigation }) {
             <Text style={styles.emptyDescription}>
               Recent passenger bookings for your company will appear here.
             </Text>
-          </View>
+          </NeuCard>
         )}
 
         {/* FOOTER */}
@@ -566,7 +618,7 @@ export default function CashierDashboardScreen({ navigation }) {
           <Ionicons
             name="shield-checkmark-outline"
             size={16}
-            color="#94A3B8"
+            color={COLORS.muted}
           />
 
           <Text style={styles.footerText}>
@@ -583,29 +635,27 @@ export default function CashierDashboardScreen({ navigation }) {
         onRequestClose={closeAlert}
       >
         <View style={styles.alertOverlay}>
-          <View style={styles.alertBox}>
-            <View
-              style={[
-                styles.alertIconContainer,
-                alertType === "warning"
-                  ? styles.warningAlertIcon
-                  : styles.errorAlertIcon,
-              ]}
-            >
+          <NeuCard style={styles.alertBox}>
+            <NeuView small style={[
+              styles.alertIconContainer,
+              alertType === "warning"
+                ? styles.warningAlertIcon
+                : styles.errorAlertIcon,
+            ]}>
               <Ionicons
                 name={
                   alertType === "warning"
                     ? "warning-outline"
                     : "close-circle-outline"
                 }
-                size={43}
+                size={39}
                 color={
                   alertType === "warning"
-                    ? "#D97706"
-                    : "#DC2626"
+                    ? COLORS.orange
+                    : COLORS.red
                 }
               />
-            </View>
+            </NeuView>
 
             <Text style={styles.alertTitle}>
               {alertTitle}
@@ -624,37 +674,48 @@ export default function CashierDashboardScreen({ navigation }) {
                 OK
               </Text>
             </TouchableOpacity>
-          </View>
+          </NeuCard>
         </View>
       </Modal>
-    </View>
+    </SafeAreaView>
   );
 }
 
+// =====================================
 // STYLES
+// =====================================
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: COLORS.background,
   },
 
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#F8FAFC",
+    backgroundColor: COLORS.background,
+  },
+
+  loadingIcon: {
+    width: 70,
+    height: 70,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   loadingText: {
-    color: "#64748B",
+    color: COLORS.muted,
     fontSize: 13,
     marginTop: 12,
-    fontWeight: "500",
+    fontWeight: "600",
   },
 
   scrollContent: {
     paddingHorizontal: 18,
-    paddingTop: 18,
+    paddingTop: 15,
     paddingBottom: 35,
   },
 
@@ -663,7 +724,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: 8,
+    marginTop: 5,
     marginBottom: 24,
   },
 
@@ -672,13 +733,13 @@ const styles = StyleSheet.create({
   },
 
   greeting: {
-    color: "#64748B",
+    color: COLORS.muted,
     fontSize: 13,
-    fontWeight: "500",
+    fontWeight: "600",
   },
 
   cashierName: {
-    color: "#1E293B",
+    color: COLORS.text,
     fontSize: 25,
     fontWeight: "800",
     marginTop: 4,
@@ -689,32 +750,30 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     alignSelf: "flex-start",
-    backgroundColor: "#DBEAFE",
     paddingHorizontal: 11,
-    paddingVertical: 7,
-    borderRadius: 10,
+    paddingVertical: 8,
+    borderRadius: 12,
     marginTop: 10,
     gap: 6,
   },
 
   companyText: {
-    color: "#1D4ED8",
+    color: COLORS.primary,
     fontSize: 11,
-    fontWeight: "700",
+    fontWeight: "800",
   },
 
   headerSubtitle: {
-    color: "#64748B",
+    color: COLORS.muted,
     fontSize: 12,
-    marginTop: 8,
-    fontWeight: "500",
+    marginTop: 9,
+    fontWeight: "600",
   },
 
   headerIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 17,
-    backgroundColor: "#DBEAFE",
+    width: 57,
+    height: 57,
+    borderRadius: 19,
     justifyContent: "center",
     alignItems: "center",
     marginLeft: 12,
@@ -724,24 +783,15 @@ const styles = StyleSheet.create({
   busOverview: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 17,
     padding: 17,
-    borderWidth: 1,
-    borderColor: "#DBEAFE",
+    borderRadius: 19,
     marginBottom: 27,
-    elevation: 2,
-    shadowColor: "#1E40AF",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
   },
 
   busOverviewIcon: {
     width: 47,
     height: 47,
-    borderRadius: 14,
-    backgroundColor: "#EFF6FF",
+    borderRadius: 15,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -752,21 +802,21 @@ const styles = StyleSheet.create({
   },
 
   busOverviewTitle: {
-    color: "#1E293B",
+    color: COLORS.text,
     fontSize: 14,
-    fontWeight: "700",
+    fontWeight: "800",
   },
 
   busOverviewDescription: {
-    color: "#64748B",
+    color: COLORS.muted,
     fontSize: 11,
     marginTop: 5,
   },
 
   busCount: {
-    color: "#2563EB",
+    color: COLORS.primary,
     fontSize: 27,
-    fontWeight: "800",
+    fontWeight: "900",
   },
 
   // SECTION HEADERS
@@ -779,88 +829,87 @@ const styles = StyleSheet.create({
 
   sectionTitle: {
     fontSize: 17,
-    fontWeight: "800",
-    color: "#1E293B",
+    fontWeight: "900",
+    color: COLORS.text,
     marginBottom: 14,
+  },
+
+  refreshButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 13,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 12,
   },
 
   // PAYMENT STATISTICS
   statsContainer: {
     flexDirection: "row",
-    gap: 12,
+    gap: 13,
     marginBottom: 28,
   },
 
   statCard: {
     flex: 1,
-    backgroundColor: "#FFFFFF",
     padding: 16,
-    borderRadius: 17,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    elevation: 2,
-    shadowColor: "#1E293B",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 5,
-  },
-
-  statIcon: {
-    width: 43,
-    height: 43,
-    borderRadius: 13,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 15,
+    borderRadius: 19,
   },
 
   pendingIcon: {
-    backgroundColor: "#FEF3C7",
+    width: 43,
+    height: 43,
+    borderRadius: 14,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 15,
+    backgroundColor: COLORS.orangeLight,
   },
 
   paidIcon: {
-    backgroundColor: "#DCFCE7",
+    width: 43,
+    height: 43,
+    borderRadius: 14,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 15,
+    backgroundColor: COLORS.greenLight,
   },
 
   statNumber: {
-    color: "#1E293B",
+    color: COLORS.text,
     fontSize: 27,
-    fontWeight: "800",
+    fontWeight: "900",
   },
 
   statLabel: {
-    color: "#334155",
+    color: COLORS.secondaryText,
     fontSize: 12,
-    fontWeight: "700",
+    fontWeight: "800",
     marginTop: 5,
   },
 
   statDescription: {
-    color: "#94A3B8",
+    color: COLORS.muted,
     fontSize: 10,
     marginTop: 5,
   },
 
   // PAYMENT ACTIONS
   mainAction: {
-    backgroundColor: "#2563EB",
-    borderRadius: 17,
+    backgroundColor: COLORS.primary,
+    borderRadius: 19,
     padding: 17,
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 12,
-    elevation: 3,
-    shadowColor: "#1D4ED8",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.18,
-    shadowRadius: 6,
+    marginBottom: 13,
   },
 
   mainActionIcon: {
     width: 49,
     height: 49,
-    borderRadius: 14,
-    backgroundColor: "rgba(255,255,255,0.18)",
+    borderRadius: 15,
+    backgroundColor: "#4D87F8",
     justifyContent: "center",
     alignItems: "center",
   },
@@ -873,44 +922,41 @@ const styles = StyleSheet.create({
   mainActionTitle: {
     color: "#FFFFFF",
     fontSize: 14,
-    fontWeight: "800",
+    fontWeight: "900",
   },
 
   mainActionDescription: {
-    color: "#DBEAFE",
+    color: "#E4EEFF",
     fontSize: 11,
     lineHeight: 17,
     marginTop: 5,
   },
 
   secondaryAction: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 17,
+    backgroundColor: COLORS.surface,
+    borderRadius: 19,
     padding: 16,
     flexDirection: "row",
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#BFDBFE",
     marginBottom: 28,
   },
 
   secondaryActionIcon: {
     width: 47,
     height: 47,
-    borderRadius: 14,
-    backgroundColor: "#EFF6FF",
+    borderRadius: 15,
     justifyContent: "center",
     alignItems: "center",
   },
 
   secondaryActionTitle: {
-    color: "#1E293B",
+    color: COLORS.text,
     fontSize: 14,
-    fontWeight: "700",
+    fontWeight: "800",
   },
 
   secondaryActionDescription: {
-    color: "#64748B",
+    color: COLORS.muted,
     fontSize: 11,
     lineHeight: 17,
     marginTop: 5,
@@ -924,18 +970,15 @@ const styles = StyleSheet.create({
   },
 
   refreshText: {
-    color: "#2563EB",
-    fontWeight: "700",
+    color: COLORS.primary,
+    fontWeight: "800",
     fontSize: 12,
     marginBottom: 14,
   },
 
   recentCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 17,
+    borderRadius: 19,
     paddingHorizontal: 15,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
   },
 
   bookingItem: {
@@ -947,17 +990,9 @@ const styles = StyleSheet.create({
   bookingIcon: {
     width: 42,
     height: 42,
-    borderRadius: 13,
+    borderRadius: 14,
     justifyContent: "center",
     alignItems: "center",
-  },
-
-  bookingPaidIcon: {
-    backgroundColor: "#DCFCE7",
-  },
-
-  bookingPendingIcon: {
-    backgroundColor: "#FEF3C7",
   },
 
   bookingInfo: {
@@ -966,13 +1001,13 @@ const styles = StyleSheet.create({
   },
 
   bookingReference: {
-    color: "#1E293B",
+    color: COLORS.text,
     fontSize: 12,
-    fontWeight: "800",
+    fontWeight: "900",
   },
 
   bookingDate: {
-    color: "#94A3B8",
+    color: COLORS.muted,
     fontSize: 10,
     marginTop: 5,
   },
@@ -986,16 +1021,16 @@ const styles = StyleSheet.create({
   },
 
   paidBadge: {
-    backgroundColor: "#DCFCE7",
+    backgroundColor: COLORS.greenLight,
   },
 
   pendingBadge: {
-    backgroundColor: "#FEF3C7",
+    backgroundColor: COLORS.orangeLight,
   },
 
   statusText: {
     fontSize: 9,
-    fontWeight: "800",
+    fontWeight: "900",
   },
 
   paidText: {
@@ -1012,42 +1047,47 @@ const styles = StyleSheet.create({
   },
 
   bookingAmount: {
-    color: "#2563EB",
+    color: COLORS.primary,
     fontSize: 13,
-    fontWeight: "800",
+    fontWeight: "900",
   },
 
   bookingMethod: {
-    color: "#94A3B8",
+    color: COLORS.muted,
     fontSize: 9,
-    fontWeight: "700",
+    fontWeight: "800",
     marginTop: 6,
   },
 
   listSeparator: {
     height: 1,
-    backgroundColor: "#F1F5F9",
+    backgroundColor: "#D5E1F1",
   },
 
   // EMPTY BOOKINGS
   emptyCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 17,
+    borderRadius: 19,
     padding: 30,
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
+  },
+
+  emptyIcon: {
+    width: 65,
+    height: 65,
+    borderRadius: 21,
+    justifyContent: "center",
+    alignItems: "center",
   },
 
   emptyTitle: {
-    color: "#334155",
+    color: COLORS.secondaryText,
     fontSize: 14,
-    fontWeight: "700",
-    marginTop: 12,
+    fontWeight: "800",
+    marginTop: 15,
   },
 
   emptyDescription: {
-    color: "#94A3B8",
+    color: COLORS.muted,
     fontSize: 11,
     lineHeight: 17,
     textAlign: "center",
@@ -1064,15 +1104,15 @@ const styles = StyleSheet.create({
   },
 
   footerText: {
-    color: "#94A3B8",
+    color: COLORS.muted,
     fontSize: 10,
-    fontWeight: "600",
+    fontWeight: "700",
   },
 
   // ALERT MODAL
   alertOverlay: {
     flex: 1,
-    backgroundColor: "rgba(15, 23, 42, 0.55)",
+    backgroundColor: "rgba(22, 52, 107, 0.35)",
     justifyContent: "center",
     alignItems: "center",
     padding: 25,
@@ -1081,39 +1121,37 @@ const styles = StyleSheet.create({
   alertBox: {
     width: "100%",
     maxWidth: 350,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 22,
+    borderRadius: 23,
     padding: 25,
     alignItems: "center",
-    elevation: 10,
   },
 
   alertIconContainer: {
     width: 76,
     height: 76,
-    borderRadius: 38,
+    borderRadius: 25,
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 17,
   },
 
   errorAlertIcon: {
-    backgroundColor: "#FEE2E2",
+    backgroundColor: COLORS.redLight,
   },
 
   warningAlertIcon: {
-    backgroundColor: "#FEF3C7",
+    backgroundColor: COLORS.orangeLight,
   },
 
   alertTitle: {
-    color: "#1E293B",
+    color: COLORS.text,
     fontSize: 19,
-    fontWeight: "800",
+    fontWeight: "900",
     textAlign: "center",
   },
 
   alertMessage: {
-    color: "#64748B",
+    color: COLORS.muted,
     fontSize: 13,
     lineHeight: 21,
     textAlign: "center",
@@ -1122,8 +1160,8 @@ const styles = StyleSheet.create({
 
   alertButton: {
     width: "100%",
-    backgroundColor: "#2563EB",
-    borderRadius: 12,
+    backgroundColor: COLORS.primary,
+    borderRadius: 14,
     paddingVertical: 14,
     alignItems: "center",
     marginTop: 23,
@@ -1132,6 +1170,6 @@ const styles = StyleSheet.create({
   alertButtonText: {
     color: "#FFFFFF",
     fontSize: 14,
-    fontWeight: "800",
+    fontWeight: "900",
   },
 });

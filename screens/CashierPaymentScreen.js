@@ -17,22 +17,57 @@ import {
   StatusBar,
 } from "react-native";
 
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+
 import { supabase } from "../config/supabase";
 
+import {
+  C,
+  NeuView,
+  NeuTouchable,
+  NeuCard,
+} from "../theme/theme";
+
+// ==========================================
+// ROUTEX SOFT NEUMORPHIC COLORS
+// ==========================================
+
 const COLORS = {
-  background: "#F3F6FB",
-  white: "#FFFFFF",
-  primary: "#2563EB",
-  dark: "#172B4D",
-  muted: "#64748B",
+  background: "#DDE6F4",
+  surface: "#EFF4FC",
+  inset: "#E1E9F6",
+
+  primary: "#286DF6",
+  secondary: "#5A95FC",
+  lightBlue: "#9DC6FB",
+
+  dark: "#16346B",
+  text: "#16346B",
+  muted: "#5F7FB3",
+  secondaryText: "#2F4F86",
+
   green: "#16A34A",
+  greenLight: "#E4F6E9",
+
   red: "#DC2626",
-  border: "#E2E8F0",
+  redLight: "#FCE8E8",
+
   orange: "#D97706",
+  orangeLight: "#FFF3D9",
+
+  white: "#FFFFFF",
+  border: "#C5D4E9",
 };
 
-export default function CashierPaymentScreen({ route, navigation }) {
+// ==========================================
+// MAIN SCREEN
+// ==========================================
+
+export default function CashierPaymentScreen({
+  route,
+  navigation,
+}) {
   const bookingId = route?.params?.bookingId;
   const scannedReference = route?.params?.bookingReference;
 
@@ -46,9 +81,10 @@ export default function CashierPaymentScreen({ route, navigation }) {
   const [loading, setLoading] = useState(false);
   const [processing, setProcessing] = useState(false);
 
-  // ------------------------------------------
+  // ========================================
   // CUSTOM ALERT STATE
-  // ------------------------------------------
+  // ========================================
+
   const [alertConfig, setAlertConfig] = useState({
     visible: false,
     title: "",
@@ -59,9 +95,6 @@ export default function CashierPaymentScreen({ route, navigation }) {
     onConfirm: null,
   });
 
-  // ------------------------------------------
-  // SHOW CUSTOM ALERT
-  // ------------------------------------------
   const showAlert = (
     title,
     message,
@@ -128,19 +161,20 @@ export default function CashierPaymentScreen({ route, navigation }) {
   const getAlertBackground = () => {
     switch (alertConfig.type) {
       case "success":
-        return "#F0FDF4";
+        return COLORS.greenLight;
       case "error":
-        return "#FEF2F2";
+        return COLORS.redLight;
       case "warning":
-        return "#FFFBEB";
+        return COLORS.orangeLight;
       default:
-        return "#EFF6FF";
+        return "#E5EDFF";
     }
   };
 
-  // ------------------------------------------
+  // ========================================
   // PASSENGER TYPE FORMAT
-  // ------------------------------------------
+  // ========================================
+
   const formatPassengerType = (type) => {
     const normalized = String(type || "regular")
       .toLowerCase()
@@ -166,10 +200,10 @@ export default function CashierPaymentScreen({ route, navigation }) {
     }
   };
 
-  // ------------------------------------------
+  // ========================================
   // DISCOUNT RATE FORMAT
-  // Supports 0.20 or 20
-  // ------------------------------------------
+  // ========================================
+
   const formatDiscountRate = (rate) => {
     const value = Number(rate || 0);
 
@@ -181,20 +215,21 @@ export default function CashierPaymentScreen({ route, navigation }) {
     return `${percentage.toFixed(0)}%`;
   };
 
-  // ------------------------------------------
+  // ========================================
   // PASSENGER TYPE COLORS
-  // ------------------------------------------
+  // ========================================
+
   const getPassengerTypeColor = (type) => {
     const normalized = String(type || "")
       .toLowerCase()
       .trim();
 
     if (normalized === "student") {
-      return "#2563EB";
+      return COLORS.primary;
     }
 
     if (normalized === "pwd") {
-      return "#7C3AED";
+      return "#7956C9";
     }
 
     if (
@@ -202,15 +237,16 @@ export default function CashierPaymentScreen({ route, navigation }) {
       normalized === "senior citizen" ||
       normalized === "senior_citizen"
     ) {
-      return "#D97706";
+      return COLORS.orange;
     }
 
     return COLORS.muted;
   };
 
-  // ------------------------------------------
+  // ========================================
   // LOAD BOOKING
-  // ------------------------------------------
+  // ========================================
+
   const loadBooking = useCallback(
     async (id, bookingReference) => {
       try {
@@ -251,7 +287,7 @@ export default function CashierPaymentScreen({ route, navigation }) {
           throw new Error("Booking not found.");
         }
 
-        // Get passenger records separately
+        // Load passenger records separately
         const {
           data: passengerRows,
           error: passengerError,
@@ -281,7 +317,6 @@ export default function CashierPaymentScreen({ route, navigation }) {
         setReference(data.booking_reference || "");
 
         console.log("BOOKING ID:", data.booking_id);
-        console.log("PASSENGER QUERY ERROR:", passengerError);
         console.log("PASSENGER RECORDS:", passengerRows);
 
       } catch (error) {
@@ -299,18 +334,20 @@ export default function CashierPaymentScreen({ route, navigation }) {
     []
   );
 
-  // ------------------------------------------
+  // ========================================
   // AUTOMATICALLY LOAD AFTER QR SCAN
-  // ------------------------------------------
+  // ========================================
+
   useEffect(() => {
     if (bookingId || scannedReference) {
       loadBooking(bookingId, scannedReference);
     }
   }, [bookingId, scannedReference, loadBooking]);
 
-  // ------------------------------------------
+  // ========================================
   // MANUAL BOOKING SEARCH
-  // ------------------------------------------
+  // ========================================
+
   const findBooking = async () => {
     if (!reference.trim()) {
       showAlert(
@@ -324,9 +361,10 @@ export default function CashierPaymentScreen({ route, navigation }) {
     await loadBooking(null, reference);
   };
 
-  // ------------------------------------------
-  // CHECK BOOKING PAYMENT STATUS
-  // ------------------------------------------
+  // ========================================
+  // BOOKING PAYMENT STATUS
+  // ========================================
+
   const isPendingUnpaid =
     booking?.booking_status === "pending" &&
     booking?.payment_status === "unpaid";
@@ -338,9 +376,10 @@ export default function CashierPaymentScreen({ route, navigation }) {
     booking?.expires_at &&
     new Date(booking.expires_at).getTime() <= Date.now();
 
-  // ------------------------------------------
+  // ========================================
   // CONFIRM PAYMENT
-  // ------------------------------------------
+  // ========================================
+
   const confirmPayment = () => {
     if (!booking) return;
 
@@ -374,9 +413,10 @@ export default function CashierPaymentScreen({ route, navigation }) {
     );
   };
 
-  // ------------------------------------------
+  // ========================================
   // PROCESS PAYMENT THROUGH SUPABASE
-  // ------------------------------------------
+  // ========================================
+
   const processPayment = async () => {
     if (!booking || processing) return;
 
@@ -427,9 +467,10 @@ export default function CashierPaymentScreen({ route, navigation }) {
     }
   };
 
-  // ------------------------------------------
+  // ========================================
   // STATUS DISPLAY
-  // ------------------------------------------
+  // ========================================
+
   const getStatusColor = (status) => {
     if (status === "paid" || status === "confirmed") {
       return COLORS.green;
@@ -442,9 +483,10 @@ export default function CashierPaymentScreen({ route, navigation }) {
     return COLORS.red;
   };
 
-  // ------------------------------------------
+  // ========================================
   // SORT PASSENGERS
-  // ------------------------------------------
+  // ========================================
+
   const passengers = [
     ...(booking?.booking_passengers || []),
   ].sort(
@@ -453,11 +495,15 @@ export default function CashierPaymentScreen({ route, navigation }) {
       Number(b.passenger_number || 0)
   );
 
-  // ------------------------------------------
+  // ========================================
   // MAIN SCREEN
-  // ------------------------------------------
+  // ========================================
+
   return (
-    <View style={styles.screen}>
+    <SafeAreaView
+      style={styles.screen}
+      edges={["top", "left", "right"]}
+    >
       <StatusBar
         backgroundColor={COLORS.background}
         barStyle="dark-content"
@@ -467,10 +513,12 @@ export default function CashierPaymentScreen({ route, navigation }) {
         style={styles.container}
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
         {/* HEADER */}
+
         <View style={styles.header}>
-          <TouchableOpacity
+          <NeuTouchable
             style={styles.backButton}
             onPress={() => navigation.goBack()}
           >
@@ -479,9 +527,9 @@ export default function CashierPaymentScreen({ route, navigation }) {
               size={22}
               color={COLORS.dark}
             />
-          </TouchableOpacity>
+          </NeuTouchable>
 
-          <View>
+          <View style={styles.headerInfo}>
             <Text style={styles.title}>
               Cashier Payment
             </Text>
@@ -492,26 +540,44 @@ export default function CashierPaymentScreen({ route, navigation }) {
           </View>
         </View>
 
-        {/* SEARCH */}
-        <View style={styles.searchCard}>
+        {/* SEARCH CARD */}
+
+        <NeuCard style={styles.searchCard}>
+          <View style={styles.sectionHeading}>
+            <View style={styles.headingIcon}>
+              <Ionicons
+                name="search-outline"
+                size={20}
+                color={COLORS.primary}
+              />
+            </View>
+
+            <Text style={styles.sectionTitle}>
+              Find Booking
+            </Text>
+          </View>
+
           <Text style={styles.label}>
             Booking Reference
           </Text>
 
           <View style={styles.searchRow}>
-            <TextInput
-              style={styles.input}
-              placeholder="Enter RX booking reference"
-              placeholderTextColor="#94A3B8"
-              autoCapitalize="characters"
-              value={reference}
-              onChangeText={setReference}
-            />
+            <NeuView inset style={styles.inputWrapper}>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter RX booking reference"
+                placeholderTextColor={COLORS.muted}
+                autoCapitalize="characters"
+                value={reference}
+                onChangeText={setReference}
+              />
+            </NeuView>
 
             <TouchableOpacity
               style={styles.searchButton}
               onPress={findBooking}
               disabled={loading}
+              activeOpacity={0.85}
             >
               {loading ? (
                 <ActivityIndicator color="#FFFFFF" />
@@ -538,11 +604,12 @@ export default function CashierPaymentScreen({ route, navigation }) {
               </Text>
             </View>
           )}
-        </View>
+        </NeuCard>
 
         {/* LOADING */}
+
         {loading && (
-          <View style={styles.loadingCard}>
+          <NeuCard style={styles.loadingCard}>
             <ActivityIndicator
               size="large"
               color={COLORS.primary}
@@ -551,14 +618,17 @@ export default function CashierPaymentScreen({ route, navigation }) {
             <Text style={styles.loadingText}>
               Retrieving passenger booking...
             </Text>
-          </View>
+          </NeuCard>
         )}
 
         {/* BOOKING INFORMATION */}
+
         {booking && !loading && (
-          <View style={styles.card}>
+          <NeuCard style={styles.bookingCard}>
+            {/* CARD HEADER */}
+
             <View style={styles.cardHeader}>
-              <View>
+              <View style={{ flex: 1 }}>
                 <Text style={styles.cardTitle}>
                   Booking Information
                 </Text>
@@ -568,16 +638,19 @@ export default function CashierPaymentScreen({ route, navigation }) {
                 </Text>
               </View>
 
-              <Ionicons
-                name="receipt-outline"
-                size={27}
-                color={COLORS.primary}
-              />
+              <NeuView small style={styles.headerIcon}>
+                <Ionicons
+                  name="receipt-outline"
+                  size={24}
+                  color={COLORS.primary}
+                />
+              </NeuView>
             </View>
 
             <View style={styles.divider} />
 
-            {/* REFERENCE */}
+            {/* BOOKING REFERENCE */}
+
             <Text style={styles.detailLabel}>
               Booking Reference
             </Text>
@@ -586,7 +659,8 @@ export default function CashierPaymentScreen({ route, navigation }) {
               {booking.booking_reference}
             </Text>
 
-            {/* BUS */}
+            {/* BUS ID */}
+
             <Text style={styles.detailLabel}>
               Bus ID
             </Text>
@@ -596,9 +670,10 @@ export default function CashierPaymentScreen({ route, navigation }) {
             </Text>
 
             {/* PASSENGER FARE BREAKDOWN */}
+
             <View style={styles.passengerSection}>
               <View style={styles.passengerHeader}>
-                <View>
+                <View style={{ flex: 1 }}>
                   <Text style={styles.passengerTitle}>
                     Passenger Fare Breakdown
                   </Text>
@@ -610,14 +685,14 @@ export default function CashierPaymentScreen({ route, navigation }) {
 
                 <Ionicons
                   name="people-outline"
-                  size={25}
+                  size={24}
                   color={COLORS.primary}
                 />
               </View>
 
               {passengers.length > 0 ? (
                 passengers.map((passenger) => (
-                  <View
+                  <NeuCard
                     key={passenger.booking_passenger_id}
                     style={styles.passengerCard}
                   >
@@ -633,7 +708,7 @@ export default function CashierPaymentScreen({ route, navigation }) {
                             backgroundColor:
                               getPassengerTypeColor(
                                 passenger.passenger_type
-                              ) + "15",
+                              ) + "18",
                           },
                         ]}
                       >
@@ -695,10 +770,13 @@ export default function CashierPaymentScreen({ route, navigation }) {
                         ).toFixed(2)}
                       </Text>
                     </View>
-                  </View>
+                  </NeuCard>
                 ))
               ) : (
-                <View style={styles.noPassengerBox}>
+                <NeuView
+                  inset
+                  style={styles.noPassengerBox}
+                >
                   <Ionicons
                     name="information-circle-outline"
                     size={20}
@@ -708,11 +786,12 @@ export default function CashierPaymentScreen({ route, navigation }) {
                   <Text style={styles.noPassengerText}>
                     No individual passenger discount records were found.
                   </Text>
-                </View>
+                </NeuView>
               )}
             </View>
 
             {/* BOOKING STATUS */}
+
             <Text style={styles.detailLabel}>
               Booking Status
             </Text>
@@ -731,6 +810,7 @@ export default function CashierPaymentScreen({ route, navigation }) {
             </Text>
 
             {/* PAYMENT STATUS */}
+
             <Text style={styles.detailLabel}>
               Payment Status
             </Text>
@@ -749,7 +829,8 @@ export default function CashierPaymentScreen({ route, navigation }) {
             </Text>
 
             {/* TOTAL AMOUNT */}
-            <View style={styles.amountCard}>
+
+            <NeuView inset style={styles.amountCard}>
               <Text style={styles.amountLabel}>
                 TOTAL FARE TO COLLECT
               </Text>
@@ -757,11 +838,15 @@ export default function CashierPaymentScreen({ route, navigation }) {
               <Text style={styles.amount}>
                 ₱{Number(booking.total_amount).toFixed(2)}
               </Text>
-            </View>
+            </NeuView>
 
-            {/* EXPIRED */}
+            {/* EXPIRED BOOKING */}
+
             {isExpired && (
-              <View style={styles.warningBox}>
+              <NeuView
+                inset
+                style={styles.warningBox}
+              >
                 <Ionicons
                   name="alert-circle"
                   size={21}
@@ -771,16 +856,20 @@ export default function CashierPaymentScreen({ route, navigation }) {
                 <Text style={styles.warningText}>
                   This booking has expired. Payment cannot be processed.
                 </Text>
-              </View>
+              </NeuView>
             )}
 
             {/* PENDING PAYMENT */}
+
             {isPendingUnpaid && !isExpired && (
               <View style={styles.paymentSection}>
-                <View style={styles.pendingNotice}>
+                <NeuView
+                  inset
+                  style={styles.pendingNotice}
+                >
                   <Ionicons
                     name="cash-outline"
-                    size={22}
+                    size={23}
                     color={COLORS.orange}
                   />
 
@@ -793,7 +882,7 @@ export default function CashierPaymentScreen({ route, navigation }) {
                       Collect the cash fare before confirming this payment.
                     </Text>
                   </View>
-                </View>
+                </NeuView>
 
                 <TouchableOpacity
                   style={[
@@ -802,6 +891,7 @@ export default function CashierPaymentScreen({ route, navigation }) {
                   ]}
                   onPress={confirmPayment}
                   disabled={processing}
+                  activeOpacity={0.85}
                 >
                   {processing ? (
                     <ActivityIndicator color="#FFFFFF" />
@@ -823,8 +913,12 @@ export default function CashierPaymentScreen({ route, navigation }) {
             )}
 
             {/* ALREADY PAID */}
+
             {isAlreadyPaid && !ticket && (
-              <View style={styles.paidNotice}>
+              <NeuView
+                inset
+                style={styles.paidNotice}
+              >
                 <Ionicons
                   name="checkmark-circle"
                   size={27}
@@ -840,14 +934,18 @@ export default function CashierPaymentScreen({ route, navigation }) {
                     This booking has already been paid. Duplicate payment is not allowed.
                   </Text>
                 </View>
-              </View>
+              </NeuView>
             )}
 
             {/* OTHER BOOKING STATUS */}
+
             {!isPendingUnpaid &&
               !isAlreadyPaid &&
               !isExpired && (
-                <View style={styles.warningBox}>
+                <NeuView
+                  inset
+                  style={styles.warningBox}
+                >
                   <Ionicons
                     name="alert-circle-outline"
                     size={22}
@@ -857,17 +955,20 @@ export default function CashierPaymentScreen({ route, navigation }) {
                   <Text style={styles.warningText}>
                     This booking cannot be processed for payment because its current status is not pending and unpaid.
                   </Text>
-                </View>
+                </NeuView>
               )}
 
             {/* GENERATED TICKET */}
+
             {ticket && (
-              <View style={styles.ticket}>
-                <Ionicons
-                  name="checkmark-circle"
-                  size={48}
-                  color={COLORS.green}
-                />
+              <NeuCard style={styles.ticket}>
+                <View style={styles.ticketIcon}>
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={43}
+                    color={COLORS.green}
+                  />
+                </View>
 
                 <Text style={styles.ticketTitle}>
                   BOARDING TICKET GENERATED
@@ -892,17 +993,26 @@ export default function CashierPaymentScreen({ route, navigation }) {
                   {Number(booking.total_amount).toFixed(2)}
                 </Text>
 
-                <Text style={styles.paid}>
-                  PAID · CONFIRMED
-                </Text>
-              </View>
+                <View style={styles.paidBadge}>
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={15}
+                    color={COLORS.green}
+                  />
+
+                  <Text style={styles.paid}>
+                    PAID · CONFIRMED
+                  </Text>
+                </View>
+              </NeuCard>
             )}
-          </View>
+          </NeuCard>
         )}
 
-        {/* BOTTOM BUTTON */}
+        {/* SCAN ANOTHER BOOKING */}
+
         {booking && !loading && (
-          <TouchableOpacity
+          <NeuTouchable
             style={styles.scanAgainButton}
             onPress={() => navigation.goBack()}
           >
@@ -915,11 +1025,14 @@ export default function CashierPaymentScreen({ route, navigation }) {
             <Text style={styles.scanAgainText}>
               Scan Another Booking
             </Text>
-          </TouchableOpacity>
+          </NeuTouchable>
         )}
       </ScrollView>
 
+      {/* ================================== */}
       {/* CUSTOM ALERT MODAL */}
+      {/* ================================== */}
+
       <Modal
         visible={alertConfig.visible}
         transparent
@@ -928,7 +1041,7 @@ export default function CashierPaymentScreen({ route, navigation }) {
         onRequestClose={closeAlert}
       >
         <View style={styles.alertOverlay}>
-          <View style={styles.alertCard}>
+          <NeuCard style={styles.alertCard}>
             <View
               style={[
                 styles.alertIconContainer,
@@ -954,15 +1067,14 @@ export default function CashierPaymentScreen({ route, navigation }) {
 
             <View style={styles.alertButtonRow}>
               {alertConfig.cancelText && (
-                <TouchableOpacity
+                <NeuTouchable
                   style={styles.alertCancelButton}
                   onPress={closeAlert}
-                  activeOpacity={0.8}
                 >
                   <Text style={styles.alertCancelText}>
                     {alertConfig.cancelText}
                   </Text>
-                </TouchableOpacity>
+                </NeuTouchable>
               )}
 
               <TouchableOpacity
@@ -971,27 +1083,27 @@ export default function CashierPaymentScreen({ route, navigation }) {
                   {
                     backgroundColor: getAlertColor(),
                     flex: alertConfig.cancelText ? 1 : undefined,
-                    alignSelf: "center",
                   },
                 ]}
                 onPress={confirmAlert}
-                activeOpacity={0.8}
+                activeOpacity={0.85}
               >
                 <Text style={styles.alertConfirmText}>
                   {alertConfig.confirmText}
                 </Text>
               </TouchableOpacity>
             </View>
-          </View>
+          </NeuCard>
         </View>
       </Modal>
-    </View>
+    </SafeAreaView>
   );
 }
 
-// ------------------------------------------
+// ==========================================
 // STYLES
-// ------------------------------------------
+// ==========================================
+
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
@@ -1003,9 +1115,12 @@ const styles = StyleSheet.create({
   },
 
   content: {
-    padding: 18,
-    paddingBottom: 40,
+    paddingHorizontal: 18,
+    paddingTop: 12,
+    paddingBottom: 35,
   },
+
+  // HEADER
 
   header: {
     flexDirection: "row",
@@ -1013,62 +1128,95 @@ const styles = StyleSheet.create({
     marginBottom: 22,
   },
 
+  headerInfo: {
+    flex: 1,
+  },
+
   backButton: {
-    width: 43,
-    height: 43,
-    borderRadius: 12,
-    backgroundColor: COLORS.white,
+    width: 45,
+    height: 45,
+    borderRadius: 15,
     justifyContent: "center",
     alignItems: "center",
     marginRight: 13,
   },
 
   title: {
-    fontSize: 22,
-    fontWeight: "800",
+    fontSize: 21,
+    fontWeight: "900",
     color: COLORS.dark,
   },
 
   subtitle: {
     color: COLORS.muted,
-    fontSize: 12,
+    fontSize: 11,
     marginTop: 4,
   },
 
+  // SECTION HEADINGS
+
+  sectionHeading: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 5,
+  },
+
+  headingIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 11,
+    backgroundColor: "#E1EAFB",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  sectionTitle: {
+    color: COLORS.dark,
+    fontSize: 16,
+    fontWeight: "900",
+  },
+
+  // SEARCH
+
   searchCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: 15,
-    padding: 16,
+    padding: 17,
+    borderRadius: 20,
   },
 
   label: {
-    color: COLORS.dark,
-    fontSize: 13,
-    fontWeight: "700",
+    color: COLORS.secondaryText,
+    fontSize: 12,
+    fontWeight: "800",
     marginBottom: 9,
-    marginTop: 16,
+    marginTop: 12,
   },
 
   searchRow: {
     flexDirection: "row",
-    gap: 9,
+    alignItems: "center",
+    gap: 11,
+  },
+
+  inputWrapper: {
+    flex: 1,
+    minHeight: 49,
+    borderRadius: 13,
+    justifyContent: "center",
+    paddingHorizontal: 12,
   },
 
   input: {
-    flex: 1,
-    height: 49,
-    backgroundColor: "#F8FAFC",
-    borderRadius: 11,
-    paddingHorizontal: 14,
-    borderWidth: 1,
-    borderColor: COLORS.border,
     color: COLORS.dark,
+    fontSize: 13,
+    height: 48,
+    paddingVertical: 0,
   },
 
   searchButton: {
-    width: 52,
+    width: 50,
     height: 49,
-    borderRadius: 11,
+    borderRadius: 14,
     backgroundColor: COLORS.primary,
     alignItems: "center",
     justifyContent: "center",
@@ -1083,29 +1231,33 @@ const styles = StyleSheet.create({
 
   scannedText: {
     color: COLORS.green,
-    fontSize: 12,
-    fontWeight: "600",
+    fontSize: 11,
+    fontWeight: "700",
+    flex: 1,
   },
 
+  // LOADING
+
   loadingCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: 15,
-    padding: 30,
+    borderRadius: 18,
+    padding: 28,
     alignItems: "center",
-    marginTop: 20,
+    marginTop: 18,
   },
 
   loadingText: {
     color: COLORS.muted,
     marginTop: 12,
-    fontSize: 13,
+    fontSize: 12,
+    fontWeight: "600",
   },
 
-  card: {
-    backgroundColor: COLORS.white,
-    borderRadius: 16,
+  // BOOKING CARD
+
+  bookingCard: {
+    borderRadius: 20,
     padding: 18,
-    marginTop: 20,
+    marginTop: 18,
   },
 
   cardHeader: {
@@ -1115,15 +1267,23 @@ const styles = StyleSheet.create({
   },
 
   cardTitle: {
-    fontSize: 18,
-    fontWeight: "800",
+    fontSize: 17,
+    fontWeight: "900",
     color: COLORS.dark,
   },
 
   cardSubtitle: {
     color: COLORS.muted,
-    fontSize: 12,
+    fontSize: 11,
     marginTop: 4,
+  },
+
+  headerIcon: {
+    width: 43,
+    height: 43,
+    borderRadius: 13,
+    justifyContent: "center",
+    alignItems: "center",
   },
 
   divider: {
@@ -1134,24 +1294,26 @@ const styles = StyleSheet.create({
 
   detailLabel: {
     color: COLORS.muted,
-    fontSize: 12,
+    fontSize: 11,
+    fontWeight: "600",
     marginTop: 13,
   },
 
   detailValue: {
     color: COLORS.dark,
-    fontSize: 15,
-    fontWeight: "700",
-    marginTop: 4,
+    fontSize: 14,
+    fontWeight: "800",
+    marginTop: 5,
   },
 
   statusValue: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "900",
-    marginTop: 4,
+    marginTop: 5,
   },
 
   // PASSENGER FARE BREAKDOWN
+
   passengerSection: {
     marginTop: 23,
   },
@@ -1164,24 +1326,21 @@ const styles = StyleSheet.create({
   },
 
   passengerTitle: {
-    fontSize: 15,
-    fontWeight: "800",
+    fontSize: 14,
+    fontWeight: "900",
     color: COLORS.dark,
   },
 
   passengerSubtitle: {
-    fontSize: 11,
+    fontSize: 10,
     color: COLORS.muted,
     marginTop: 4,
   },
 
   passengerCard: {
-    backgroundColor: "#F8FAFC",
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 13,
+    borderRadius: 15,
     padding: 14,
-    marginBottom: 12,
+    marginBottom: 13,
   },
 
   passengerTop: {
@@ -1189,64 +1348,65 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 13,
+    gap: 8,
   },
 
   passengerName: {
-    fontSize: 14,
-    fontWeight: "800",
+    fontSize: 13,
+    fontWeight: "900",
     color: COLORS.dark,
   },
 
   passengerBadge: {
-    paddingHorizontal: 11,
+    paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 20,
   },
 
   passengerBadgeText: {
-    fontSize: 11,
-    fontWeight: "800",
+    fontSize: 10,
+    fontWeight: "900",
   },
 
   passengerFareRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginTop: 8,
+    marginTop: 9,
   },
 
   passengerLabel: {
-    fontSize: 12,
+    fontSize: 11,
     color: COLORS.muted,
   },
 
   passengerValue: {
-    fontSize: 13,
+    fontSize: 12,
     color: COLORS.dark,
-    fontWeight: "600",
+    fontWeight: "700",
   },
 
   discountValue: {
-    fontSize: 13,
+    fontSize: 12,
     color: COLORS.green,
-    fontWeight: "800",
+    fontWeight: "900",
   },
 
   passengerDivider: {
     height: 1,
     backgroundColor: COLORS.border,
-    marginTop: 12,
+    marginTop: 13,
     marginBottom: 4,
   },
 
   passengerFinalLabel: {
-    fontSize: 13,
+    fontSize: 12,
     color: COLORS.dark,
-    fontWeight: "800",
+    fontWeight: "900",
   },
 
   passengerFinalValue: {
-    fontSize: 16,
+    fontSize: 15,
     color: COLORS.primary,
     fontWeight: "900",
   },
@@ -1255,37 +1415,41 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 9,
-    backgroundColor: "#FFFBEB",
-    borderRadius: 10,
+    borderRadius: 13,
     padding: 13,
   },
 
   noPassengerText: {
     flex: 1,
-    color: "#92400E",
-    fontSize: 12,
+    color: COLORS.orange,
+    fontSize: 11,
+    lineHeight: 17,
+    fontWeight: "600",
   },
 
+  // TOTAL AMOUNT
+
   amountCard: {
-    backgroundColor: "#EFF6FF",
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 17,
     marginTop: 22,
   },
 
   amountLabel: {
     color: COLORS.muted,
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 0.5,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.7,
   },
 
   amount: {
     color: COLORS.primary,
     fontSize: 29,
     fontWeight: "900",
-    marginTop: 6,
+    marginTop: 7,
   },
+
+  // PAYMENT SECTION
 
   paymentSection: {
     marginTop: 20,
@@ -1295,33 +1459,38 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 11,
-    backgroundColor: "#FFFBEB",
-    borderRadius: 12,
+    borderRadius: 14,
     padding: 14,
   },
 
   pendingTitle: {
-    color: "#92400E",
-    fontWeight: "800",
-    fontSize: 14,
+    color: COLORS.orange,
+    fontWeight: "900",
+    fontSize: 13,
   },
 
   pendingDescription: {
-    color: "#A16207",
-    fontSize: 12,
-    lineHeight: 18,
-    marginTop: 3,
+    color: "#9A6A18",
+    fontSize: 11,
+    lineHeight: 17,
+    marginTop: 4,
   },
 
   confirmButton: {
-    backgroundColor: COLORS.green,
-    borderRadius: 11,
-    padding: 16,
+    backgroundColor: COLORS.primary,
+    borderRadius: 14,
+    minHeight: 51,
+    paddingHorizontal: 16,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 9,
-    marginTop: 21,
+    marginTop: 16,
+    elevation: 3,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 7,
   },
 
   disabledButton: {
@@ -1330,70 +1499,81 @@ const styles = StyleSheet.create({
 
   confirmText: {
     color: COLORS.white,
-    fontSize: 15,
-    fontWeight: "800",
+    fontSize: 13,
+    fontWeight: "900",
   },
+
+  // PAID NOTICE
 
   paidNotice: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    backgroundColor: "#F0FDF4",
-    borderRadius: 12,
+    borderRadius: 14,
     padding: 15,
     marginTop: 20,
   },
 
   paidTitle: {
-    color: "#166534",
-    fontSize: 14,
-    fontWeight: "800",
+    color: COLORS.green,
+    fontSize: 13,
+    fontWeight: "900",
   },
 
   paidDescription: {
-    color: "#15803D",
-    fontSize: 12,
-    lineHeight: 18,
+    color: "#43845A",
+    fontSize: 11,
+    lineHeight: 17,
     marginTop: 4,
   },
+
+  // WARNING
 
   warningBox: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    backgroundColor: "#FEF2F2",
-    borderRadius: 12,
+    borderRadius: 14,
     padding: 14,
     marginTop: 20,
   },
 
   warningText: {
     flex: 1,
-    color: "#991B1B",
-    fontSize: 12,
-    lineHeight: 19,
+    color: COLORS.red,
+    fontSize: 11,
+    lineHeight: 18,
+    fontWeight: "600",
   },
 
+  // GENERATED TICKET
+
   ticket: {
-    backgroundColor: "#F0FDF4",
-    borderWidth: 1,
-    borderColor: "#BBF7D0",
-    borderRadius: 13,
-    padding: 18,
+    borderRadius: 17,
+    padding: 19,
     alignItems: "center",
     marginTop: 22,
   },
 
+  ticketIcon: {
+    width: 65,
+    height: 65,
+    borderRadius: 33,
+    backgroundColor: COLORS.greenLight,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
   ticketTitle: {
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: "900",
-    color: "#166534",
-    marginTop: 9,
+    color: COLORS.green,
+    marginTop: 12,
     textAlign: "center",
   },
 
   ticketCode: {
-    fontSize: 22,
+    fontSize: 21,
     fontWeight: "900",
     color: COLORS.dark,
     marginVertical: 14,
@@ -1401,38 +1581,52 @@ const styles = StyleSheet.create({
   },
 
   ticketDetail: {
-    fontSize: 13,
-    color: "#475569",
-    marginTop: 6,
+    fontSize: 11,
+    color: COLORS.secondaryText,
+    marginTop: 7,
+    fontWeight: "600",
+  },
+
+  paidBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 15,
+    backgroundColor: COLORS.greenLight,
+    paddingHorizontal: 13,
+    paddingVertical: 8,
+    borderRadius: 20,
   },
 
   paid: {
-    color: "#15803D",
+    color: COLORS.green,
+    fontSize: 11,
     fontWeight: "900",
-    marginTop: 14,
   },
 
+  // SCAN ANOTHER BOOKING
+
   scanAgainButton: {
-    backgroundColor: COLORS.white,
-    borderRadius: 12,
-    padding: 16,
+    minHeight: 51,
+    borderRadius: 15,
+    marginTop: 16,
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
     gap: 9,
-    marginTop: 16,
   },
 
   scanAgainText: {
     color: COLORS.primary,
-    fontSize: 14,
-    fontWeight: "800",
+    fontSize: 13,
+    fontWeight: "900",
   },
 
-  // CUSTOM ALERT MODAL
+  // ALERT MODAL
+
   alertOverlay: {
     flex: 1,
-    backgroundColor: "rgba(15, 23, 42, 0.55)",
+    backgroundColor: "rgba(22, 52, 107, 0.25)",
     justifyContent: "center",
     alignItems: "center",
     padding: 25,
@@ -1441,36 +1635,34 @@ const styles = StyleSheet.create({
   alertCard: {
     width: "100%",
     maxWidth: 380,
-    backgroundColor: COLORS.white,
-    borderRadius: 20,
+    borderRadius: 23,
     padding: 25,
     alignItems: "center",
-    elevation: 10,
   },
 
   alertIconContainer: {
-    width: 75,
-    height: 75,
-    borderRadius: 38,
+    width: 73,
+    height: 73,
+    borderRadius: 37,
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 17,
   },
 
   alertTitle: {
-    fontSize: 21,
-    fontWeight: "800",
+    fontSize: 20,
+    fontWeight: "900",
     color: COLORS.dark,
     textAlign: "center",
   },
 
   alertMessage: {
-    fontSize: 14,
-    color: COLORS.muted,
+    fontSize: 13,
+    color: COLORS.secondaryText,
     lineHeight: 21,
     textAlign: "center",
     marginTop: 10,
-    marginBottom: 24,
+    marginBottom: 23,
   },
 
   alertButtonRow: {
@@ -1484,31 +1676,30 @@ const styles = StyleSheet.create({
   alertConfirmButton: {
     flex: 1,
     minHeight: 47,
-    paddingHorizontal: 18,
-    borderRadius: 11,
+    paddingHorizontal: 14,
+    borderRadius: 13,
     justifyContent: "center",
     alignItems: "center",
   },
 
   alertConfirmText: {
     color: COLORS.white,
-    fontSize: 13,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "900",
     textAlign: "center",
   },
 
   alertCancelButton: {
     flex: 1,
     minHeight: 47,
-    backgroundColor: "#F1F5F9",
-    borderRadius: 11,
+    borderRadius: 13,
     justifyContent: "center",
     alignItems: "center",
   },
 
   alertCancelText: {
     color: COLORS.dark,
-    fontSize: 13,
-    fontWeight: "700",
+    fontSize: 12,
+    fontWeight: "800",
   },
 });

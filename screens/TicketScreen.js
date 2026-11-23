@@ -1,5 +1,9 @@
 
-import React, { useEffect, useState, useCallback } from "react";
+import React, {
+  useEffect,
+  useState,
+  useCallback,
+} from "react";
 
 import {
   View,
@@ -8,12 +12,40 @@ import {
   ActivityIndicator,
   StyleSheet,
   ScrollView,
+  StatusBar,
 } from "react-native";
 
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import QRCode from "react-native-qrcode-svg";
 
 import { supabase } from "../config/supabase";
+
+import {
+  C,
+  NeuView,
+  NeuTouchable,
+  NeuCard,
+} from "../theme/theme";
+
+const COLORS = {
+  primary: C.blue || "#286DF6",
+  primaryDark: "#1D55C7",
+  primaryLight: "#DCEBFF",
+  secondaryBlue: C.secondaryBlue || "#5A95FC",
+  lightBlue: C.lightBlue || "#9DC6FB",
+  background: C.background || "#DDE6F4",
+  surface: C.surface || "#EFF4FC",
+  text: C.text || "#16346B",
+  secondary: C.secondaryText || "#2F4F86",
+  muted: C.muted || "#5F7FB3",
+  green: "#16A34A",
+  greenLight: "#DDF5E5",
+  orange: "#D97706",
+  orangeLight: "#FFF0D1",
+  red: "#DC2626",
+  redLight: "#FCE2E2",
+};
 
 export default function TicketScreen({ route, navigation }) {
   const { bookingId } = route.params || {};
@@ -22,10 +54,15 @@ export default function TicketScreen({ route, navigation }) {
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
 
-  // Load the latest booking information
+  // LOAD TICKET
   const loadTicket = useCallback(async () => {
     try {
       setErrorMessage("");
+
+      if (!bookingId) {
+        setErrorMessage("Booking ID is missing.");
+        return;
+      }
 
       const {
         data: { user },
@@ -74,7 +111,7 @@ export default function TicketScreen({ route, navigation }) {
     }
   }, [bookingId]);
 
-  // Initial loading and automatic Realtime updates
+  // INITIAL LOAD AND REALTIME
   useEffect(() => {
     if (!bookingId) {
       setErrorMessage("Booking ID is missing.");
@@ -97,7 +134,6 @@ export default function TicketScreen({ route, navigation }) {
         (payload) => {
           console.log("Booking updated:", payload.new);
 
-          // Immediately update the displayed booking information
           setBooking((currentBooking) => {
             if (!currentBooking) return currentBooking;
 
@@ -107,7 +143,6 @@ export default function TicketScreen({ route, navigation }) {
             };
           });
 
-          // Fetch the latest complete booking record
           loadTicket();
         }
       )
@@ -120,7 +155,7 @@ export default function TicketScreen({ route, navigation }) {
     };
   }, [bookingId, loadTicket]);
 
-  // Return to MainTabs and select Home
+  // RETURN TO HOME
   const goBackHome = () => {
     navigation.reset({
       index: 0,
@@ -142,25 +177,52 @@ export default function TicketScreen({ route, navigation }) {
     });
   };
 
+  // PAYMENT AND BOARDING STATUS
+  const isPaid =
+    booking?.payment_status === "paid" &&
+    booking?.booking_status === "confirmed" &&
+    !!booking?.ticket_code;
+
+  const isBoarded =
+    booking?.boarding_status === "boarded";
+
+  // LOADING
   if (loading) {
     return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#2563EB" />
+      <SafeAreaView style={styles.centerContainer} edges={["top", "left", "right"]}>
+        <StatusBar
+          barStyle="dark-content"
+          backgroundColor={COLORS.background}
+        />
+
+        <ActivityIndicator
+          size="large"
+          color={COLORS.primary}
+        />
+
         <Text style={styles.loadingText}>
           Loading your ticket...
         </Text>
-      </View>
+      </SafeAreaView>
     );
   }
 
+  // ERROR
   if (errorMessage) {
     return (
-      <View style={styles.centerContainer}>
-        <Ionicons
-          name="alert-circle-outline"
-          size={65}
-          color="#EF4444"
+      <SafeAreaView style={styles.centerContainer} edges={["top", "left", "right"]}>
+        <StatusBar
+          barStyle="dark-content"
+          backgroundColor={COLORS.background}
         />
+
+        <NeuView style={styles.errorIcon}>
+          <Ionicons
+            name="alert-circle-outline"
+            size={42}
+            color={COLORS.red}
+          />
+        </NeuView>
 
         <Text style={styles.errorTitle}>
           Ticket Unavailable
@@ -170,34 +232,40 @@ export default function TicketScreen({ route, navigation }) {
           {errorMessage}
         </Text>
 
-        <TouchableOpacity
+        <NeuTouchable
           style={styles.button}
           onPress={goBackHome}
         >
+          <Ionicons
+            name="home-outline"
+            size={19}
+            color="#FFFFFF"
+          />
+
           <Text style={styles.buttonText}>
             Back to Home
           </Text>
-        </TouchableOpacity>
-      </View>
+        </NeuTouchable>
+      </SafeAreaView>
     );
   }
 
-  const isPaid =
-    booking.payment_status === "paid" &&
-    booking.booking_status === "confirmed" &&
-    booking.ticket_code;
-
-  const isBoarded =
-    booking.boarding_status === "boarded";
-
+  // PAYMENT PENDING
   if (!isPaid) {
     return (
-      <View style={styles.centerContainer}>
-        <Ionicons
-          name="time-outline"
-          size={65}
-          color="#F59E0B"
+      <SafeAreaView style={styles.centerContainer} edges={["top", "left", "right"]}>
+        <StatusBar
+          barStyle="dark-content"
+          backgroundColor={COLORS.background}
         />
+
+        <NeuView style={styles.pendingIcon}>
+          <Ionicons
+            name="time-outline"
+            size={42}
+            color={COLORS.orange}
+          />
+        </NeuView>
 
         <Text style={styles.errorTitle}>
           Payment Pending
@@ -208,197 +276,255 @@ export default function TicketScreen({ route, navigation }) {
           and wait for your booking to be confirmed.
         </Text>
 
-        <TouchableOpacity
+        <NeuTouchable
           style={styles.button}
           onPress={goBackHome}
         >
+          <Ionicons
+            name="home-outline"
+            size={19}
+            color="#FFFFFF"
+          />
+
           <Text style={styles.buttonText}>
             Back to Home
           </Text>
-        </TouchableOpacity>
-      </View>
+        </NeuTouchable>
+      </SafeAreaView>
     );
   }
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.scrollContent}
-    >
-      <View style={styles.header}>
-        <Ionicons
-          name={
-            isBoarded
-              ? "checkmark-done-circle"
-              : "checkmark-circle"
-          }
-          size={55}
-          color="#16A34A"
-        />
+    <SafeAreaView style={styles.screen} edges={["top", "left", "right"]}>
+      <StatusBar
+        barStyle="dark-content"
+        backgroundColor={COLORS.background}
+      />
 
-        <Text style={styles.headerTitle}>
-          {isBoarded ? "Successfully Boarded!" : "Booking Confirmed!"}
-        </Text>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {/* HEADER */}
+        <View style={styles.header}>
+          <NeuView style={styles.headerIcon}>
+            <Ionicons
+              name={
+                isBoarded
+                  ? "checkmark-done-circle"
+                  : "checkmark-circle"
+              }
+              size={34}
+              color={COLORS.green}
+            />
+          </NeuView>
 
-        <Text style={styles.headerSubtitle}>
-          {isBoarded
-            ? "Your ticket has been verified by the bus operator."
-            : "Your payment was successful."}
-        </Text>
-      </View>
-
-      {/* Ticket Card */}
-      <View style={styles.ticketCard}>
-        <View style={styles.ticketHeader}>
-          <Text style={styles.ticketTitle}>
-            RouteX E-Ticket
+          <Text style={styles.headerTitle}>
+            {isBoarded ? "Successfully Boarded!" : "Booking Confirmed!"}
           </Text>
 
-          <View
-            style={[
+          <Text style={styles.headerSubtitle}>
+            {isBoarded
+              ? "Your ticket has been verified by the bus operator."
+              : "Your payment was successful."}
+          </Text>
+        </View>
+
+        {/* TICKET CARD */}
+        <NeuCard style={styles.ticketCard}>
+          {/* TICKET HEADER */}
+          <View style={styles.ticketHeader}>
+            <View style={styles.ticketBrand}>
+              <NeuView small style={styles.brandIcon}>
+                <Ionicons
+                  name="bus"
+                  size={23}
+                  color={COLORS.primary}
+                />
+              </NeuView>
+
+              <View>
+                <Text style={styles.ticketTitle}>
+                  RouteX
+                </Text>
+
+                <Text style={styles.ticketSubtitle}>
+                  E-Ticket
+                </Text>
+              </View>
+            </View>
+
+            <NeuView inset style={[
               styles.paidBadge,
               isBoarded && styles.boardedBadge,
-            ]}
-          >
-            <Text
-              style={[
+            ]}>
+              <Text style={[
                 styles.paidText,
                 isBoarded && styles.boardedText,
+              ]}>
+                {isBoarded ? "BOARDED" : "PAID"}
+              </Text>
+            </NeuView>
+          </View>
+
+          <View style={styles.divider} />
+
+          {/* BOOKING REFERENCE */}
+          <Text style={styles.label}>
+            BOOKING REFERENCE
+          </Text>
+
+          <Text style={styles.value}>
+            {booking.booking_reference || "Unavailable"}
+          </Text>
+
+          {/* BOOKING ID */}
+          <Text style={styles.label}>
+            BOOKING ID
+          </Text>
+
+          <Text style={styles.value}>
+            {booking.booking_id}
+          </Text>
+
+          {/* AMOUNT */}
+          <NeuView inset style={styles.amountBox}>
+            <Text style={styles.amountLabel}>
+              Total Amount
+            </Text>
+
+            <Text style={styles.amount}>
+              ₱{Number(booking.total_amount || 0).toLocaleString("en-PH", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
+            </Text>
+          </NeuView>
+
+          {/* PAYMENT STATUS */}
+          <View style={styles.statusRow}>
+            <Text style={styles.label}>
+              Payment Status
+            </Text>
+
+            <NeuView small style={styles.statusBadge}>
+              <Ionicons
+                name="checkmark-circle"
+                size={16}
+                color={COLORS.green}
+              />
+
+              <Text style={styles.status}>
+                Paid
+              </Text>
+            </NeuView>
+          </View>
+
+          {/* BOARDING STATUS */}
+          <Text style={styles.label}>
+            Boarding Status
+          </Text>
+
+          <NeuView inset style={styles.boardingStatusContainer}>
+            <Ionicons
+              name={
+                isBoarded
+                  ? "checkmark-circle"
+                  : "time-outline"
+              }
+              size={20}
+              color={isBoarded ? COLORS.green : COLORS.orange}
+            />
+
+            <Text
+              style={[
+                styles.boardingStatusText,
+                isBoarded && styles.boardedStatusText,
               ]}
             >
-              {isBoarded ? "BOARDED" : "PAID"}
+              {isBoarded ? "Boarded" : "Not Boarded"}
             </Text>
-          </View>
-        </View>
+          </NeuView>
 
-        <View style={styles.divider} />
+          {isBoarded && (
+            <Text style={styles.boardedMessage}>
+              Your QR ticket has been successfully scanned and verified.
+            </Text>
+          )}
 
-        <Text style={styles.label}>
-          Booking Reference
-        </Text>
+          <View style={styles.divider} />
 
-        <Text style={styles.value}>
-          {booking.booking_reference}
-        </Text>
+          {/* QR CODE */}
+          <Text style={styles.qrTitle}>
+            Your Ticket QR Code
+          </Text>
 
-        <Text style={styles.label}>
-          Booking ID
-        </Text>
+          <Text style={styles.qrSubtitle}>
+            Show this code to the bus operator
+          </Text>
 
-        <Text style={styles.value}>
-          {booking.booking_id}
-        </Text>
+          <NeuView inset style={styles.qrContainer}>
+            <QRCode
+              value={`ROUTEX-TICKET:${booking.ticket_code}`}
+              size={210}
+              backgroundColor="#EFF4FC"
+              color={COLORS.text}
+            />
+          </NeuView>
 
-        <Text style={styles.label}>
-          Total Amount
-        </Text>
+          <Text style={styles.qrInstruction}>
+            {isBoarded
+              ? "This ticket has already been used for boarding."
+              : "Present this QR code to the bus operator when boarding."}
+          </Text>
 
-        <Text style={styles.amount}>
-          ₱{Number(booking.total_amount || 0).toFixed(2)}
-        </Text>
+          {/* TICKET CODE */}
+          <Text style={styles.label}>
+            TICKET CODE
+          </Text>
 
-        <Text style={styles.label}>
-          Payment Status
-        </Text>
+          <NeuView inset style={styles.ticketCodeBox}>
+            <Text style={styles.ticketCode}>
+              {booking.ticket_code}
+            </Text>
+          </NeuView>
+        </NeuCard>
 
-        <Text style={styles.status}>
-          Paid
-        </Text>
-
-        {/* Boarding Status */}
-        <Text style={styles.label}>
-          Boarding Status
-        </Text>
-
-        <View style={styles.boardingStatusContainer}>
+        {/* BACK TO HOME */}
+        <NeuTouchable
+          style={styles.button}
+          onPress={goBackHome}
+        >
           <Ionicons
-            name={
-              isBoarded
-                ? "checkmark-circle"
-                : "time-outline"
-            }
-            size={20}
-            color={isBoarded ? "#16A34A" : "#F59E0B"}
+            name="home-outline"
+            size={19}
+            color="#FFFFFF"
           />
 
-          <Text
-            style={[
-              styles.boardingStatusText,
-              isBoarded && styles.boardedStatusText,
-            ]}
-          >
-            {isBoarded ? "Boarded" : "Not Boarded"}
+          <Text style={styles.buttonText}>
+            Back to Home
           </Text>
-        </View>
-
-        {isBoarded && (
-          <Text style={styles.boardedMessage}>
-            Your QR ticket has been successfully scanned and verified.
-          </Text>
-        )}
-
-        <View style={styles.divider} />
-
-        <Text style={styles.qrTitle}>
-          Your Ticket QR Code
-        </Text>
-
-        <View style={styles.qrContainer}>
-          <QRCode
-            value={`ROUTEX-TICKET:${booking.ticket_code}`}
-            size={210}
-            backgroundColor="#FFFFFF"
-            color="#000000"
-          />
-        </View>
-
-        <Text style={styles.qrInstruction}>
-          {isBoarded
-            ? "This ticket has already been used for boarding."
-            : "Present this QR code to the bus operator when boarding."}
-        </Text>
-
-        <Text style={styles.label}>
-          Ticket Code
-        </Text>
-
-        <Text style={styles.ticketCode}>
-          {booking.ticket_code}
-        </Text>
-      </View>
-
-      <TouchableOpacity
-        style={styles.button}
-        onPress={goBackHome}
-      >
-        <Ionicons
-          name="home-outline"
-          size={20}
-          color="#FFFFFF"
-        />
-
-        <Text style={styles.buttonText}>
-          Back to Home
-        </Text>
-      </TouchableOpacity>
-    </ScrollView>
+        </NeuTouchable>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
+// STYLES
 const styles = StyleSheet.create({
-  container: {
+  screen: {
     flex: 1,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: COLORS.background,
   },
 
   scrollContent: {
-    padding: 20,
+    padding: 18,
     paddingBottom: 35,
   },
 
   centerContainer: {
     flex: 1,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: COLORS.background,
     justifyContent: "center",
     alignItems: "center",
     padding: 25,
@@ -406,43 +532,47 @@ const styles = StyleSheet.create({
 
   loadingText: {
     marginTop: 15,
-    fontSize: 15,
-    color: "#64748B",
+    fontSize: 13,
+    fontWeight: "600",
+    color: COLORS.secondary,
   },
 
+  // HEADER
   header: {
     alignItems: "center",
-    marginTop: 25,
-    marginBottom: 25,
+    marginTop: 12,
+    marginBottom: 23,
+  },
+
+  headerIcon: {
+    width: 65,
+    height: 65,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
   },
 
   headerTitle: {
-    fontSize: 23,
-    fontWeight: "bold",
-    color: "#1E293B",
-    marginTop: 12,
+    fontSize: 22,
+    fontWeight: "900",
+    color: COLORS.text,
     textAlign: "center",
   },
 
   headerSubtitle: {
-    fontSize: 14,
-    color: "#64748B",
-    marginTop: 5,
+    fontSize: 12,
+    color: COLORS.secondary,
+    marginTop: 6,
     textAlign: "center",
+    lineHeight: 18,
   },
 
+  // TICKET
   ticketCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 18,
-    padding: 22,
-    elevation: 3,
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    shadowOffset: {
-      width: 0,
-      height: 3,
-    },
+    padding: 20,
+    borderRadius: 20,
+    marginBottom: 20,
   },
 
   ticketHeader: {
@@ -451,23 +581,42 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
+  ticketBrand: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  brandIcon: {
+    width: 43,
+    height: 43,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 11,
+  },
+
   ticketTitle: {
-    fontSize: 19,
-    fontWeight: "bold",
-    color: "#1E293B",
+    fontSize: 18,
+    fontWeight: "900",
+    color: COLORS.text,
+  },
+
+  ticketSubtitle: {
+    fontSize: 11,
+    color: COLORS.secondary,
+    marginTop: 2,
   },
 
   paidBadge: {
-    backgroundColor: "#DCFCE7",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
+    paddingHorizontal: 13,
+    paddingVertical: 8,
+    borderRadius: 12,
   },
 
   paidText: {
-    color: "#15803D",
-    fontWeight: "bold",
-    fontSize: 12,
+    color: COLORS.green,
+    fontWeight: "900",
+    fontSize: 11,
   },
 
   boardedBadge: {
@@ -475,125 +624,192 @@ const styles = StyleSheet.create({
   },
 
   boardedText: {
-    color: "#1D4ED8",
+    color: COLORS.primary,
   },
 
   divider: {
     height: 1,
-    backgroundColor: "#E2E8F0",
-    marginVertical: 18,
+    backgroundColor: "#C8D7ED",
+    marginVertical: 19,
   },
 
   label: {
-    fontSize: 12,
-    color: "#64748B",
-    marginTop: 14,
+    fontSize: 10,
+    color: COLORS.muted,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+    marginTop: 15,
   },
 
   value: {
-    fontSize: 16,
+    fontSize: 15,
+    fontWeight: "800",
+    color: COLORS.text,
+    marginTop: 5,
+  },
+
+  // AMOUNT
+  amountBox: {
+    padding: 16,
+    borderRadius: 15,
+    marginTop: 19,
+  },
+
+  amountLabel: {
+    fontSize: 12,
     fontWeight: "600",
-    color: "#1E293B",
-    marginTop: 4,
+    color: COLORS.secondary,
   },
 
   amount: {
-    fontSize: 23,
-    fontWeight: "bold",
-    color: "#2563EB",
-    marginTop: 4,
+    fontSize: 25,
+    fontWeight: "900",
+    color: COLORS.primary,
+    marginTop: 5,
+  },
+
+  // PAYMENT STATUS
+  statusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 15,
+  },
+
+  statusBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    borderRadius: 11,
+    gap: 5,
   },
 
   status: {
-    fontSize: 15,
-    fontWeight: "bold",
-    color: "#16A34A",
-    marginTop: 4,
+    fontSize: 12,
+    fontWeight: "900",
+    color: COLORS.green,
   },
 
+  // BOARDING STATUS
   boardingStatusContainer: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 7,
-    marginTop: 7,
+    padding: 13,
+    borderRadius: 13,
+    marginTop: 8,
+    gap: 8,
   },
 
   boardingStatusText: {
-    fontSize: 15,
-    fontWeight: "bold",
-    color: "#F59E0B",
+    fontSize: 13,
+    fontWeight: "900",
+    color: COLORS.orange,
   },
 
   boardedStatusText: {
-    color: "#16A34A",
+    color: COLORS.green,
   },
 
   boardedMessage: {
-    fontSize: 12,
-    color: "#16A34A",
-    marginTop: 8,
-    lineHeight: 18,
+    fontSize: 11,
+    color: COLORS.green,
+    marginTop: 9,
+    lineHeight: 17,
   },
 
+  // QR CODE
   qrTitle: {
-    fontSize: 17,
-    fontWeight: "bold",
-    color: "#1E293B",
+    fontSize: 16,
+    fontWeight: "900",
+    color: COLORS.text,
     textAlign: "center",
-    marginBottom: 20,
+  },
+
+  qrSubtitle: {
+    fontSize: 11,
+    color: COLORS.secondary,
+    textAlign: "center",
+    marginTop: 5,
+    marginBottom: 18,
   },
 
   qrContainer: {
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 15,
-    backgroundColor: "#FFFFFF",
+    alignSelf: "center",
+    padding: 18,
+    borderRadius: 17,
   },
 
   qrInstruction: {
-    fontSize: 12,
-    color: "#64748B",
+    fontSize: 11,
+    color: COLORS.secondary,
     textAlign: "center",
-    marginTop: 15,
-    lineHeight: 19,
+    marginTop: 16,
+    lineHeight: 18,
+  },
+
+  ticketCodeBox: {
+    padding: 13,
+    borderRadius: 12,
+    marginTop: 8,
   },
 
   ticketCode: {
     fontSize: 11,
-    color: "#334155",
+    fontWeight: "800",
+    color: COLORS.primary,
     textAlign: "center",
-    marginTop: 5,
   },
 
+  // BUTTON
   button: {
-    backgroundColor: "#2563EB",
+    backgroundColor: COLORS.primary,
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
     padding: 16,
-    borderRadius: 12,
-    marginTop: 25,
+    borderRadius: 15,
     gap: 9,
   },
 
   buttonText: {
     color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "bold",
+    fontSize: 14,
+    fontWeight: "900",
+  },
+
+  // ERROR STATES
+  errorIcon: {
+    width: 75,
+    height: 75,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 15,
+  },
+
+  pendingIcon: {
+    width: 75,
+    height: 75,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 15,
   },
 
   errorTitle: {
     fontSize: 21,
-    fontWeight: "bold",
-    color: "#1E293B",
-    marginTop: 15,
+    fontWeight: "900",
+    color: COLORS.text,
+    marginTop: 5,
+    textAlign: "center",
   },
 
   errorText: {
-    fontSize: 14,
-    color: "#64748B",
+    fontSize: 13,
+    color: COLORS.secondary,
     textAlign: "center",
-    marginTop: 8,
+    marginTop: 9,
     lineHeight: 21,
   },
 });

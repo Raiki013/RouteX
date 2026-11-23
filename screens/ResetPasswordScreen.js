@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from "react";
 
 import {
@@ -12,21 +11,16 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Alert,
 } from "react-native";
 
 import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "../config/supabase";
 
-const C = {
-  navy: "#0F2747",
-  blue: "#2563EB",
-  background: "#F3F7FC",
-  white: "#FFFFFF",
-  text: "#172B4D",
-  gray: "#7B8798",
-  border: "#E3EAF2",
-};
+import {
+  C,
+  NeuView,
+  NeuTouchable,
+} from "../theme/theme";
 
 export default function ResetPasswordScreen({ navigation }) {
   const [password, setPassword] = useState("");
@@ -52,18 +46,13 @@ export default function ResetPasswordScreen({ navigation }) {
         const { data, error } =
           await supabase.auth.getSession();
 
-        if (error) {
-          throw error;
-        }
+        if (error) throw error;
 
         if (mounted) {
           setValidSession(!!data.session?.user);
         }
       } catch (error) {
-        console.log(
-          "RECOVERY SESSION ERROR:",
-          error.message
-        );
+        console.log("RECOVERY SESSION ERROR:", error.message);
 
         if (mounted) {
           setValidSession(false);
@@ -83,105 +72,73 @@ export default function ResetPasswordScreen({ navigation }) {
   }, []);
 
   // =====================================
+  // BACK TO LOGIN
+  // =====================================
+
+  const goToLogin = () => {
+    navigation.reset({
+      index: 0,
+      routes: [{ name: "Login" }],
+    });
+  };
+
+  // =====================================
   // RESET PASSWORD
   // =====================================
 
   const handleResetPassword = async () => {
     if (!password || !confirmPassword) {
-      Alert.alert(
-        "Missing Fields",
-        "Please complete all fields."
-      );
       return;
     }
 
     if (password.length < 6) {
-      Alert.alert(
-        "Invalid Password",
-        "Password must contain at least 6 characters."
-      );
       return;
     }
 
     if (password !== confirmPassword) {
-      Alert.alert(
-        "Password Mismatch",
-        "Your passwords do not match."
-      );
       return;
     }
 
     if (!validSession) {
-      Alert.alert(
-        "Session Expired",
-        "Your password reset link is invalid or expired. Please request a new password reset link."
-      );
       return;
     }
 
     setLoading(true);
 
     try {
-      // UPDATE SUPABASE PASSWORD
       const { error } = await supabase.auth.updateUser({
         password: password,
       });
 
       if (error) {
-        Alert.alert(
-          "Update Failed",
-          error.message
-        );
+        console.log("UPDATE PASSWORD ERROR:", error.message);
         return;
       }
 
-      // CLEAR INPUTS
       setPassword("");
       setConfirmPassword("");
 
-      // SIGN OUT AFTER SUCCESSFUL PASSWORD UPDATE
       const { error: signOutError } =
         await supabase.auth.signOut();
 
       if (signOutError) {
-        console.log(
-          "SIGN OUT ERROR:",
-          signOutError.message
-        );
+        console.log("SIGN OUT ERROR:", signOutError.message);
       }
 
-      Alert.alert(
-        "Password Updated!",
-        "Your RouteX password has been successfully changed. You can now log in using your new password.",
-        [
+      // Show success using the screen UI
+      navigation.reset({
+        index: 0,
+        routes: [
           {
-            text: "OK",
-            onPress: () => {
-              navigation.reset({
-                index: 0,
-                routes: [
-                  {
-                    name: "Login",
-                  },
-                ],
-              });
+            name: "Login",
+            params: {
+              passwordUpdated: true,
             },
           },
         ],
-        {
-          cancelable: false,
-        }
-      );
+      });
     } catch (error) {
-      console.log(
-        "PASSWORD UPDATE ERROR:",
-        error.message
-      );
-
-      Alert.alert(
-        "Error",
-        "Something went wrong. Please try again."
-      );
+      console.log("PASSWORD UPDATE ERROR:", error.message);
     } finally {
       setLoading(false);
     }
@@ -194,10 +151,14 @@ export default function ResetPasswordScreen({ navigation }) {
   if (checkingSession) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator
-          size="large"
-          color={C.blue}
+        <StatusBar
+          backgroundColor={C.background}
+          barStyle="dark-content"
         />
+
+        <NeuView style={styles.loadingIcon}>
+          <ActivityIndicator size="large" color={C.blue} />
+        </NeuView>
 
         <Text style={styles.loadingText}>
           Verifying password reset session...
@@ -213,13 +174,18 @@ export default function ResetPasswordScreen({ navigation }) {
   if (!validSession) {
     return (
       <View style={styles.loadingContainer}>
-        <View style={styles.iconContainer}>
+        <StatusBar
+          backgroundColor={C.background}
+          barStyle="dark-content"
+        />
+
+        <NeuView style={styles.iconContainer}>
           <Ionicons
             name="alert-circle-outline"
-            size={42}
-            color="#DC2626"
+            size={43}
+            color="#DC5252"
           />
-        </View>
+        </NeuView>
 
         <Text style={styles.title}>
           Reset Link Expired
@@ -232,12 +198,8 @@ export default function ResetPasswordScreen({ navigation }) {
 
         <TouchableOpacity
           style={styles.button}
-          onPress={() => {
-            navigation.reset({
-              index: 0,
-              routes: [{ name: "Login" }],
-            });
-          }}
+          onPress={goToLogin}
+          activeOpacity={0.85}
         >
           <Text style={styles.buttonText}>
             Back to Login
@@ -267,14 +229,15 @@ export default function ResetPasswordScreen({ navigation }) {
         showsVerticalScrollIndicator={false}
       >
         {/* HEADER */}
+
         <View style={styles.header}>
-          <View style={styles.iconContainer}>
+          <NeuView style={styles.iconContainer}>
             <Ionicons
               name="lock-closed-outline"
               size={42}
               color={C.blue}
             />
-          </View>
+          </NeuView>
 
           <Text style={styles.title}>
             Reset Password
@@ -286,13 +249,15 @@ export default function ResetPasswordScreen({ navigation }) {
         </View>
 
         {/* RESET CARD */}
-        <View style={styles.card}>
+
+        <NeuView style={styles.card}>
           {/* NEW PASSWORD */}
+
           <Text style={styles.inputLabel}>
             New Password
           </Text>
 
-          <View style={styles.inputBox}>
+          <NeuView inset style={styles.inputBox}>
             <Ionicons
               name="lock-closed-outline"
               size={21}
@@ -301,7 +266,7 @@ export default function ResetPasswordScreen({ navigation }) {
 
             <TextInput
               placeholder="Enter new password"
-              placeholderTextColor="#A0AAB8"
+              placeholderTextColor={C.muted}
               style={styles.input}
               value={password}
               onChangeText={setPassword}
@@ -324,17 +289,18 @@ export default function ResetPasswordScreen({ navigation }) {
                     : "eye-outline"
                 }
                 size={21}
-                color={C.gray}
+                color={C.muted}
               />
             </TouchableOpacity>
-          </View>
+          </NeuView>
 
           {/* CONFIRM PASSWORD */}
+
           <Text style={styles.inputLabel}>
             Confirm New Password
           </Text>
 
-          <View style={styles.inputBox}>
+          <NeuView inset style={styles.inputBox}>
             <Ionicons
               name="lock-closed-outline"
               size={21}
@@ -343,7 +309,7 @@ export default function ResetPasswordScreen({ navigation }) {
 
             <TextInput
               placeholder="Confirm new password"
-              placeholderTextColor="#A0AAB8"
+              placeholderTextColor={C.muted}
               style={styles.input}
               value={confirmPassword}
               onChangeText={setConfirmPassword}
@@ -366,16 +332,25 @@ export default function ResetPasswordScreen({ navigation }) {
                     : "eye-outline"
                 }
                 size={21}
-                color={C.gray}
+                color={C.muted}
               />
             </TouchableOpacity>
+          </NeuView>
+
+          <View style={styles.hintContainer}>
+            <Ionicons
+              name="information-circle-outline"
+              size={15}
+              color={C.muted}
+            />
+
+            <Text style={styles.hint}>
+              Password must contain at least 6 characters.
+            </Text>
           </View>
 
-          <Text style={styles.hint}>
-            Password must contain at least 6 characters.
-          </Text>
-
           {/* UPDATE BUTTON */}
+
           <TouchableOpacity
             style={[
               styles.button,
@@ -386,7 +361,7 @@ export default function ResetPasswordScreen({ navigation }) {
             activeOpacity={0.85}
           >
             {loading ? (
-              <ActivityIndicator color={C.white} />
+              <ActivityIndicator color="#FFFFFF" />
             ) : (
               <View style={styles.buttonContent}>
                 <Text style={styles.buttonText}>
@@ -396,21 +371,32 @@ export default function ResetPasswordScreen({ navigation }) {
                 <Ionicons
                   name="arrow-forward"
                   size={20}
-                  color={C.white}
+                  color="#FFFFFF"
                 />
               </View>
             )}
           </TouchableOpacity>
 
+          {/* VALIDATION MESSAGES */}
+
+          {password.length > 0 && password.length < 6 && (
+            <Text style={styles.errorText}>
+              Password must contain at least 6 characters.
+            </Text>
+          )}
+
+          {confirmPassword.length > 0 &&
+            password !== confirmPassword && (
+              <Text style={styles.errorText}>
+                Passwords do not match.
+              </Text>
+            )}
+
           {/* BACK TO LOGIN */}
+
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => {
-              navigation.reset({
-                index: 0,
-                routes: [{ name: "Login" }],
-              });
-            }}
+            onPress={goToLogin}
             disabled={loading}
           >
             <Ionicons
@@ -423,14 +409,15 @@ export default function ResetPasswordScreen({ navigation }) {
               Back to Login
             </Text>
           </TouchableOpacity>
-        </View>
+        </NeuView>
 
         {/* FOOTER */}
+
         <View style={styles.footer}>
           <Ionicons
             name="shield-checkmark-outline"
-            size={15}
-            color={C.gray}
+            size={16}
+            color={C.muted}
           />
 
           <Text style={styles.footerText}>
@@ -441,6 +428,10 @@ export default function ResetPasswordScreen({ navigation }) {
     </KeyboardAvoidingView>
   );
 }
+
+// =====================================
+// STYLES
+// =====================================
 
 const styles = StyleSheet.create({
   container: {
@@ -463,10 +454,19 @@ const styles = StyleSheet.create({
     padding: 30,
   },
 
+  loadingIcon: {
+    width: 85,
+    height: 85,
+    borderRadius: 45,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+
   loadingText: {
     fontSize: 13,
-    color: C.gray,
-    marginTop: 15,
+    color: C.muted,
+    marginTop: 5,
     textAlign: "center",
   },
 
@@ -476,62 +476,50 @@ const styles = StyleSheet.create({
   },
 
   iconContainer: {
-    width: 85,
-    height: 85,
+    width: 88,
+    height: 88,
     borderRadius: 45,
-    backgroundColor: "#DBEAFE",
-    alignItems: "center",
     justifyContent: "center",
-    marginBottom: 18,
+    alignItems: "center",
+    marginBottom: 20,
   },
 
   title: {
     fontSize: 27,
     fontWeight: "900",
-    color: C.navy,
+    color: C.text,
     textAlign: "center",
   },
 
   subtitle: {
     fontSize: 13,
-    color: C.gray,
+    color: C.muted,
     textAlign: "center",
     marginTop: 9,
-    lineHeight: 20,
+    lineHeight: 21,
+    paddingHorizontal: 10,
   },
 
   card: {
-    backgroundColor: C.white,
+    padding: 23,
     borderRadius: 25,
-    padding: 25,
-    elevation: 5,
-    shadowColor: "#193B5C",
-    shadowOffset: {
-      width: 0,
-      height: 5,
-    },
-    shadowOpacity: 0.08,
-    shadowRadius: 15,
   },
 
   inputLabel: {
     fontSize: 13,
-    fontWeight: "700",
+    fontWeight: "800",
     color: C.text,
-    marginBottom: 9,
-    marginTop: 8,
+    marginBottom: 10,
+    marginTop: 9,
   },
 
   inputBox: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#F7F9FC",
-    borderWidth: 1,
-    borderColor: C.border,
-    borderRadius: 13,
+    borderRadius: 14,
     paddingHorizontal: 15,
-    height: 55,
-    marginBottom: 18,
+    height: 56,
+    marginBottom: 17,
   },
 
   input: {
@@ -542,22 +530,37 @@ const styles = StyleSheet.create({
     height: "100%",
   },
 
+  hintContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: -5,
+    marginBottom: 12,
+    gap: 6,
+  },
+
   hint: {
     fontSize: 11,
-    color: C.gray,
-    marginTop: -7,
-    marginBottom: 12,
+    color: C.muted,
+    flex: 1,
   },
 
   button: {
     backgroundColor: C.blue,
     height: 55,
-    borderRadius: 14,
+    borderRadius: 15,
     justifyContent: "center",
     alignItems: "center",
     marginTop: 10,
-    elevation: 4,
     paddingHorizontal: 15,
+
+    shadowColor: C.blue,
+    shadowOffset: {
+      width: 0,
+      height: 5,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
 
   buttonDisabled: {
@@ -574,7 +577,14 @@ const styles = StyleSheet.create({
   buttonText: {
     fontSize: 15,
     fontWeight: "800",
-    color: C.white,
+    color: "#FFFFFF",
+  },
+
+  errorText: {
+    fontSize: 11,
+    color: "#DC5252",
+    marginTop: 8,
+    textAlign: "center",
   },
 
   backButton: {
@@ -582,13 +592,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginTop: 25,
-    gap: 7,
+    gap: 8,
   },
 
   backText: {
     color: C.blue,
     fontSize: 13,
-    fontWeight: "700",
+    fontWeight: "800",
   },
 
   footer: {
@@ -601,6 +611,6 @@ const styles = StyleSheet.create({
 
   footerText: {
     fontSize: 10,
-    color: C.gray,
+    color: C.muted,
   },
 });

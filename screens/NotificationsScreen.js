@@ -1,11 +1,14 @@
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useState,
+} from "react";
 
 import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   ScrollView,
   StatusBar,
   ActivityIndicator,
@@ -18,27 +21,12 @@ import { useFocusEffect } from "@react-navigation/native";
 
 import { supabase } from "../config/supabase";
 
-const C = {
-  background: "#F1F5F9",
-  primary: "#1677D2",
-  primaryDark: "#125FA8",
-  text: "#26384A",
-  secondary: "#64798D",
-  muted: "#8A9CAD",
-  white: "#FFFFFF",
-  border: "#E2E8F0",
-  green: "#16A34A",
-  red: "#DC2626",
-};
-
-const GLASS = {
-  card: "rgba(255, 255, 255, 0.85)",
-  border: "rgba(255, 255, 255, 0.95)",
-  shadow: "#64748B",
-  text: "#26384A",
-  secondary: "#64798D",
-  muted: "#8A9CAD",
-};
+import {
+  C,
+  NeuView,
+  NeuTouchable,
+  NeuCard,
+} from "../theme/theme";
 
 export default function NotificationsScreen({ navigation }) {
   const [notifications, setNotifications] = useState([]);
@@ -51,12 +39,20 @@ export default function NotificationsScreen({ navigation }) {
   const [alertMessage, setAlertMessage] = useState("");
   const [alertType, setAlertType] = useState("info");
 
+  // =====================================
+  // CUSTOM ALERT
+  // =====================================
+
   const showAlert = (title, message, type = "info") => {
     setAlertTitle(title);
     setAlertMessage(message);
     setAlertType(type);
     setAlertVisible(true);
   };
+
+  // =====================================
+  // LOAD NOTIFICATIONS
+  // =====================================
 
   const loadNotifications = useCallback(async () => {
     try {
@@ -94,9 +90,14 @@ export default function NotificationsScreen({ navigation }) {
 
   useFocusEffect(
     useCallback(() => {
+      setLoading(true);
       loadNotifications();
     }, [loadNotifications])
   );
+
+  // =====================================
+  // REALTIME NOTIFICATIONS
+  // =====================================
 
   useEffect(() => {
     if (!currentUserId) return;
@@ -122,10 +123,18 @@ export default function NotificationsScreen({ navigation }) {
     };
   }, [currentUserId, loadNotifications]);
 
+  // =====================================
+  // REFRESH
+  // =====================================
+
   const onRefresh = () => {
     setRefreshing(true);
     loadNotifications();
   };
+
+  // =====================================
+  // MARK AS READ
+  // =====================================
 
   const markAsRead = async (notification) => {
     if (notification.is_read) return;
@@ -163,8 +172,14 @@ export default function NotificationsScreen({ navigation }) {
     }
   };
 
+  // =====================================
+  // MARK ALL AS READ
+  // =====================================
+
   const markAllAsRead = async () => {
-    const unread = notifications.filter((item) => !item.is_read);
+    const unread = notifications.filter(
+      (item) => !item.is_read
+    );
 
     if (unread.length === 0) {
       showAlert(
@@ -178,7 +193,10 @@ export default function NotificationsScreen({ navigation }) {
     const previousNotifications = [...notifications];
 
     setNotifications((previous) =>
-      previous.map((item) => ({ ...item, is_read: true }))
+      previous.map((item) => ({
+        ...item,
+        is_read: true,
+      }))
     );
 
     const { error } = await supabase
@@ -189,6 +207,7 @@ export default function NotificationsScreen({ navigation }) {
 
     if (error) {
       console.log("MARK ALL AS READ ERROR:", error.message);
+
       setNotifications(previousNotifications);
 
       showAlert(
@@ -196,6 +215,7 @@ export default function NotificationsScreen({ navigation }) {
         "Unable to update your notifications.",
         "error"
       );
+
       return;
     }
 
@@ -205,6 +225,10 @@ export default function NotificationsScreen({ navigation }) {
       "success"
     );
   };
+
+  // =====================================
+  // NOTIFICATION ICONS
+  // =====================================
 
   const getNotificationIcon = (type) => {
     switch ((type || "").toLowerCase()) {
@@ -225,6 +249,10 @@ export default function NotificationsScreen({ navigation }) {
     }
   };
 
+  // =====================================
+  // NOTIFICATION COLORS
+  // =====================================
+
   const getNotificationColor = (type) => {
     switch ((type || "").toLowerCase()) {
       case "success":
@@ -236,18 +264,24 @@ export default function NotificationsScreen({ navigation }) {
       case "payment":
         return "#0D9488";
       case "booking":
-        return C.primary;
+        return C.blue;
       default:
-        return C.primary;
+        return C.blue;
     }
   };
+
+  // =====================================
+  // DATE FORMAT
+  // =====================================
 
   const formatDate = (date) => {
     if (!date) return "";
 
     const notificationDate = new Date(date);
 
-    if (Number.isNaN(notificationDate.getTime())) return "";
+    if (Number.isNaN(notificationDate.getTime())) {
+      return "";
+    }
 
     return notificationDate.toLocaleString([], {
       month: "short",
@@ -266,6 +300,10 @@ export default function NotificationsScreen({ navigation }) {
     await markAsRead(notification);
   };
 
+  // =====================================
+  // MAIN UI
+  // =====================================
+
   return (
     <View style={styles.container}>
       <StatusBar
@@ -274,8 +312,10 @@ export default function NotificationsScreen({ navigation }) {
       />
 
       {/* HEADER */}
+
       <View style={styles.header}>
-        <TouchableOpacity
+        <NeuTouchable
+          small
           style={styles.backButton}
           onPress={() => {
             if (navigation.canGoBack()) {
@@ -287,44 +327,50 @@ export default function NotificationsScreen({ navigation }) {
         >
           <Ionicons
             name="arrow-back"
-            size={22}
-            color={C.text}
+            size={21}
+            color={C.blue}
           />
-        </TouchableOpacity>
+        </NeuTouchable>
 
         <View style={styles.headerTextContainer}>
-          <Text style={styles.headerTitle}>Notifications</Text>
+          <Text style={styles.headerTitle}>
+            Notifications
+          </Text>
+
           <Text style={styles.headerSubtitle}>
             Stay updated with your latest activities
           </Text>
         </View>
 
-        <TouchableOpacity
+        <NeuTouchable
+          small
           style={styles.headerIcon}
           onPress={loadNotifications}
         >
           <Ionicons
             name="refresh-outline"
             size={21}
-            color={C.primary}
+            color={C.blue}
           />
-        </TouchableOpacity>
+        </NeuTouchable>
       </View>
 
-      {/* SUMMARY */}
-      <View style={styles.summaryCard}>
-        <View style={styles.summaryIcon}>
+      {/* SUMMARY CARD */}
+
+      <NeuCard style={styles.summaryCard}>
+        <NeuView small style={styles.summaryIcon}>
           <Ionicons
             name="notifications"
             size={23}
-            color={C.primary}
+            color={C.blue}
           />
-        </View>
+        </NeuView>
 
         <View style={styles.summaryTextContainer}>
           <Text style={styles.summaryTitle}>
             Your Notifications
           </Text>
+
           <Text style={styles.summarySubtitle}>
             {unreadCount === 0
               ? "You're all caught up!"
@@ -336,35 +382,42 @@ export default function NotificationsScreen({ navigation }) {
           </Text>
         </View>
 
-        <View style={styles.countBadge}>
+        <NeuView inset style={styles.countBadge}>
           <Text style={styles.countText}>
             {unreadCount}
           </Text>
-        </View>
-      </View>
+        </NeuView>
+      </NeuCard>
 
-      {/* NOTIFICATION LIST HEADER */}
+      {/* SECTION HEADER */}
+
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>
           Recent Notifications
         </Text>
 
         {unreadCount > 0 && (
-          <TouchableOpacity onPress={markAllAsRead}>
+          <NeuTouchable
+            small
+            style={styles.markAllButton}
+            onPress={markAllAsRead}
+          >
             <Text style={styles.markAllText}>
               Mark all as read
             </Text>
-          </TouchableOpacity>
+          </NeuTouchable>
         )}
       </View>
 
       {/* NOTIFICATION LIST */}
+
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator
             size="large"
-            color={C.primary}
+            color={C.blue}
           />
+
           <Text style={styles.loadingText}>
             Loading notifications...
           </Text>
@@ -378,20 +431,23 @@ export default function NotificationsScreen({ navigation }) {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              tintColor={C.primary}
-              colors={[C.primary]}
+              tintColor={C.blue}
+              colors={[C.blue]}
             />
           }
         >
           {notifications.length === 0 ? (
-            <View style={styles.emptyCard}>
-              <View style={styles.emptyIconContainer}>
+            <NeuCard style={styles.emptyCard}>
+              <NeuView
+                inset
+                style={styles.emptyIconContainer}
+              >
                 <Ionicons
                   name="notifications-off-outline"
-                  size={42}
+                  size={39}
                   color={C.muted}
                 />
-              </View>
+              </NeuView>
 
               <Text style={styles.emptyTitle}>
                 No Notifications Yet
@@ -401,31 +457,31 @@ export default function NotificationsScreen({ navigation }) {
                 When you receive notifications, they will
                 appear here.
               </Text>
-            </View>
+            </NeuCard>
           ) : (
             notifications.map((item) => (
-              <TouchableOpacity
+              <NeuTouchable
                 key={item.id}
-                activeOpacity={0.85}
-                onPress={() => handleNotificationPress(item)}
                 style={styles.notificationCard}
+                onPress={() =>
+                  handleNotificationPress(item)
+                }
               >
-                <View
-                  style={[
-                    styles.notificationIcon,
-                    {
-                      backgroundColor: `${getNotificationColor(
-                        item.type
-                      )}15`,
-                    },
-                  ]}
+                {/* NOTIFICATION ICON */}
+
+                <NeuView
+                  small
+                  inset
+                  style={styles.notificationIcon}
                 >
                   <Ionicons
                     name={getNotificationIcon(item.type)}
-                    size={23}
+                    size={22}
                     color={getNotificationColor(item.type)}
                   />
-                </View>
+                </NeuView>
+
+                {/* NOTIFICATION CONTENT */}
 
                 <View style={styles.notificationContent}>
                   <View style={styles.notificationTitleRow}>
@@ -463,13 +519,14 @@ export default function NotificationsScreen({ navigation }) {
                     )}
                   </View>
                 </View>
-              </TouchableOpacity>
+              </NeuTouchable>
             ))
           )}
         </ScrollView>
       )}
 
       {/* CUSTOM ALERT MODAL */}
+
       <Modal
         visible={alertVisible}
         transparent
@@ -477,19 +534,10 @@ export default function NotificationsScreen({ navigation }) {
         onRequestClose={() => setAlertVisible(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.alertCard}>
-            <View
-              style={[
-                styles.alertIcon,
-                {
-                  backgroundColor:
-                    alertType === "success"
-                      ? "#DCFCE7"
-                      : alertType === "error"
-                      ? "#FEE2E2"
-                      : "#DBEAFE",
-                },
-              ]}
+          <NeuCard style={styles.alertCard}>
+            <NeuView
+              inset
+              style={styles.alertIcon}
             >
               <Ionicons
                 name={
@@ -499,16 +547,16 @@ export default function NotificationsScreen({ navigation }) {
                     ? "alert-circle"
                     : "information-circle"
                 }
-                size={34}
+                size={35}
                 color={
                   alertType === "success"
                     ? C.green
                     : alertType === "error"
                     ? C.red
-                    : C.primary
+                    : C.blue
                 }
               />
-            </View>
+            </NeuView>
 
             <Text style={styles.alertTitle}>
               {alertTitle}
@@ -518,20 +566,24 @@ export default function NotificationsScreen({ navigation }) {
               {alertMessage}
             </Text>
 
-            <TouchableOpacity
+            <NeuTouchable
               style={styles.alertButton}
               onPress={() => setAlertVisible(false)}
             >
               <Text style={styles.alertButtonText}>
                 Okay
               </Text>
-            </TouchableOpacity>
-          </View>
+            </NeuTouchable>
+          </NeuCard>
         </View>
       </Modal>
     </View>
   );
 }
+
+// =====================================
+// STYLES
+// =====================================
 
 const styles = StyleSheet.create({
   container: {
@@ -539,27 +591,23 @@ const styles = StyleSheet.create({
     backgroundColor: C.background,
   },
 
+  // HEADER
+
   header: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 20,
     paddingTop: 15,
     paddingBottom: 18,
-    backgroundColor: GLASS.card,
-    borderBottomWidth: 1,
-    borderBottomColor: GLASS.border,
   },
 
   backButton: {
     width: 42,
     height: 42,
     borderRadius: 14,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: GLASS.border,
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 12,
+    marginRight: 13,
   },
 
   headerTextContainer: {
@@ -568,142 +616,131 @@ const styles = StyleSheet.create({
 
   headerTitle: {
     fontSize: 21,
-    fontWeight: "800",
-    color: GLASS.text,
+    fontWeight: "900",
+    color: C.text,
   },
 
   headerSubtitle: {
-    fontSize: 12,
-    color: GLASS.secondary,
-    marginTop: 3,
+    fontSize: 11,
+    color: C.muted,
+    marginTop: 4,
   },
 
   headerIcon: {
     width: 40,
     height: 40,
     borderRadius: 13,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: GLASS.border,
     alignItems: "center",
     justifyContent: "center",
+    marginLeft: 10,
   },
+
+  // SUMMARY
 
   summaryCard: {
     flexDirection: "row",
     alignItems: "center",
-    marginHorizontal: 18,
-    marginTop: 20,
-    padding: 16,
-    borderRadius: 20,
-    backgroundColor: GLASS.card,
-    borderWidth: 1,
-    borderColor: GLASS.border,
-    shadowColor: GLASS.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
+    marginHorizontal: 20,
+    marginTop: 8,
+    padding: 17,
+    borderRadius: 22,
   },
 
   summaryIcon: {
     width: 48,
     height: 48,
-    borderRadius: 16,
-    backgroundColor: "#E8F2FC",
+    borderRadius: 15,
     alignItems: "center",
     justifyContent: "center",
   },
 
   summaryTextContainer: {
     flex: 1,
-    marginLeft: 13,
+    marginLeft: 14,
   },
 
   summaryTitle: {
     fontSize: 15,
-    fontWeight: "800",
-    color: GLASS.text,
+    fontWeight: "900",
+    color: C.text,
   },
 
   summarySubtitle: {
-    fontSize: 12,
-    color: GLASS.secondary,
-    marginTop: 4,
+    fontSize: 11,
+    color: C.muted,
+    marginTop: 5,
   },
 
   countBadge: {
-    minWidth: 30,
-    height: 30,
+    minWidth: 32,
+    height: 32,
     paddingHorizontal: 8,
-    borderRadius: 15,
-    backgroundColor: "#E8F2FC",
+    borderRadius: 11,
     alignItems: "center",
     justifyContent: "center",
   },
 
   countText: {
-    color: C.primary,
     fontSize: 13,
-    fontWeight: "800",
+    fontWeight: "900",
+    color: C.blue,
   },
+
+  // SECTION HEADER
 
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     marginHorizontal: 20,
-    marginTop: 25,
-    marginBottom: 12,
+    marginTop: 27,
+    marginBottom: 15,
   },
 
   sectionTitle: {
     fontSize: 16,
-    fontWeight: "800",
-    color: GLASS.text,
+    fontWeight: "900",
+    color: C.text,
+  },
+
+  markAllButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 12,
   },
 
   markAllText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: C.primary,
+    fontSize: 11,
+    fontWeight: "800",
+    color: C.blue,
   },
+
+  // NOTIFICATION LIST
 
   scrollView: {
     flex: 1,
   },
 
   scrollContent: {
-    paddingHorizontal: 18,
-    paddingBottom: 30,
+    paddingHorizontal: 20,
+    paddingBottom: 35,
   },
 
   notificationCard: {
     flexDirection: "row",
     alignItems: "flex-start",
     padding: 15,
-    marginBottom: 12,
-    borderRadius: 18,
-
-    // Same background and border for every notification.
-    backgroundColor: GLASS.card,
-    borderWidth: 1,
-    borderColor: GLASS.border,
-
-    shadowColor: GLASS.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.07,
-    shadowRadius: 7,
-    elevation: 2,
+    marginBottom: 15,
+    borderRadius: 20,
   },
 
   notificationIcon: {
-    width: 43,
-    height: 43,
+    width: 44,
+    height: 44,
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 12,
+    marginRight: 13,
   },
 
   notificationContent: {
@@ -719,43 +756,46 @@ const styles = StyleSheet.create({
   notificationTitle: {
     flex: 1,
     fontSize: 14,
-    fontWeight: "800",
-    color: GLASS.text,
+    fontWeight: "900",
+    color: C.text,
     marginRight: 8,
   },
 
   unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: C.primary,
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    backgroundColor: C.blue,
+    marginTop: 4,
   },
 
   notificationMessage: {
     fontSize: 12,
     lineHeight: 19,
-    color: GLASS.secondary,
-    marginTop: 6,
+    color: C.textSecondary,
+    marginTop: 7,
   },
 
   notificationFooter: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 10,
+    marginTop: 12,
   },
 
   notificationDate: {
     fontSize: 10,
-    color: GLASS.muted,
+    color: C.muted,
     marginLeft: 5,
   },
 
   readLabel: {
     fontSize: 10,
-    color: GLASS.muted,
+    color: C.muted,
     marginLeft: "auto",
-    fontWeight: "600",
+    fontWeight: "800",
   },
+
+  // LOADING
 
   loadingContainer: {
     flex: 1,
@@ -764,49 +804,52 @@ const styles = StyleSheet.create({
   },
 
   loadingText: {
-    color: GLASS.secondary,
-    fontSize: 13,
-    marginTop: 12,
+    color: C.textSecondary,
+    fontSize: 12,
+    marginTop: 13,
+    fontWeight: "600",
   },
+
+  // EMPTY STATE
 
   emptyCard: {
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 25,
     paddingVertical: 45,
-    borderRadius: 20,
-    backgroundColor: GLASS.card,
-    borderWidth: 1,
-    borderColor: GLASS.border,
+    borderRadius: 22,
+    marginTop: 5,
   },
 
   emptyIconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 26,
-    backgroundColor: "#FFFFFF",
+    width: 82,
+    height: 82,
+    borderRadius: 25,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 17,
+    marginBottom: 18,
   },
 
   emptyTitle: {
     fontSize: 17,
-    fontWeight: "800",
-    color: GLASS.text,
+    fontWeight: "900",
+    color: C.text,
+    textAlign: "center",
   },
 
   emptySubtitle: {
     fontSize: 12,
     lineHeight: 19,
-    color: GLASS.secondary,
+    color: C.muted,
     textAlign: "center",
-    marginTop: 8,
+    marginTop: 9,
   },
+
+  // MODAL
 
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(15, 23, 42, 0.40)",
+    backgroundColor: "rgba(22, 52, 107, 0.28)",
     alignItems: "center",
     justifyContent: "center",
     padding: 25,
@@ -815,50 +858,48 @@ const styles = StyleSheet.create({
   alertCard: {
     width: "100%",
     maxWidth: 350,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 24,
-    padding: 25,
+    borderRadius: 25,
+    padding: 26,
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
   },
 
   alertIcon: {
-    width: 65,
-    height: 65,
+    width: 68,
+    height: 68,
     borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 15,
+    marginBottom: 17,
   },
 
   alertTitle: {
     fontSize: 19,
-    fontWeight: "800",
-    color: GLASS.text,
+    fontWeight: "900",
+    color: C.text,
     textAlign: "center",
   },
 
   alertMessage: {
     fontSize: 13,
     lineHeight: 20,
-    color: GLASS.secondary,
+    color: C.textSecondary,
     textAlign: "center",
-    marginTop: 9,
+    marginTop: 10,
   },
 
   alertButton: {
     width: "100%",
-    backgroundColor: C.primary,
-    paddingVertical: 13,
-    borderRadius: 14,
+    backgroundColor: C.blue,
+    paddingVertical: 14,
+    borderRadius: 15,
     alignItems: "center",
-    marginTop: 22,
+    justifyContent: "center",
+    marginTop: 23,
   },
 
   alertButtonText: {
     fontSize: 14,
-    fontWeight: "800",
-    color: "#FFFFFF",
+    fontWeight: "900",
+    color: C.white,
   },
 });

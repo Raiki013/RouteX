@@ -10,12 +10,13 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   ActivityIndicator,
   ScrollView,
   StatusBar,
   useWindowDimensions,
 } from "react-native";
+
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
   CameraView,
@@ -30,21 +31,29 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "../config/supabase";
 
-const C = {
-  blue: "#2563EB",
-  navy: "#172B4D",
-  background: "#F3F7FC",
-  white: "#FFFFFF",
-  gray: "#64748B",
+import {
+  C as THEME,
+  NeuView,
+  NeuTouchable,
+  NeuCard,
+} from "../theme/theme";
+
+// ==========================================
+// ROUTEX COLORS
+// ==========================================
+
+const COLORS = {
+  ...THEME,
   green: "#16A34A",
-  red: "#DC2626",
+  red: "#D9485F",
+  paleGreen: "#E0F5E8",
+  paleRed: "#F9E3E7",
 };
 
 export default function OperatorTicketScannerScreen({
   navigation,
 }) {
   const isFocused = useIsFocused();
-
   const { width, height } = useWindowDimensions();
 
   const [permission, requestPermission] =
@@ -69,9 +78,9 @@ export default function OperatorTicketScannerScreen({
     Math.max(230, height * 0.36)
   );
 
-  // ------------------------------------------
+  // ==========================================
   // COMPONENT MOUNT
-  // ------------------------------------------
+  // ==========================================
 
   useEffect(() => {
     mounted.current = true;
@@ -83,9 +92,9 @@ export default function OperatorTicketScannerScreen({
     };
   }, []);
 
-  // ------------------------------------------
+  // ==========================================
   // SCREEN FOCUS HANDLING
-  // ------------------------------------------
+  // ==========================================
 
   useFocusEffect(
     useCallback(() => {
@@ -110,9 +119,9 @@ export default function OperatorTicketScannerScreen({
     }, [])
   );
 
-  // ------------------------------------------
+  // ==========================================
   // VERIFY SCANNED TICKET
-  // ------------------------------------------
+  // ==========================================
 
   const handleBarcodeScanned = async ({ data }) => {
     if (
@@ -133,7 +142,6 @@ export default function OperatorTicketScannerScreen({
 
     try {
       const qrValue = String(data || "").trim();
-
       const prefix = "ROUTEX-TICKET:";
 
       console.log("SCANNED QR VALUE:", qrValue);
@@ -365,9 +373,9 @@ export default function OperatorTicketScannerScreen({
     }
   };
 
-  // ------------------------------------------
+  // ==========================================
   // SCAN ANOTHER TICKET
-  // ------------------------------------------
+  // ==========================================
 
   const scanAgain = () => {
     scanLock.current = false;
@@ -378,9 +386,9 @@ export default function OperatorTicketScannerScreen({
     setChecking(false);
   };
 
-  // ------------------------------------------
+  // ==========================================
   // CAMERA PERMISSION
-  // ------------------------------------------
+  // ==========================================
 
   const handlePermission = async () => {
     try {
@@ -388,7 +396,6 @@ export default function OperatorTicketScannerScreen({
 
       if (!response.granted) {
         console.log("OPERATOR CAMERA PERMISSION DENIED");
-
       }
     } catch (error) {
       console.log(
@@ -398,9 +405,9 @@ export default function OperatorTicketScannerScreen({
     }
   };
 
-  // ------------------------------------------
+  // ==========================================
   // RETRY CAMERA
-  // ------------------------------------------
+  // ==========================================
 
   const retryCamera = () => {
     scanLock.current = false;
@@ -414,92 +421,127 @@ export default function OperatorTicketScannerScreen({
     setResult(null);
   };
 
-  // ------------------------------------------
+  // ==========================================
   // CAMERA PERMISSION LOADING
-  // ------------------------------------------
+  // ==========================================
 
   if (!permission) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator
-          size="large"
-          color={C.blue}
+      <SafeAreaView
+        style={styles.container}
+        edges={["top", "left", "right"]}
+      >
+        <StatusBar
+          backgroundColor={COLORS.background}
+          barStyle="dark-content"
         />
 
-        <Text style={styles.infoText}>
-          Checking camera permission...
-        </Text>
-      </View>
+        <View style={styles.center}>
+          <NeuView style={styles.loadingIcon}>
+            <ActivityIndicator
+              size="large"
+              color={COLORS.blue}
+            />
+          </NeuView>
+
+          <Text style={styles.infoText}>
+            Checking camera permission...
+          </Text>
+        </View>
+      </SafeAreaView>
     );
   }
 
-  // ------------------------------------------
+  // ==========================================
   // CAMERA PERMISSION REQUEST
-  // ------------------------------------------
+  // ==========================================
 
   if (!permission.granted) {
     return (
-      <View style={styles.center}>
-        <Ionicons
-          name="camera-outline"
-          size={65}
-          color={C.blue}
+      <SafeAreaView
+        style={styles.container}
+        edges={["top", "left", "right"]}
+      >
+        <StatusBar
+          backgroundColor={COLORS.background}
+          barStyle="dark-content"
         />
 
-        <Text style={styles.permissionTitle}>
-          Camera Permission Required
-        </Text>
+        <View style={styles.center}>
+          <NeuView style={styles.permissionIcon}>
+            <Ionicons
+              name="camera-outline"
+              size={42}
+              color={COLORS.blue}
+            />
+          </NeuView>
 
-        <Text style={styles.infoText}>
-          RouteX needs camera access to scan passenger
-          boarding tickets.
-        </Text>
-
-        <TouchableOpacity
-          style={styles.primaryButton}
-          onPress={handlePermission}
-        >
-          <Text style={styles.primaryButtonText}>
-            Allow Camera Access
+          <Text style={styles.permissionTitle}>
+            Camera Permission Required
           </Text>
-        </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Text style={styles.backButtonText}>
-            Go Back
+          <Text style={styles.infoText}>
+            RouteX needs camera access to scan passenger
+            boarding tickets.
           </Text>
-        </TouchableOpacity>
-      </View>
+
+          <NeuTouchable
+            style={styles.primaryButton}
+            onPress={handlePermission}
+          >
+            <Ionicons
+              name="camera"
+              size={19}
+              color={COLORS.white}
+            />
+
+            <Text style={styles.primaryButtonText}>
+              Allow Camera Access
+            </Text>
+          </NeuTouchable>
+
+          <NeuTouchable
+            small
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Text style={styles.backButtonText}>
+              Go Back
+            </Text>
+          </NeuTouchable>
+        </View>
+      </SafeAreaView>
     );
   }
 
-  // ------------------------------------------
+  // ==========================================
   // MAIN SCREEN
-  // ------------------------------------------
+  // ==========================================
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView
+      style={styles.container}
+      edges={["top", "left", "right"]}
+    >
       <StatusBar
-        backgroundColor={C.white}
+        backgroundColor={COLORS.background}
         barStyle="dark-content"
       />
 
       {/* HEADER */}
 
       <View style={styles.header}>
-        <TouchableOpacity
+        <NeuTouchable
+          small
           style={styles.backIcon}
           onPress={() => navigation.goBack()}
         >
           <Ionicons
             name="arrow-back"
-            size={23}
-            color={C.navy}
+            size={21}
+            color={COLORS.text}
           />
-        </TouchableOpacity>
+        </NeuTouchable>
 
         <View style={styles.headerTextContainer}>
           <Text style={styles.headerTitle}>
@@ -510,16 +552,28 @@ export default function OperatorTicketScannerScreen({
             RouteX Operator
           </Text>
         </View>
+
+        <View style={styles.headerRight}>
+          <NeuView small style={styles.headerBadge}>
+            <Ionicons
+              name="qr-code"
+              size={18}
+              color={COLORS.blue}
+            />
+          </NeuView>
+        </View>
       </View>
 
       {/* INSTRUCTIONS */}
 
-      <View style={styles.instructionCard}>
-        <Ionicons
-          name="qr-code-outline"
-          size={25}
-          color={C.blue}
-        />
+      <NeuCard style={styles.instructionCard}>
+        <NeuView small style={styles.instructionIcon}>
+          <Ionicons
+            name="qr-code-outline"
+            size={23}
+            color={COLORS.blue}
+          />
+        </NeuView>
 
         <View style={styles.instructionTextContainer}>
           <Text style={styles.instructionTitle}>
@@ -531,171 +585,159 @@ export default function OperatorTicketScannerScreen({
             ticket QR code inside the camera frame.
           </Text>
         </View>
-      </View>
+      </NeuCard>
 
       {/* CAMERA PREVIEW */}
 
-      {!result && <View style={styles.cameraArea}>
-        <View
-          style={[
-            styles.cameraContainer,
-            { height: cameraHeight },
-          ]}
-        >
-          {/* CAMERA */}
+      {!result && (
+        <View style={styles.cameraArea}>
+          <View
+            style={[
+              styles.cameraContainer,
+              { height: cameraHeight },
+            ]}
+          >
+            {isFocused && !cameraError && (
+              <CameraView
+                style={styles.camera}
+                facing="back"
+                barcodeScannerSettings={{
+                  barcodeTypes: ["qr"],
+                }}
+                onCameraReady={() => {
+                  console.log("OPERATOR CAMERA READY");
 
-          {isFocused && !cameraError && (
-            <CameraView
-              style={styles.camera}
-              facing="back"
-              barcodeScannerSettings={{
-                barcodeTypes: ["qr"],
-              }}
-              onCameraReady={() => {
-                console.log("OPERATOR CAMERA READY");
+                  if (!mounted.current) return;
 
-                if (!mounted.current) return;
+                  setCameraReady(true);
+                  setCameraError("");
+                }}
+                onMountError={(event) => {
+                  const message =
+                    event?.message ||
+                    "Unable to initialize camera.";
 
-                setCameraReady(true);
-                setCameraError("");
-              }}
-              onMountError={(event) => {
-                const message =
-                  event?.message ||
-                  "Unable to initialize camera.";
+                  console.log(
+                    "OPERATOR CAMERA ERROR:",
+                    message
+                  );
 
-                console.log(
-                  "OPERATOR CAMERA ERROR:",
-                  message
-                );
+                  if (!mounted.current) return;
 
-                if (!mounted.current) return;
+                  setCameraReady(false);
+                  setCameraError(message);
+                }}
+                onBarcodeScanned={
+                  isFocused &&
+                  !scanned &&
+                  !checking
+                    ? handleBarcodeScanned
+                    : undefined
+                }
+              />
+            )}
 
-                setCameraReady(false);
-                setCameraError(message);
-              }}
-              onBarcodeScanned={
-                isFocused &&
-                !scanned &&
-                !checking
-                  ? handleBarcodeScanned
-                  : undefined
-              }
-            />
-          )}
+            {/* CAMERA LOADING */}
 
-          {/* CAMERA LOADING */}
+            {!cameraReady &&
+              !cameraError &&
+              !checking && (
+                <View
+                  pointerEvents="none"
+                  style={styles.cameraLoading}
+                >
+                  <ActivityIndicator
+                    size="large"
+                    color={COLORS.white}
+                  />
 
-          {!cameraReady &&
-            !cameraError &&
-            !checking && (
+                  <Text style={styles.cameraLoadingText}>
+                    Starting camera...
+                  </Text>
+                </View>
+              )}
+
+            {/* SCAN FRAME */}
+
+            {!cameraError && (
               <View
                 pointerEvents="none"
-                style={styles.cameraLoading}
+                style={styles.scanOverlay}
               >
-                <ActivityIndicator
-                  size="large"
-                  color={C.white}
-                />
+                <View
+                  style={[
+                    styles.scanFrame,
+                    {
+                      width: frameSize,
+                      height: frameSize,
+                    },
+                  ]}
+                >
+                  <View
+                    style={[styles.corner, styles.topLeft]}
+                  />
 
-                <Text style={styles.cameraLoadingText}>
-                  Starting camera...
-                </Text>
+                  <View
+                    style={[styles.corner, styles.topRight]}
+                  />
+
+                  <View
+                    style={[styles.corner, styles.bottomLeft]}
+                  />
+
+                  <View
+                    style={[styles.corner, styles.bottomRight]}
+                  />
+                </View>
               </View>
             )}
 
-          {/* SCAN FRAME */}
+            {/* CAMERA ERROR */}
 
-          {!cameraError && (
-            <View
-              pointerEvents="none"
-              style={styles.scanOverlay}
-            >
-              <View
-                style={[
-                  styles.scanFrame,
-                  {
-                    width: frameSize,
-                    height: frameSize,
-                  },
-                ]}
-              >
-                <View
-                  style={[
-                    styles.corner,
-                    styles.topLeft,
-                  ]}
+            {cameraError ? (
+              <View style={styles.cameraError}>
+                <Ionicons
+                  name="alert-circle-outline"
+                  size={55}
+                  color={COLORS.white}
                 />
 
-                <View
-                  style={[
-                    styles.corner,
-                    styles.topRight,
-                  ]}
-                />
-
-                <View
-                  style={[
-                    styles.corner,
-                    styles.bottomLeft,
-                  ]}
-                />
-
-                <View
-                  style={[
-                    styles.corner,
-                    styles.bottomRight,
-                  ]}
-                />
-              </View>
-            </View>
-          )}
-
-          {/* CAMERA ERROR */}
-
-          {cameraError ? (
-            <View style={styles.cameraError}>
-              <Ionicons
-                name="alert-circle-outline"
-                size={55}
-                color={C.white}
-              />
-
-              <Text style={styles.cameraErrorTitle}>
-                Camera Unavailable
-              </Text>
-
-              <Text style={styles.cameraErrorMessage}>
-                {cameraError}
-              </Text>
-
-              <TouchableOpacity
-                style={styles.retryCameraButton}
-                onPress={retryCamera}
-              >
-                <Text style={styles.retryCameraText}>
-                  Retry Camera
+                <Text style={styles.cameraErrorTitle}>
+                  Camera Unavailable
                 </Text>
-              </TouchableOpacity>
-            </View>
-          ) : null}
 
-          {/* VERIFYING OVERLAY */}
+                <Text style={styles.cameraErrorMessage}>
+                  {cameraError}
+                </Text>
 
-          {checking && (
-            <View style={styles.cameraLoading}>
-              <ActivityIndicator
-                size="large"
-                color={C.white}
-              />
+                <NeuTouchable
+                  style={styles.retryCameraButton}
+                  onPress={retryCamera}
+                >
+                  <Text style={styles.retryCameraText}>
+                    Retry Camera
+                  </Text>
+                </NeuTouchable>
+              </View>
+            ) : null}
 
-              <Text style={styles.cameraLoadingText}>
-                Verifying ticket...
-              </Text>
-            </View>
-          )}
+            {/* VERIFYING OVERLAY */}
+
+            {checking && (
+              <View style={styles.cameraLoading}>
+                <ActivityIndicator
+                  size="large"
+                  color={COLORS.white}
+                />
+
+                <Text style={styles.cameraLoadingText}>
+                  Verifying ticket...
+                </Text>
+              </View>
+            )}
+          </View>
         </View>
-      </View>}
+      )}
 
       {/* CONFIRMATION / RESULT DETAILS */}
 
@@ -707,14 +749,17 @@ export default function OperatorTicketScannerScreen({
         {/* SCAN STATUS */}
 
         {!result && !checking && (
-          <View style={styles.statusRow}>
+          <NeuView
+            inset
+            style={styles.statusCard}
+          >
             <View
               style={[
                 styles.statusIndicator,
                 {
                   backgroundColor: cameraReady
-                    ? C.green
-                    : C.blue,
+                    ? COLORS.green
+                    : COLORS.secondary,
                 },
               ]}
             />
@@ -724,19 +769,22 @@ export default function OperatorTicketScannerScreen({
                 ? "Camera ready — position QR code"
                 : "Waiting for camera..."}
             </Text>
-          </View>
+          </NeuView>
         )}
 
         {/* RESULT */}
 
         {result && (
-          <View style={styles.resultContainer}>
-            <View
+          <NeuCard style={styles.resultContainer}>
+            <NeuView
+              small
               style={[
                 styles.resultIcon,
-                result.success
-                  ? styles.successIcon
-                  : styles.errorIcon,
+                {
+                  backgroundColor: result.success
+                    ? COLORS.paleGreen
+                    : COLORS.paleRed,
+                },
               ]}
             >
               <Ionicons
@@ -745,20 +793,22 @@ export default function OperatorTicketScannerScreen({
                     ? "checkmark-circle"
                     : "close-circle"
                 }
-                size={55}
+                size={48}
                 color={
-                  result.success ? C.green : C.red
+                  result.success
+                    ? COLORS.green
+                    : COLORS.red
                 }
               />
-            </View>
+            </NeuView>
 
             <Text
               style={[
                 styles.resultTitle,
                 {
                   color: result.success
-                    ? C.green
-                    : C.red,
+                    ? COLORS.green
+                    : COLORS.red,
                 },
               ]}
             >
@@ -770,7 +820,10 @@ export default function OperatorTicketScannerScreen({
             </Text>
 
             {result.success && (
-              <View style={styles.bookingDetails}>
+              <NeuView
+                inset
+                style={styles.bookingDetails}
+              >
                 <Text style={styles.detailLabel}>
                   Booking Reference
                 </Text>
@@ -778,6 +831,8 @@ export default function OperatorTicketScannerScreen({
                 <Text style={styles.detailValue}>
                   {result.reference || "Not available"}
                 </Text>
+
+                <View style={styles.detailDivider} />
 
                 <Text style={styles.detailLabel}>
                   Passenger Count
@@ -787,89 +842,112 @@ export default function OperatorTicketScannerScreen({
                   {result.passengers ?? 1}
                 </Text>
 
-                <View style={styles.boardedBadge}>
+                <NeuView
+                  small
+                  style={styles.boardedBadge}
+                >
                   <Ionicons
                     name="checkmark-circle"
                     size={17}
-                    color={C.green}
+                    color={COLORS.green}
                   />
 
                   <Text style={styles.boardedText}>
                     BOARDED
                   </Text>
-                </View>
-              </View>
+                </NeuView>
+              </NeuView>
             )}
 
-            <TouchableOpacity
+            <NeuTouchable
               style={styles.primaryButton}
               onPress={scanAgain}
-              activeOpacity={0.85}
             >
               <Ionicons
                 name="scan"
                 size={20}
-                color={C.white}
+                color={COLORS.white}
               />
 
               <Text style={styles.primaryButtonText}>
                 Scan Another Ticket
               </Text>
-            </TouchableOpacity>
-          </View>
+            </NeuTouchable>
+          </NeuCard>
         )}
 
         {/* FOOTER NOTE */}
 
-        <View style={styles.noteCard}>
-          <Ionicons
-            name="shield-checkmark-outline"
-            size={21}
-            color={C.blue}
-          />
+        <NeuView
+          inset
+          style={styles.noteCard}
+        >
+          <NeuView small style={styles.noteIcon}>
+            <Ionicons
+              name="shield-checkmark-outline"
+              size={20}
+              color={COLORS.blue}
+            />
+          </NeuView>
 
           <Text style={styles.noteText}>
             Only paid and confirmed tickets assigned to
             your bus can be accepted. Each ticket can
             only be boarded once.
           </Text>
-        </View>
+        </NeuView>
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
-// ------------------------------------------
+// ==========================================
 // STYLES
-// ------------------------------------------
+// ==========================================
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: C.background,
+    backgroundColor: COLORS.background,
   },
 
   center: {
     flex: 1,
-    backgroundColor: C.background,
+    backgroundColor: COLORS.background,
     justifyContent: "center",
     alignItems: "center",
     padding: 25,
   },
 
+  loadingIcon: {
+    width: 76,
+    height: 76,
+    borderRadius: 24,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  permissionIcon: {
+    width: 90,
+    height: 90,
+    borderRadius: 28,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
   infoText: {
-    color: C.gray,
+    color: COLORS.muted,
     fontSize: 13,
     textAlign: "center",
-    marginTop: 12,
+    marginTop: 15,
     lineHeight: 20,
   },
 
   permissionTitle: {
-    color: C.navy,
+    color: COLORS.text,
     fontSize: 19,
     fontWeight: "bold",
-    marginTop: 18,
+    marginTop: 22,
   },
 
   // HEADER
@@ -879,15 +957,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingTop: 12,
     paddingHorizontal: 20,
-    paddingBottom: 17,
-    backgroundColor: C.white,
+    paddingBottom: 15,
   },
 
   backIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 13,
-    backgroundColor: C.background,
+    width: 43,
+    height: 43,
+    borderRadius: 14,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -899,13 +975,25 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: "bold",
-    color: C.navy,
+    color: COLORS.text,
   },
 
   headerSubtitle: {
     fontSize: 11,
-    color: C.gray,
+    color: COLORS.muted,
     marginTop: 3,
+  },
+
+  headerRight: {
+    marginLeft: "auto",
+  },
+
+  headerBadge: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    justifyContent: "center",
+    alignItems: "center",
   },
 
   // INSTRUCTIONS
@@ -913,27 +1001,34 @@ const styles = StyleSheet.create({
   instructionCard: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: C.white,
-    padding: 14,
-    borderRadius: 15,
+    padding: 15,
+    borderRadius: 20,
     marginHorizontal: 20,
-    marginTop: 15,
+    marginTop: 5,
     marginBottom: 15,
-    gap: 12,
+  },
+
+  instructionIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 15,
+    justifyContent: "center",
+    alignItems: "center",
   },
 
   instructionTextContainer: {
     flex: 1,
+    marginLeft: 13,
   },
 
   instructionTitle: {
-    color: C.navy,
+    color: COLORS.text,
     fontSize: 14,
     fontWeight: "bold",
   },
 
   instructionDescription: {
-    color: C.gray,
+    color: COLORS.muted,
     fontSize: 11,
     lineHeight: 17,
     marginTop: 4,
@@ -954,7 +1049,7 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     position: "relative",
     backgroundColor: "#000000",
-    borderRadius: 18,
+    borderRadius: 22,
     overflow: "hidden",
   },
 
@@ -972,7 +1067,7 @@ const styles = StyleSheet.create({
   },
 
   cameraLoadingText: {
-    color: C.white,
+    color: COLORS.white,
     fontSize: 13,
     marginTop: 12,
     fontWeight: "bold",
@@ -996,7 +1091,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     width: 38,
     height: 38,
-    borderColor: C.white,
+    borderColor: COLORS.white,
   },
 
   topLeft: {
@@ -1043,7 +1138,7 @@ const styles = StyleSheet.create({
   },
 
   cameraErrorTitle: {
-    color: C.white,
+    color: COLORS.white,
     fontSize: 18,
     fontWeight: "bold",
     marginTop: 12,
@@ -1058,15 +1153,15 @@ const styles = StyleSheet.create({
   },
 
   retryCameraButton: {
-    backgroundColor: C.white,
-    paddingHorizontal: 20,
-    paddingVertical: 11,
-    borderRadius: 10,
+    backgroundColor: COLORS.white,
+    paddingHorizontal: 22,
+    paddingVertical: 12,
+    borderRadius: 13,
     marginTop: 18,
   },
 
   retryCameraText: {
-    color: C.navy,
+    color: COLORS.blue,
     fontWeight: "bold",
   },
 
@@ -1083,51 +1178,46 @@ const styles = StyleSheet.create({
     paddingBottom: 25,
   },
 
-  statusRow: {
+  statusCard: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+    alignSelf: "center",
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 16,
     marginTop: 15,
-    gap: 9,
   },
 
   statusIndicator: {
     width: 9,
     height: 9,
     borderRadius: 5,
+    marginRight: 9,
   },
 
   scanHint: {
-    color: C.blue,
-    fontSize: 13,
+    color: COLORS.blue,
+    fontSize: 12,
     fontWeight: "600",
   },
 
   // RESULT
 
   resultContainer: {
-    backgroundColor: C.white,
-    borderRadius: 16,
-    padding: 18,
+    borderRadius: 24,
+    padding: 20,
     alignItems: "center",
     marginTop: 12,
   },
 
   resultIcon: {
-    width: 75,
-    height: 75,
-    borderRadius: 40,
+    width: 82,
+    height: 82,
+    borderRadius: 26,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 13,
-  },
-
-  successIcon: {
-    backgroundColor: "#DCFCE7",
-  },
-
-  errorIcon: {
-    backgroundColor: "#FEE2E2",
+    marginBottom: 15,
   },
 
   resultTitle: {
@@ -1137,47 +1227,51 @@ const styles = StyleSheet.create({
   },
 
   resultMessage: {
-    color: C.gray,
+    color: COLORS.muted,
     fontSize: 12,
     textAlign: "center",
-    lineHeight: 18,
+    lineHeight: 19,
     marginTop: 8,
   },
 
   bookingDetails: {
     width: "100%",
-    backgroundColor: C.background,
-    borderRadius: 13,
-    padding: 14,
-    marginTop: 17,
+    borderRadius: 17,
+    padding: 15,
+    marginTop: 18,
   },
 
   detailLabel: {
-    color: C.gray,
+    color: COLORS.muted,
     fontSize: 11,
     marginTop: 5,
   },
 
   detailValue: {
-    color: C.navy,
+    color: COLORS.text,
     fontSize: 14,
     fontWeight: "bold",
-    marginTop: 3,
+    marginTop: 4,
+  },
+
+  detailDivider: {
+    height: 1,
+    backgroundColor: COLORS.darkShadow,
+    marginVertical: 12,
   },
 
   boardedBadge: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#DCFCE7",
-    borderRadius: 10,
-    padding: 10,
+    borderRadius: 12,
+    padding: 11,
     marginTop: 15,
     gap: 7,
   },
 
   boardedText: {
-    color: C.green,
+    color: COLORS.green,
     fontSize: 12,
     fontWeight: "bold",
   },
@@ -1185,9 +1279,9 @@ const styles = StyleSheet.create({
   // BUTTONS
 
   primaryButton: {
-    backgroundColor: C.blue,
+    backgroundColor: COLORS.blue,
     padding: 15,
-    borderRadius: 12,
+    borderRadius: 15,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -1197,18 +1291,20 @@ const styles = StyleSheet.create({
   },
 
   primaryButtonText: {
-    color: C.white,
+    color: COLORS.white,
     fontSize: 14,
     fontWeight: "bold",
   },
 
   backButton: {
-    padding: 14,
-    marginTop: 8,
+    paddingHorizontal: 25,
+    paddingVertical: 12,
+    marginTop: 12,
+    borderRadius: 13,
   },
 
   backButtonText: {
-    color: C.gray,
+    color: COLORS.textSecondary,
     fontWeight: "bold",
   },
 
@@ -1217,16 +1313,23 @@ const styles = StyleSheet.create({
   noteCard: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#EAF3FF",
     padding: 14,
-    borderRadius: 13,
+    borderRadius: 17,
     marginTop: 18,
-    gap: 10,
+    gap: 11,
+  },
+
+  noteIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
   },
 
   noteText: {
     flex: 1,
-    color: C.navy,
+    color: COLORS.textSecondary,
     fontSize: 11,
     lineHeight: 17,
   },

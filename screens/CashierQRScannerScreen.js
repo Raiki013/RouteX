@@ -29,22 +29,46 @@ import {
 
 import { Ionicons } from "@expo/vector-icons";
 
+import { SafeAreaView } from "react-native-safe-area-context";
+
 import { supabase } from "../config/supabase";
 
+import {
+  C,
+  NeuView,
+  NeuTouchable,
+  NeuCard,
+} from "../theme/theme";
+
+// ==========================================
+// ROUTEX SOFT NEUMORPHIC THEME
+// ==========================================
+
 const COLORS = {
-  background: "#071827",
-  surface: "#102B3E",
-  surfaceLight: "#173247",
-  cyan: "#06B6D4",
+  primary: C.blue || "#286DF6",
+  secondary: C.secondary || "#5A95FC",
+  lightBlue: C.lightBlue || "#9DC6FB",
+  background: C.background || "#DDE6F4",
+  surface: C.surface || "#EFF4FC",
+  inset: C.inset || "#E1E9F6",
+  text: C.text || "#16346B",
+  secondaryText: C.secondaryText || "#2F4F86",
+  muted: C.muted || "#5F7FB3",
+
   white: "#FFFFFF",
-  muted: "#94A3B8",
-  danger: "#EF4444",
-  success: "#22C55E",
+  danger: "#DC2626",
+  dangerLight: "#FCE4E4",
+  success: "#16A34A",
+  successLight: "#DDF5E5",
+  warning: "#D97706",
+  warningLight: "#FFF0D6",
+
+  cameraBackground: "#071827",
 };
 
-// ------------------------------------------
+// ==========================================
 // SWEET ALERT COMPONENT
-// ------------------------------------------
+// ==========================================
 
 const SweetAlert = ({
   visible,
@@ -59,26 +83,26 @@ const SweetAlert = ({
   const getColor = () => {
     switch (type) {
       case "success":
-        return "#16A34A";
+        return COLORS.success;
       case "error":
-        return "#DC2626";
+        return COLORS.danger;
       case "warning":
-        return "#D97706";
+        return COLORS.warning;
       default:
-        return "#2563EB";
+        return COLORS.primary;
     }
   };
 
   const getBackground = () => {
     switch (type) {
       case "success":
-        return "#F0FDF4";
+        return COLORS.successLight;
       case "error":
-        return "#FEF2F2";
+        return COLORS.dangerLight;
       case "warning":
-        return "#FFFBEB";
+        return COLORS.warningLight;
       default:
-        return "#EFF6FF";
+        return "#DCE9FF";
     }
   };
 
@@ -104,19 +128,21 @@ const SweetAlert = ({
       onRequestClose={onCancel}
     >
       <View style={styles.alertOverlay}>
-        <View style={styles.alertCard}>
-          <View
-            style={[
-              styles.alertIconContainer,
-              { backgroundColor: getBackground() },
-            ]}
-          >
-            <Ionicons
-              name={getIcon()}
-              size={43}
-              color={getColor()}
-            />
-          </View>
+        <NeuCard style={styles.alertCard}>
+          <NeuView small style={styles.alertIconContainer}>
+            <View
+              style={[
+                styles.alertIconBackground,
+                { backgroundColor: getBackground() },
+              ]}
+            >
+              <Ionicons
+                name={getIcon()}
+                size={40}
+                color={getColor()}
+              />
+            </View>
+          </NeuView>
 
           <Text style={styles.alertTitle}>
             {title}
@@ -128,42 +154,39 @@ const SweetAlert = ({
 
           <View style={styles.alertButtonRow}>
             {cancelText && (
-              <TouchableOpacity
+              <NeuTouchable
                 style={styles.alertCancelButton}
                 onPress={onCancel}
-                activeOpacity={0.8}
               >
                 <Text style={styles.alertCancelText}>
                   {cancelText}
                 </Text>
-              </TouchableOpacity>
+              </NeuTouchable>
             )}
 
             <TouchableOpacity
               style={[
                 styles.alertConfirmButton,
-                {
-                  backgroundColor: getColor(),
-                  flex: cancelText ? 1 : undefined,
-                },
+                { backgroundColor: getColor() },
+                cancelText ? { flex: 1 } : { width: "100%" },
               ]}
               onPress={onConfirm}
-              activeOpacity={0.8}
+              activeOpacity={0.85}
             >
               <Text style={styles.alertConfirmText}>
                 {confirmText}
               </Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </NeuCard>
       </View>
     </Modal>
   );
 };
 
-// ------------------------------------------
+// ==========================================
 // MAIN SCREEN
-// ------------------------------------------
+// ==========================================
 
 const CashierQRScannerScreen = ({ navigation }) => {
   const isFocused = useIsFocused();
@@ -205,9 +228,9 @@ const CashierQRScannerScreen = ({ navigation }) => {
     Math.max(230, height * 0.44)
   );
 
-  // ------------------------------------------
+  // ==========================================
   // SWEET ALERT FUNCTIONS
-  // ------------------------------------------
+  // ==========================================
 
   const showAlert = (
     title,
@@ -259,9 +282,9 @@ const CashierQRScannerScreen = ({ navigation }) => {
     />
   );
 
-  // ------------------------------------------
+  // ==========================================
   // CHECK COMPONENT MOUNT
-  // ------------------------------------------
+  // ==========================================
 
   useEffect(() => {
     mounted.current = true;
@@ -273,9 +296,9 @@ const CashierQRScannerScreen = ({ navigation }) => {
     };
   }, []);
 
-  // ------------------------------------------
+  // ==========================================
   // CASHIER AUTHORIZATION
-  // ------------------------------------------
+  // ==========================================
 
   useEffect(() => {
     let cancelled = false;
@@ -345,9 +368,9 @@ const CashierQRScannerScreen = ({ navigation }) => {
     };
   }, [navigation]);
 
-  // ------------------------------------------
+  // ==========================================
   // SCREEN FOCUS HANDLING
-  // ------------------------------------------
+  // ==========================================
 
   useFocusEffect(
     useCallback(() => {
@@ -361,7 +384,6 @@ const CashierQRScannerScreen = ({ navigation }) => {
       setCameraError(null);
 
       return () => {
-        // Stop scanning when leaving this screen.
         scanLock.current = true;
         processingRef.current = false;
 
@@ -371,9 +393,9 @@ const CashierQRScannerScreen = ({ navigation }) => {
     }, [])
   );
 
-  // ------------------------------------------
+  // ==========================================
   // BOOKING REFERENCE
-  // ------------------------------------------
+  // ==========================================
 
   const extractBookingReference = useCallback((value) => {
     if (!value || typeof value !== "string") {
@@ -394,9 +416,9 @@ const CashierQRScannerScreen = ({ navigation }) => {
     return reference || null;
   }, []);
 
-  // ------------------------------------------
+  // ==========================================
   // QR SCANNER
-  // ------------------------------------------
+  // ==========================================
 
   const handleBarcodeScanned = useCallback(
     async ({ data }) => {
@@ -410,7 +432,6 @@ const CashierQRScannerScreen = ({ navigation }) => {
         return;
       }
 
-      // Lock immediately to prevent duplicate scans.
       scanLock.current = true;
       processingRef.current = true;
 
@@ -476,9 +497,9 @@ const CashierQRScannerScreen = ({ navigation }) => {
     [navigation, isFocused, extractBookingReference]
   );
 
-  // ------------------------------------------
+  // ==========================================
   // CAMERA PERMISSION
-  // ------------------------------------------
+  // ==========================================
 
   const handlePermission = async () => {
     try {
@@ -502,9 +523,9 @@ const CashierQRScannerScreen = ({ navigation }) => {
     }
   };
 
-  // ------------------------------------------
+  // ==========================================
   // RETRY CAMERA
-  // ------------------------------------------
+  // ==========================================
 
   const retryCamera = () => {
     scanLock.current = false;
@@ -517,9 +538,9 @@ const CashierQRScannerScreen = ({ navigation }) => {
     setScannerEnabled(true);
   };
 
-  // ------------------------------------------
+  // ==========================================
   // SCAN AGAIN
-  // ------------------------------------------
+  // ==========================================
 
   const scanAgain = () => {
     scanLock.current = false;
@@ -530,16 +551,33 @@ const CashierQRScannerScreen = ({ navigation }) => {
     setScannerEnabled(true);
   };
 
-  // ------------------------------------------
-  // LOADING
-  // ------------------------------------------
+  // ==========================================
+  // LOADING SCREEN
+  // ==========================================
 
   if (checkingUser || !permission) {
     return (
-      <View style={styles.center}>
+      <SafeAreaView
+        style={styles.center}
+        edges={["top", "left", "right"]}
+      >
+        <StatusBar
+          backgroundColor={COLORS.background}
+          barStyle="dark-content"
+        />
+
+        <NeuView small style={styles.loadingIcon}>
+          <Ionicons
+            name="scan-outline"
+            size={32}
+            color={COLORS.primary}
+          />
+        </NeuView>
+
         <ActivityIndicator
           size="large"
-          color={COLORS.cyan}
+          color={COLORS.primary}
+          style={{ marginTop: 22 }}
         />
 
         <Text style={styles.loadingText}>
@@ -549,22 +587,32 @@ const CashierQRScannerScreen = ({ navigation }) => {
         </Text>
 
         {alertModal}
-      </View>
+      </SafeAreaView>
     );
   }
 
-  // ------------------------------------------
+  // ==========================================
   // AUTHORIZATION
-  // ------------------------------------------
+  // ==========================================
 
   if (!authorized) {
     return (
-      <View style={styles.center}>
-        <Ionicons
-          name="lock-closed-outline"
-          size={55}
-          color={COLORS.danger}
+      <SafeAreaView
+        style={styles.center}
+        edges={["top", "left", "right"]}
+      >
+        <StatusBar
+          backgroundColor={COLORS.background}
+          barStyle="dark-content"
         />
+
+        <NeuView small style={styles.permissionIcon}>
+          <Ionicons
+            name="lock-closed-outline"
+            size={38}
+            color={COLORS.danger}
+          />
+        </NeuView>
 
         <Text style={styles.title}>
           Access Denied
@@ -584,22 +632,32 @@ const CashierQRScannerScreen = ({ navigation }) => {
         </TouchableOpacity>
 
         {alertModal}
-      </View>
+      </SafeAreaView>
     );
   }
 
-  // ------------------------------------------
+  // ==========================================
   // CAMERA PERMISSION
-  // ------------------------------------------
+  // ==========================================
 
   if (!permission.granted) {
     return (
-      <View style={styles.center}>
-        <Ionicons
-          name="camera-outline"
-          size={60}
-          color={COLORS.cyan}
+      <SafeAreaView
+        style={styles.center}
+        edges={["top", "left", "right"]}
+      >
+        <StatusBar
+          backgroundColor={COLORS.background}
+          barStyle="dark-content"
         />
+
+        <NeuView small style={styles.permissionIcon}>
+          <Ionicons
+            name="camera-outline"
+            size={40}
+            color={COLORS.primary}
+          />
+        </NeuView>
 
         <Text style={styles.title}>
           Camera Permission Required
@@ -619,34 +677,38 @@ const CashierQRScannerScreen = ({ navigation }) => {
         </TouchableOpacity>
 
         {alertModal}
-      </View>
+      </SafeAreaView>
     );
   }
 
-  // ------------------------------------------
+  // ==========================================
   // MAIN SCREEN
-  // ------------------------------------------
+  // ==========================================
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView
+      style={styles.container}
+      edges={["top", "left", "right"]}
+    >
       <StatusBar
         backgroundColor={COLORS.background}
-        barStyle="light-content"
+        barStyle="dark-content"
       />
 
       {/* HEADER */}
 
       <View style={styles.header}>
-        <TouchableOpacity
+        <NeuTouchable
+          small
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
           <Ionicons
             name="arrow-back"
-            size={23}
-            color={COLORS.white}
+            size={22}
+            color={COLORS.primary}
           />
-        </TouchableOpacity>
+        </NeuTouchable>
 
         <View style={styles.headerInfo}>
           <Text style={styles.headerTitle}>
@@ -657,21 +719,31 @@ const CashierQRScannerScreen = ({ navigation }) => {
             Cashier booking verification
           </Text>
         </View>
+
+        <NeuView small style={styles.headerIcon}>
+          <Ionicons
+            name="qr-code-outline"
+            size={25}
+            color={COLORS.primary}
+          />
+        </NeuView>
       </View>
 
       {/* INSTRUCTION */}
 
-      <View style={styles.instruction}>
-        <Ionicons
-          name="information-circle-outline"
-          size={21}
-          color={COLORS.cyan}
-        />
+      <NeuCard style={styles.instruction}>
+        <NeuView small style={styles.instructionIcon}>
+          <Ionicons
+            name="information-circle-outline"
+            size={21}
+            color={COLORS.primary}
+          />
+        </NeuView>
 
         <Text style={styles.instructionText}>
           Ask the passenger to display their booking QR code.
         </Text>
-      </View>
+      </NeuCard>
 
       {/* CAMERA PREVIEW */}
 
@@ -682,8 +754,6 @@ const CashierQRScannerScreen = ({ navigation }) => {
             { height: cameraHeight },
           ]}
         >
-          {/* Keep CameraView mounted while focused. */}
-
           {isFocused && !cameraError && (
             <CameraView
               style={styles.camera}
@@ -732,7 +802,7 @@ const CashierQRScannerScreen = ({ navigation }) => {
               >
                 <ActivityIndicator
                   size="large"
-                  color={COLORS.cyan}
+                  color={COLORS.lightBlue}
                 />
 
                 <Text style={styles.cameraLoadingText}>
@@ -757,33 +827,10 @@ const CashierQRScannerScreen = ({ navigation }) => {
                   },
                 ]}
               >
-                <View
-                  style={[
-                    styles.corner,
-                    styles.topLeft,
-                  ]}
-                />
-
-                <View
-                  style={[
-                    styles.corner,
-                    styles.topRight,
-                  ]}
-                />
-
-                <View
-                  style={[
-                    styles.corner,
-                    styles.bottomLeft,
-                  ]}
-                />
-
-                <View
-                  style={[
-                    styles.corner,
-                    styles.bottomRight,
-                  ]}
-                />
+                <View style={[styles.corner, styles.topLeft]} />
+                <View style={[styles.corner, styles.topRight]} />
+                <View style={[styles.corner, styles.bottomLeft]} />
+                <View style={[styles.corner, styles.bottomRight]} />
               </View>
             </View>
           )}
@@ -836,7 +883,7 @@ const CashierQRScannerScreen = ({ navigation }) => {
 
       {/* BOTTOM SECTION */}
 
-      <View style={styles.bottomSection}>
+      <NeuCard style={styles.bottomSection}>
         <View style={styles.statusRow}>
           <View
             style={[
@@ -844,7 +891,7 @@ const CashierQRScannerScreen = ({ navigation }) => {
               {
                 backgroundColor: cameraReady
                   ? COLORS.success
-                  : COLORS.cyan,
+                  : COLORS.primary,
               },
             ]}
           />
@@ -880,76 +927,90 @@ const CashierQRScannerScreen = ({ navigation }) => {
               </Text>
             </TouchableOpacity>
           )}
-      </View>
+      </NeuCard>
 
       {alertModal}
-    </View>
+    </SafeAreaView>
   );
 };
 
 export default CashierQRScannerScreen;
 
-// ------------------------------------------
+// ==========================================
 // STYLES
-// ------------------------------------------
+// ==========================================
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#061522",
+    backgroundColor: COLORS.background,
   },
 
   center: {
     flex: 1,
-    backgroundColor: "#061522",
+    backgroundColor: COLORS.background,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 28,
     paddingVertical: 32,
   },
 
+  loadingIcon: {
+    width: 75,
+    height: 75,
+    borderRadius: 23,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
   loadingText: {
     color: COLORS.muted,
     marginTop: 15,
     fontSize: 14,
+    fontWeight: "600",
+  },
+
+  permissionIcon: {
+    width: 85,
+    height: 85,
+    borderRadius: 26,
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   title: {
-    color: COLORS.white,
+    color: COLORS.text,
     fontSize: 21,
-    fontWeight: "bold",
-    marginTop: 18,
+    fontWeight: "900",
+    marginTop: 20,
     textAlign: "center",
   },
 
   description: {
     color: COLORS.muted,
     textAlign: "center",
-    fontSize: 14,
-    lineHeight: 22,
+    fontSize: 13,
+    lineHeight: 21,
     marginTop: 12,
   },
 
   // HEADER
 
   header: {
-  flexDirection: "row",
-  alignItems: "center",
-  paddingHorizontal: 20,
-  paddingTop: 45,
-  paddingBottom: 18,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 18,
   },
 
   backButton: {
-    width: 46,
-    height: 46,
+    width: 45,
+    height: 45,
     borderRadius: 15,
-    backgroundColor: "#123247",
-    borderWidth: 1,
-    borderColor: "rgba(148,163,184,0.14)",
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 14,
+    marginRight: 13,
   },
 
   headerInfo: {
@@ -957,17 +1018,26 @@ const styles = StyleSheet.create({
   },
 
   headerTitle: {
-    color: COLORS.white,
+    color: COLORS.text,
     fontSize: 21,
-    fontWeight: "800",
+    fontWeight: "900",
     letterSpacing: 0.2,
   },
 
   headerSubtitle: {
-    color: "#91A8B8",
+    color: COLORS.muted,
     fontSize: 12,
     marginTop: 4,
-    letterSpacing: 0.15,
+    fontWeight: "600",
+  },
+
+  headerIcon: {
+    width: 47,
+    height: 47,
+    borderRadius: 15,
+    justifyContent: "center",
+    alignItems: "center",
+    marginLeft: 10,
   },
 
   // INSTRUCTION
@@ -976,21 +1046,27 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     marginHorizontal: 20,
-    marginBottom: 16,
-    paddingHorizontal: 15,
-    paddingVertical: 14,
-    borderRadius: 15,
-    backgroundColor: "#102B3E",
-    borderWidth: 1,
-    borderColor: "rgba(6,182,212,0.18)",
+    marginBottom: 15,
+    paddingHorizontal: 13,
+    paddingVertical: 13,
+    borderRadius: 17,
     gap: 11,
   },
 
+  instructionIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
   instructionText: {
-    color: "#D5E2EA",
+    color: COLORS.secondaryText,
     flex: 1,
-    fontSize: 13,
-    lineHeight: 20,
+    fontSize: 12,
+    lineHeight: 19,
+    fontWeight: "600",
   },
 
   // CAMERA AREA
@@ -999,7 +1075,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 0,
     paddingHorizontal: 18,
-    paddingBottom: 10,
+    paddingBottom: 12,
     justifyContent: "center",
   },
 
@@ -1008,16 +1084,16 @@ const styles = StyleSheet.create({
     maxWidth: 520,
     alignSelf: "center",
     position: "relative",
-    backgroundColor: "#02070B",
-    borderRadius: 24,
+    backgroundColor: COLORS.cameraBackground,
+    borderRadius: 23,
     overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "rgba(103,232,249,0.22)",
-    elevation: 9,
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.28,
-    shadowRadius: 16,
+    borderWidth: 3,
+    borderColor: COLORS.surface,
+    elevation: 5,
+    shadowColor: "#9FB4D0",
+    shadowOffset: { width: 4, height: 5 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
   },
 
   camera: {
@@ -1029,7 +1105,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "rgba(2,12,20,0.82)",
+    backgroundColor: "rgba(7,24,39,0.88)",
     zIndex: 1,
   },
 
@@ -1037,6 +1113,7 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     marginTop: 13,
     fontSize: 14,
+    fontWeight: "600",
   },
 
   // QR FRAME
@@ -1057,7 +1134,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     width: 39,
     height: 39,
-    borderColor: "#22D3EE",
+    borderColor: "#9DC6FB",
   },
 
   topLeft: {
@@ -1098,7 +1175,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.cameraBackground,
     padding: 22,
     zIndex: 4,
   },
@@ -1106,12 +1183,12 @@ const styles = StyleSheet.create({
   errorTitle: {
     color: COLORS.white,
     fontSize: 18,
-    fontWeight: "bold",
+    fontWeight: "800",
     marginTop: 14,
   },
 
   errorText: {
-    color: COLORS.muted,
+    color: "#CBD5E1",
     textAlign: "center",
     fontSize: 13,
     lineHeight: 20,
@@ -1124,25 +1201,24 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.75)",
+    backgroundColor: "rgba(7,24,39,0.82)",
     zIndex: 5,
   },
 
   processingText: {
     color: COLORS.white,
     fontSize: 15,
+    fontWeight: "700",
     marginTop: 14,
   },
 
-  // BOTTOM
+  // BOTTOM SECTION
 
   bottomSection: {
-    paddingHorizontal: 22,
-    paddingTop: 15,
-    paddingBottom: 24,
-    backgroundColor: "#0A2030",
-    borderTopWidth: 1,
-    borderTopColor: "rgba(148,163,184,0.10)",
+    marginHorizontal: 18,
+    marginBottom: 15,
+    padding: 17,
+    borderRadius: 19,
   },
 
   statusRow: {
@@ -1156,47 +1232,45 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-    borderWidth: 2,
-    borderColor: "rgba(255,255,255,0.18)",
   },
 
   statusText: {
-    color: "#E5F3F8",
-    fontWeight: "700",
-    fontSize: 13,
-    letterSpacing: 0.1,
+    color: COLORS.text,
+    fontWeight: "800",
+    fontSize: 12,
+    flex: 1,
   },
 
   bottomDescription: {
-    color: "#91A8B8",
-    fontSize: 12,
-    lineHeight: 19,
-    marginTop: 7,
+    color: COLORS.muted,
+    fontSize: 11,
+    lineHeight: 18,
+    marginTop: 8,
   },
 
   // BUTTONS
 
   primaryButton: {
-    backgroundColor: "#0891B2",
+    backgroundColor: COLORS.primary,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 9,
-    minHeight: 50,
-    paddingVertical: 14,
+    minHeight: 49,
+    paddingVertical: 13,
     paddingHorizontal: 24,
-    borderRadius: 15,
+    borderRadius: 14,
     marginTop: 18,
-    shadowColor: "#06B6D4",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.18,
-    shadowRadius: 8,
     elevation: 3,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
   },
 
   buttonText: {
     color: COLORS.white,
-    fontWeight: "bold",
+    fontWeight: "800",
     fontSize: 14,
   },
 
@@ -1204,7 +1278,7 @@ const styles = StyleSheet.create({
 
   alertOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.65)",
+    backgroundColor: "rgba(22,52,107,0.35)",
     justifyContent: "center",
     alignItems: "center",
     padding: 25,
@@ -1213,32 +1287,38 @@ const styles = StyleSheet.create({
   alertCard: {
     width: "100%",
     maxWidth: 380,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 24,
-    padding: 26,
+    borderRadius: 23,
+    padding: 25,
     alignItems: "center",
-    elevation: 12,
   },
 
   alertIconContainer: {
-    width: 75,
-    height: 75,
-    borderRadius: 38,
+    width: 76,
+    height: 76,
+    borderRadius: 24,
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 17,
   },
 
+  alertIconBackground: {
+    width: 62,
+    height: 62,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
   alertTitle: {
-    fontSize: 21,
-    fontWeight: "800",
-    color: "#172B4D",
+    fontSize: 20,
+    fontWeight: "900",
+    color: COLORS.text,
     textAlign: "center",
   },
 
   alertMessage: {
-    fontSize: 14,
-    color: "#64748B",
+    fontSize: 13,
+    color: COLORS.muted,
     lineHeight: 21,
     textAlign: "center",
     marginTop: 10,
@@ -1254,7 +1334,7 @@ const styles = StyleSheet.create({
   alertConfirmButton: {
     minHeight: 47,
     paddingHorizontal: 18,
-    borderRadius: 11,
+    borderRadius: 13,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -1262,22 +1342,21 @@ const styles = StyleSheet.create({
   alertConfirmText: {
     color: "#FFFFFF",
     fontSize: 13,
-    fontWeight: "800",
+    fontWeight: "900",
     textAlign: "center",
   },
 
   alertCancelButton: {
     flex: 1,
     minHeight: 47,
-    backgroundColor: "#F1F5F9",
-    borderRadius: 11,
     justifyContent: "center",
     alignItems: "center",
+    borderRadius: 13,
   },
 
   alertCancelText: {
-    color: "#172B4D",
+    color: COLORS.text,
     fontSize: 13,
-    fontWeight: "700",
+    fontWeight: "800",
   },
 });

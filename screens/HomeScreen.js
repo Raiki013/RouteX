@@ -1,9 +1,4 @@
-import React, {
-  useCallback,
-  useEffect,
-  useState,
-  useRef,
-} from "react";
+import React, { useCallback, useEffect, useState } from "react";
 
 import {
   View,
@@ -14,114 +9,22 @@ import {
   ActivityIndicator,
   RefreshControl,
   Modal,
-  ImageBackground,
   Image,
+  ImageBackground,
   StatusBar,
 } from "react-native";
 
 import { Ionicons } from "@expo/vector-icons";
-import { BlurView, BlurTargetView } from "expo-blur";
 import { supabase } from "../config/supabase";
-
-// =====================================
-// ROUTEX - BLUE GLASSMORPHISM
-// =====================================
-
-const C = {
-  background: "#D6E6F3",
-  background2: "#C9DEEF",
-
-  navy: "#145DA8",
-  blue: "#286DF6",
-  cyan: "#087FAF",
-
-  white: "#FFFFFF",
-  gray: "#496681",
-
-  green: "#258BCB",
-  red: "#D9485F",
-  orange: "#087FAF",
-
-  glass: "rgba(90, 149, 252, 0.24)",
-  glassLight: "rgba(90, 149, 252, 0.13)",
-  glassBorder: "rgba(255, 255, 255, 0.72)",
-  glassStrong: "rgba(90, 149, 252, 0.36)",
-
-  text: "#081B33",
-  textSecondary: "#263F59",
-
-  paleBlue: "rgba(90, 149, 252, 0.14)",
-  paleGreen: "rgba(37, 139, 203, 0.12)",
-  paleRed: "rgba(217, 72, 95, 0.10)",
-  paleOrange: "rgba(8, 127, 175, 0.12)",
-};
+import {
+  C,
+  NeuView,
+  NeuTouchable,
+  NeuCard,
+  blueGlow,
+} from "../theme/theme";
 
 const GCASH_BUCKET = "operator-gcash-qr";
-
-// =====================================
-// REUSABLE GLASS BLUR
-// =====================================
-
-function GlassBlur({ blurTarget, intensity = 40 }) {
-  return (
-    <View
-      pointerEvents="none"
-      style={StyleSheet.absoluteFill}
-    >
-      <BlurView
-        blurTarget={blurTarget}
-        blurMethod="dimezisBlurView"
-        intensity={intensity}
-        tint="light"
-        pointerEvents="none"
-        style={StyleSheet.absoluteFill}
-      />
-
-      {/* Soft glass reflection */}
-      <View style={styles.glassBlurReflection} />
-
-      {/* Top reflective edge */}
-      <View style={styles.glassBlurHighlight} />
-
-      {/* Subtle glossy shine */}
-      <View style={styles.glassBlurShine} />
-    </View>
-  );
-}
-
-// =====================================
-// REUSABLE GLASS CARD
-// =====================================
-
-function GlassCard({ children, style, blurTarget }) {
-  return (
-    <View style={[styles.glassCard, style]}>
-      <GlassBlur
-        blurTarget={blurTarget}
-        intensity={40}
-      />
-
-      <View
-        pointerEvents="none"
-        style={styles.glassReflection}
-      />
-
-      <View
-        pointerEvents="none"
-        style={styles.glassHighlight}
-      />
-
-      <View
-        pointerEvents="none"
-        style={styles.glassShine}
-      />
-
-      <View style={styles.glassContent}>
-        {children}
-      </View>
-    </View>
-  );
-}
 
 // =====================================
 // CUSTOM ALERT
@@ -138,7 +41,7 @@ function SweetAlert({
   const alertColors = {
     success: C.blue,
     error: C.red,
-    warning: C.cyan,
+    warning: C.secondary,
     info: C.blue,
   };
 
@@ -158,19 +61,14 @@ function SweetAlert({
       onRequestClose={onConfirm}
     >
       <View style={styles.modalOverlay}>
-        <View style={styles.alertBox}>
-          <View
-            style={[
-              styles.alertIcon,
-              { backgroundColor: `${alertColors[type]}25` },
-            ]}
-          >
+        <NeuView style={styles.alertBox}>
+          <NeuView style={styles.alertIcon}>
             <Ionicons
               name={alertIcons[type]}
-              size={55}
+              size={50}
               color={alertColors[type]}
             />
-          </View>
+          </NeuView>
 
           <Text style={styles.alertTitle}>{title}</Text>
           <Text style={styles.alertMessage}>{message}</Text>
@@ -183,11 +81,9 @@ function SweetAlert({
             onPress={onConfirm}
             activeOpacity={0.85}
           >
-            <Text style={styles.alertButtonText}>
-              {confirmText}
-            </Text>
+            <Text style={styles.alertButtonText}>{confirmText}</Text>
           </TouchableOpacity>
-        </View>
+        </NeuView>
       </View>
     </Modal>
   );
@@ -198,8 +94,6 @@ function SweetAlert({
 // =====================================
 
 export default function HomeScreen({ navigation }) {
-  const blurTargetRef = useRef(null);
-
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -229,19 +123,11 @@ export default function HomeScreen({ navigation }) {
   });
 
   const showAlert = (title, message, type = "info") => {
-    setAlertConfig({
-      visible: true,
-      title,
-      message,
-      type,
-    });
+    setAlertConfig({ visible: true, title, message, type });
   };
 
   const closeAlert = () => {
-    setAlertConfig((prev) => ({
-      ...prev,
-      visible: false,
-    }));
+    setAlertConfig((prev) => ({ ...prev, visible: false }));
   };
 
   const alertModal = (
@@ -337,7 +223,6 @@ export default function HomeScreen({ navigation }) {
         setActiveTrip(null);
 
         await loadPassengerBookings(currentUser.id);
-
         return;
       }
 
@@ -370,8 +255,7 @@ export default function HomeScreen({ navigation }) {
       if (currentTrip) {
         selectedBus =
           buses?.find(
-            (bus) =>
-              String(bus.bus_id) === String(currentTrip.bus_id)
+            (bus) => String(bus.bus_id) === String(currentTrip.bus_id)
           ) || null;
       }
 
@@ -421,10 +305,7 @@ export default function HomeScreen({ navigation }) {
     const loadUnreadNotifications = async (userId) => {
       const { count, error } = await supabase
         .from("notifications")
-        .select("id", {
-          count: "exact",
-          head: true,
-        })
+        .select("id", { count: "exact", head: true })
         .eq("user_id", userId)
         .eq("is_read", false);
 
@@ -448,9 +329,7 @@ export default function HomeScreen({ navigation }) {
         if (error) throw error;
 
         if (!currentUser) {
-          if (isMounted) {
-            setHasUnreadNotifications(false);
-          }
+          if (isMounted) setHasUnreadNotifications(false);
           return;
         }
 
@@ -482,22 +361,18 @@ export default function HomeScreen({ navigation }) {
 
     initializeNotifications();
 
-    const unsubscribeFocus = navigation.addListener(
-      "focus",
-      async () => {
-        const {
-          data: { user: currentUser },
-        } = await supabase.auth.getUser();
+    const unsubscribeFocus = navigation.addListener("focus", async () => {
+      const {
+        data: { user: currentUser },
+      } = await supabase.auth.getUser();
 
-        if (currentUser && isMounted) {
-          loadUnreadNotifications(currentUser.id);
-        }
+      if (currentUser && isMounted) {
+        loadUnreadNotifications(currentUser.id);
       }
-    );
+    });
 
     return () => {
       isMounted = false;
-
       unsubscribeFocus();
 
       if (channel) {
@@ -589,41 +464,16 @@ export default function HomeScreen({ navigation }) {
   // NAVIGATION
   // =====================================
 
-  const openBooking = () => {
-    navigation.navigate("Booking");
-  };
-
-  const openTracking = () => {
-    navigation.navigate("Live Tracking");
-  };
-
-  const openNotifications = () => {
-    navigation.navigate("Notifications");
-  };
-
-  const openDocking = () => {
-    navigation.navigate("OperatorDocking");
-  };
-
-  const openScanner = () => {
-    navigation.navigate("OperatorTicketScanner");
-  };
-
-  const openTrip = () => {
-    navigation.navigate("Live Tracking");
-  };
-
-  const openPayment = (bookingId) => {
-    navigation.navigate("Payment", {
-      bookingId,
-    });
-  };
-
-  const openTicket = (bookingId) => {
-    navigation.navigate("Ticket", {
-      bookingId,
-    });
-  };
+  const openBooking = () => navigation.navigate("Booking");
+  const openTracking = () => navigation.navigate("Live Tracking");
+  const openNotifications = () => navigation.navigate("Notifications");
+  const openTripManagement = () => navigation.navigate("TripManagement");
+  const openScanner = () => navigation.navigate("OperatorTicketScanner");
+  const openTrip = () => navigation.navigate("Live Tracking");
+  const openPayment = (bookingId) =>
+    navigation.navigate("Payment", { bookingId });
+  const openTicket = (bookingId) =>
+    navigation.navigate("Ticket", { bookingId });
 
   // =====================================
   // FORMAT BOOKING DATE
@@ -648,44 +498,29 @@ export default function HomeScreen({ navigation }) {
     const paymentStatus = booking.payment_status?.toLowerCase();
 
     if (bookingStatus === "cancelled") {
-      return {
-        label: "Cancelled",
-        color: "#DC2626",
-        background: "rgba(220, 38, 38, 0.12)",
-      };
+      return { label: "Cancelled", color: C.red, background: C.paleRed };
     }
 
     if (bookingStatus === "completed") {
-      return {
-        label: "Completed",
-        color: "#15803D",
-        background: "rgba(21, 128, 61, 0.12)",
-      };
+      return { label: "Completed", color: C.blue, background: C.paleBlue };
     }
 
-    if (
-      bookingStatus === "confirmed" &&
-      paymentStatus === "paid"
-    ) {
-      return {
-        label: "Confirmed",
-        color: "#15803D",
-        background: "rgba(8, 127, 175, 0.13)",
-      };
+    if (bookingStatus === "confirmed" && paymentStatus === "paid") {
+      return { label: "Confirmed", color: C.blue, background: C.paleBlue };
     }
 
     if (paymentStatus === "pending") {
       return {
         label: "Payment Pending",
-        color: "#B45309",
-        background: "rgba(245, 158, 11, 0.15)",
+        color: C.text,
+        background: C.lightBlue,
       };
     }
 
     return {
       label: "Request Pending",
-      color: "#7C3AED",
-      background: "rgba(124, 58, 237, 0.12)",
+      color: C.white,
+      background: C.secondary,
     };
   };
 
@@ -696,14 +531,11 @@ export default function HomeScreen({ navigation }) {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <StatusBar
-          barStyle="dark-content"
-          backgroundColor={C.background}
-        />
+        <StatusBar barStyle="dark-content" backgroundColor={C.background} />
 
-        <View style={styles.loadingLogo}>
+        <NeuView style={styles.loadingLogo}>
           <Ionicons name="bus" size={38} color={C.blue} />
-        </View>
+        </NeuView>
 
         <Text style={styles.loadingBrand}>RouteX</Text>
 
@@ -713,9 +545,7 @@ export default function HomeScreen({ navigation }) {
           style={{ marginTop: 20 }}
         />
 
-        <Text style={styles.loadingText}>
-          Loading your dashboard...
-        </Text>
+        <Text style={styles.loadingText}>Loading your dashboard...</Text>
 
         {alertModal}
       </View>
@@ -728,21 +558,9 @@ export default function HomeScreen({ navigation }) {
 
   return (
     <>
-      <StatusBar
-        barStyle="dark-content"
-        backgroundColor={C.background}
-      />
+      <StatusBar barStyle="dark-content" backgroundColor={C.background} />
 
       <View style={styles.screenRoot}>
-        {/* SHARED BACKGROUND TO BLUR */}
-
-        <BlurTargetView
-          ref={blurTargetRef}
-          style={StyleSheet.absoluteFill}
-        >
-          <View style={styles.blurBackdrop} />
-        </BlurTargetView>
-
         <ScrollView
           style={styles.container}
           contentContainerStyle={styles.content}
@@ -760,20 +578,14 @@ export default function HomeScreen({ navigation }) {
 
           <View style={styles.header}>
             <View style={{ flex: 1 }}>
-              <View style={styles.brandRow}>
-
-
-         
-              </View>
+              <View style={styles.brandRow} />
 
               <Text style={styles.greeting}>
                 {isOperator ? "OPERATOR DASHBOARD" : "WELCOME BACK"}
               </Text>
 
               <Text style={styles.userName}>
-                {isOperator
-                  ? `Hello, ${firstName}! 👋`
-                  : `${firstName}! 👋`}
+                {isOperator ? `Hello, ${firstName}! 👋` : `${firstName}! 👋`}
               </Text>
 
               <Text style={styles.headerSubtitle}>
@@ -804,45 +616,31 @@ export default function HomeScreen({ navigation }) {
 
           {isOperator ? (
             <>
-              {/* ASSIGNED BUS */}
-
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>
-                  My Assigned Bus
-                </Text>
+                <Text style={styles.sectionTitle}>My Assigned Bus</Text>
 
-                <View style={styles.assignedBadge}>
+                <NeuView small style={styles.assignedBadge}>
                   <View style={styles.greenDot} />
-
-                  <Text style={styles.assignedBadgeText}>
-                    Admin Assigned
-                  </Text>
-                </View>
+                  <Text style={styles.assignedBadgeText}>Admin Assigned</Text>
+                </NeuView>
               </View>
 
               {assignedBus ? (
-                <GlassCard
-                  blurTarget={blurTargetRef}
-                  style={styles.busCard}
-                >
+                <NeuCard style={styles.busCard}>
                   <View style={styles.busCardTop}>
-                    <View style={styles.busIconContainer}>
-                      <Ionicons
-                        name="bus"
-                        size={30}
-                        color={C.blue}
-                      />
-                    </View>
+                    <NeuView small style={styles.busIconContainer}>
+                      <Ionicons name="bus" size={30} color={C.blue} />
+                    </NeuView>
 
-                    <View style={styles.busStatusContainer}>
+                    <NeuView inset style={styles.busStatusContainer}>
                       <View
                         style={[
                           styles.statusDot,
                           {
                             backgroundColor:
                               assignedBus.bus_status === "online"
-                                ? C.cyan
-                                : C.gray,
+                                ? C.blue
+                                : C.muted,
                           },
                         ]}
                       />
@@ -850,7 +648,7 @@ export default function HomeScreen({ navigation }) {
                       <Text style={styles.busStatusText}>
                         {assignedBus.bus_status || "offline"}
                       </Text>
-                    </View>
+                    </NeuView>
                   </View>
 
                   <Text style={styles.busName}>
@@ -862,9 +660,7 @@ export default function HomeScreen({ navigation }) {
                   </Text>
 
                   <View style={styles.plateContainer}>
-                    <Text style={styles.plateLabel}>
-                      PLATE NUMBER
-                    </Text>
+                    <Text style={styles.plateLabel}>PLATE NUMBER</Text>
 
                     <Text style={styles.plateNumber}>
                       {assignedBus.plate_number || "Not available"}
@@ -878,7 +674,6 @@ export default function HomeScreen({ navigation }) {
                         size={17}
                         color={C.blue}
                       />
-
                       <Text style={styles.busDetailText}>
                         {assignedBus.bus_type || "Bus type unavailable"}
                       </Text>
@@ -890,58 +685,43 @@ export default function HomeScreen({ navigation }) {
                         size={17}
                         color={C.blue}
                       />
-
                       <Text style={styles.busDetailText}>
                         {assignedBus.capacity || 0} seats
                       </Text>
                     </View>
                   </View>
-                </GlassCard>
+                </NeuCard>
               ) : (
-                <GlassCard
-                  blurTarget={blurTargetRef}
-                  style={styles.emptyCard}
-                >
-                  <View style={styles.emptyIcon}>
-                    <Ionicons
-                      name="bus-outline"
-                      size={32}
-                      color={C.blue}
-                    />
-                  </View>
+                <NeuCard style={styles.emptyCard}>
+                  <NeuView small style={styles.emptyIcon}>
+                    <Ionicons name="bus-outline" size={32} color={C.blue} />
+                  </NeuView>
 
-                  <Text style={styles.emptyTitle}>
-                    No Bus Assigned Yet
-                  </Text>
+                  <Text style={styles.emptyTitle}>No Bus Assigned Yet</Text>
 
                   <Text style={styles.emptyDescription}>
                     Your assigned bus will appear here once the
                     administrator registers and assigns one to your
                     account.
                   </Text>
-                </GlassCard>
+                </NeuCard>
               )}
 
               {/* CURRENT TRIP */}
 
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>
-                  Current Trip
-                </Text>
+                <Text style={styles.sectionTitle}>Current Trip</Text>
               </View>
 
-              <GlassCard
-                blurTarget={blurTargetRef}
-                style={styles.tripCard}
-              >
+              <NeuCard style={styles.tripCard}>
                 <View style={styles.tripCardHeader}>
-                  <View style={styles.tripIcon}>
+                  <NeuView small style={styles.tripIcon}>
                     <Ionicons
                       name="navigate-outline"
                       size={23}
                       color={C.blue}
                     />
-                  </View>
+                  </NeuView>
 
                   <View style={{ flex: 1 }}>
                     <Text style={styles.tripTitle}>
@@ -955,12 +735,11 @@ export default function HomeScreen({ navigation }) {
                     </Text>
                   </View>
 
-                  <View
+                  <NeuView
+                    inset
                     style={[
                       styles.tripStatusBadge,
-                      activeTrip
-                        ? styles.activeBadge
-                        : styles.inactiveBadge,
+                      activeTrip && styles.activeBadge,
                     ]}
                   >
                     <Text
@@ -973,19 +752,17 @@ export default function HomeScreen({ navigation }) {
                     >
                       {activeTrip ? "ACTIVE" : "IDLE"}
                     </Text>
-                  </View>
+                  </NeuView>
                 </View>
 
                 {activeTrip && (
-                  <View style={styles.destinationContainer}>
-                    <Text style={styles.destinationLabel}>
-                      DESTINATION
-                    </Text>
+                  <NeuView inset style={styles.destinationContainer}>
+                    <Text style={styles.destinationLabel}>DESTINATION</Text>
 
                     <Text style={styles.destinationText}>
                       {activeTrip.destination || "Not specified"}
                     </Text>
-                  </View>
+                  </NeuView>
                 )}
 
                 <TouchableOpacity
@@ -1005,243 +782,218 @@ export default function HomeScreen({ navigation }) {
                   />
 
                   <Text style={styles.primaryButtonText}>
-                    {activeTrip
-                      ? "Manage Active Trip"
-                      : "Open Trip Tracking"}
+                    {activeTrip ? "Manage Active Trip" : "Open Trip Tracking"}
                   </Text>
                 </TouchableOpacity>
-              </GlassCard>
+              </NeuCard>
 
               {/* QUICK ACTIONS */}
 
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>
-                  Quick Actions
-                </Text>
+                <Text style={styles.sectionTitle}>Quick Actions</Text>
               </View>
 
               <View style={styles.actionGrid}>
-                <TouchableOpacity
+                <NeuTouchable
                   style={styles.actionCard}
                   onPress={openScanner}
                   activeOpacity={0.8}
                 >
-                  <GlassBlur blurTarget={blurTargetRef} />
-
-                  <View style={styles.actionIcon}>
+                  <NeuView small style={styles.actionIcon}>
                     <Ionicons
                       name="qr-code-outline"
                       size={26}
                       color={C.blue}
                     />
-                  </View>
+                  </NeuView>
 
-                  <Text style={styles.actionTitle}>
-                    Ticket Scanner
-                  </Text>
+                  <Text style={styles.actionTitle}>Ticket Scanner</Text>
 
                   <Text style={styles.actionDescription}>
                     Scan passenger tickets
                   </Text>
-                </TouchableOpacity>
+                </NeuTouchable>
 
-                <TouchableOpacity
+                <NeuTouchable
                   style={styles.actionCard}
-                  onPress={openDocking}
+                  onPress={openTripManagement}
                   activeOpacity={0.8}
                 >
-                  <GlassBlur blurTarget={blurTargetRef} />
-
-                  <View style={styles.actionIcon}>
+                  <NeuView small style={styles.actionIcon}>
                     <Ionicons
                       name="location-outline"
                       size={26}
                       color={C.blue}
                     />
-                  </View>
+                  </NeuView>
 
-                  <Text style={styles.actionTitle}>
-                    Bus Docking
-                  </Text>
+                  <Text style={styles.actionTitle}>Bus Docking</Text>
 
                   <Text style={styles.actionDescription}>
                     Manage bus docking
                   </Text>
-                </TouchableOpacity>
+                </NeuTouchable>
               </View>
 
               {/* GCASH QR SHORTCUT */}
 
-              <TouchableOpacity
+              <NeuTouchable
                 style={styles.shortcutCard}
                 onPress={openGcashQR}
                 activeOpacity={0.85}
               >
-                <GlassBlur blurTarget={blurTargetRef} />
-
-                <View style={styles.shortcutIcon}>
-                  <Ionicons
-                    name="qr-code"
-                    size={24}
-                    color={C.blue}
-                  />
-                </View>
+                <NeuView small style={styles.shortcutIcon}>
+                  <Ionicons name="qr-code" size={24} color={C.blue} />
+                </NeuView>
 
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.shortcutTitle}>
-                    Show GCash QR Code
-                  </Text>
+                  <Text style={styles.shortcutTitle}>Show GCash QR Code</Text>
 
                   <Text style={styles.shortcutDescription}>
                     Display your uploaded GCash payment QR code
                   </Text>
                 </View>
 
-                <Ionicons
-                  name="chevron-forward"
-                  size={21}
-                  color={C.gray}
-                />
-              </TouchableOpacity>
+                <Ionicons name="chevron-forward" size={21} color={C.muted} />
+              </NeuTouchable>
 
               {/* LIVE TRACKING SHORTCUT */}
 
-              <TouchableOpacity
+              <NeuTouchable
                 style={styles.shortcutCard}
                 onPress={openTracking}
                 activeOpacity={0.85}
               >
-                <GlassBlur blurTarget={blurTargetRef} />
-
-                <View style={styles.shortcutIcon}>
-                  <Ionicons
-                    name="map-outline"
-                    size={24}
-                    color={C.blue}
-                  />
-                </View>
+                <NeuView small style={styles.shortcutIcon}>
+                  <Ionicons name="map-outline" size={24} color={C.blue} />
+                </NeuView>
 
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.shortcutTitle}>
-                    Live Tracking
-                  </Text>
+                  <Text style={styles.shortcutTitle}>Live Tracking</Text>
 
                   <Text style={styles.shortcutDescription}>
                     View the live tracking screen
                   </Text>
                 </View>
 
-                <Ionicons
-                  name="chevron-forward"
-                  size={21}
-                  color={C.gray}
-                />
-              </TouchableOpacity>
+                <Ionicons name="chevron-forward" size={21} color={C.muted} />
+              </NeuTouchable>
             </>
           ) : (
-            /* PASSENGER DASHBOARD */
             <>
-              {/* BOOKING HERO */}
+              {/* PASSENGER HERO */}
 
-              <ImageBackground
-                source={require("../assets/booking-bg.jpg")}
-                style={styles.passengerHero}
-                imageStyle={styles.heroImage}
-                resizeMode="cover"
-              >
-                <View style={styles.heroOverlay} />
+              <NeuView style={styles.passengerHero}>
+                <ImageBackground
+                  source={require("../assets/booking-bg.jpg")}
+                  style={styles.heroClip}
+                  imageStyle={styles.heroImage}
+                  resizeMode="cover"
+                >
+                  <View style={styles.heroOverlay} />
 
-                <View style={styles.heroTextContainer}>
-                  <View style={styles.heroTag}>
-                    <Ionicons
-                      name="navigate"
-                      size={12}
-                      color={C.cyan}
-                    />
+                  <View style={styles.heroTextContainer}>
+                    <View style={styles.heroTag}>
+                      <Ionicons name="navigate" size={13} color={C.blue} />
 
-                    <Text style={styles.heroEyebrow}>
-                      TRAVEL WITH ROUTEX
+                      <Text style={styles.heroEyebrow}>
+                        TRAVEL WITH ROUTEX
+                      </Text>
+                    </View>
+
+                    <Text style={styles.heroTitle}>
+                      Your next trip starts here.
                     </Text>
+
+                    <Text style={styles.heroSubtitle}>
+                      Track your bus. Book your seat. Travel with ease.
+                    </Text>
+
+                    <TouchableOpacity
+                      style={styles.heroButton}
+                      onPress={openBooking}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={styles.heroButtonText}>Book a Bus</Text>
+
+                      <Ionicons name="arrow-forward" size={18} color={C.blue} />
+                    </TouchableOpacity>
                   </View>
+                </ImageBackground>
+              </NeuView>
 
-                  <Text style={styles.heroTitle}>
-                    Your next trip starts here.
-                  </Text>
+              {/* QUICK STATS */}
 
-                  <Text style={styles.heroSubtitle}>
-                    Track your bus. Book your seat. Travel with ease.
-                  </Text>
+              <View style={styles.statsRow}>
+                {[
+                  {
+                    icon: "ticket-outline",
+                    value: bookings.length,
+                    label: "Bookings",
+                  },
+                  {
+                    icon: "checkmark-done-outline",
+                    value: bookings.filter(
+                      (b) => b.booking_status?.toLowerCase() === "confirmed"
+                    ).length,
+                    label: "Confirmed",
+                  },
+                  {
+                    icon: "hourglass-outline",
+                    value: bookings.filter((b) =>
+                      ["pending", "requested"].includes(
+                        b.booking_status?.toLowerCase()
+                      )
+                    ).length,
+                    label: "Pending",
+                  },
+                ].map((stat) => (
+                  <NeuView key={stat.label} style={styles.statCard}>
+                    <NeuView inset style={styles.statIcon}>
+                      <Ionicons name={stat.icon} size={18} color={C.blue} />
+                    </NeuView>
 
-                  <TouchableOpacity
-                    style={styles.heroButton}
-                    onPress={openBooking}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={styles.heroButtonText}>
-                      Book a Bus
-                    </Text>
-
-                    <Ionicons
-                      name="arrow-forward"
-                      size={18}
-                      color={C.white}
-                    />
-                  </TouchableOpacity>
-                </View>
-              </ImageBackground>
+                    <Text style={styles.statValue}>{stat.value}</Text>
+                    <Text style={styles.statLabel}>{stat.label}</Text>
+                  </NeuView>
+                ))}
+              </View>
 
               {/* MY BOOKINGS */}
 
               <View style={styles.sectionHeader}>
                 <View>
-                  <Text style={styles.sectionTitle}>
-                    My Bookings
-                  </Text>
+                  <Text style={styles.sectionTitle}>My Bookings</Text>
 
                   <Text style={styles.bookingSectionSubtitle}>
                     Your recent booking requests and tickets
                   </Text>
                 </View>
 
-                <TouchableOpacity
+                <NeuTouchable
+                  small
+                  style={styles.refreshButton}
                   onPress={() => user && loadPassengerBookings(user.id)}
                   activeOpacity={0.7}
                 >
-                  <Ionicons
-                    name="refresh-outline"
-                    size={22}
-                    color={C.blue}
-                  />
-                </TouchableOpacity>
+                  <Ionicons name="refresh-outline" size={20} color={C.blue} />
+                </NeuTouchable>
               </View>
 
               {bookingsLoading ? (
-                <GlassCard
-                  blurTarget={blurTargetRef}
-                  style={styles.bookingLoading}
-                >
+                <NeuCard style={styles.bookingLoading}>
                   <ActivityIndicator size="small" color={C.blue} />
-
                   <Text style={styles.bookingLoadingText}>
                     Loading your bookings...
                   </Text>
-                </GlassCard>
+                </NeuCard>
               ) : bookings.length === 0 ? (
-                <GlassCard
-                  blurTarget={blurTargetRef}
-                  style={styles.noBookingsCard}
-                >
-                  <View style={styles.noBookingsIcon}>
-                    <Ionicons
-                      name="ticket-outline"
-                      size={30}
-                      color={C.blue}
-                    />
-                  </View>
+                <NeuCard style={styles.noBookingsCard}>
+                  <NeuView small style={styles.noBookingsIcon}>
+                    <Ionicons name="ticket-outline" size={30} color={C.blue} />
+                  </NeuView>
 
-                  <Text style={styles.noBookingsTitle}>
-                    No Bookings Yet
-                  </Text>
+                  <Text style={styles.noBookingsTitle}>No Bookings Yet</Text>
 
                   <Text style={styles.noBookingsText}>
                     Your booking requests and previous trips will
@@ -1253,17 +1005,11 @@ export default function HomeScreen({ navigation }) {
                     onPress={openBooking}
                     activeOpacity={0.85}
                   >
-                    <Text style={styles.bookNowButtonText}>
-                      Book a Bus
-                    </Text>
+                    <Text style={styles.bookNowButtonText}>Book a Bus</Text>
 
-                    <Ionicons
-                      name="arrow-forward"
-                      size={16}
-                      color={C.white}
-                    />
+                    <Ionicons name="arrow-forward" size={16} color={C.white} />
                   </TouchableOpacity>
-                </GlassCard>
+                </NeuCard>
               ) : (
                 <>
                   {displayedBookings.map((booking) => {
@@ -1284,7 +1030,7 @@ export default function HomeScreen({ navigation }) {
                       !hasTicket && !isCancelled && !isCompleted;
 
                     return (
-                      <TouchableOpacity
+                      <NeuTouchable
                         key={booking.booking_id}
                         style={styles.bookingCard}
                         onPress={() => {
@@ -1295,16 +1041,14 @@ export default function HomeScreen({ navigation }) {
                         disabled={!isProcessing}
                         activeOpacity={isProcessing ? 0.75 : 1}
                       >
-                        <GlassBlur blurTarget={blurTargetRef} />
-
                         <View style={styles.bookingTopRow}>
-                          <View style={styles.bookingIcon}>
+                          <NeuView small style={styles.bookingIcon}>
                             <Ionicons
                               name={hasTicket ? "ticket" : "time-outline"}
                               size={23}
                               color={C.blue}
                             />
-                          </View>
+                          </NeuView>
 
                           <View style={styles.bookingMainInfo}>
                             <Text style={styles.bookingReference}>
@@ -1369,9 +1113,7 @@ export default function HomeScreen({ navigation }) {
                           {hasTicket ? (
                             <TouchableOpacity
                               style={styles.viewTicketButton}
-                              onPress={() =>
-                                openTicket(booking.booking_id)
-                              }
+                              onPress={() => openTicket(booking.booking_id)}
                               activeOpacity={0.85}
                             >
                               <Ionicons
@@ -1430,30 +1172,22 @@ export default function HomeScreen({ navigation }) {
                             </Text>
                           </View>
                         )}
-                      </TouchableOpacity>
+                      </NeuTouchable>
                     );
                   })}
 
                   {bookings.length > 3 && (
                     <TouchableOpacity
                       style={styles.seeMoreButton}
-                      onPress={() =>
-                        setShowAllBookings(!showAllBookings)
-                      }
+                      onPress={() => setShowAllBookings(!showAllBookings)}
                       activeOpacity={0.7}
                     >
                       <Text style={styles.seeMoreText}>
-                        {showAllBookings
-                          ? "Show Less"
-                          : "See All Bookings"}
+                        {showAllBookings ? "Show Less" : "See All Bookings"}
                       </Text>
 
                       <Ionicons
-                        name={
-                          showAllBookings
-                            ? "chevron-up"
-                            : "chevron-down"
-                        }
+                        name={showAllBookings ? "chevron-up" : "chevron-down"}
                         size={17}
                         color={C.blue}
                       />
@@ -1465,80 +1199,52 @@ export default function HomeScreen({ navigation }) {
               {/* EXPLORE ROUTEX */}
 
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>
-                  Explore RouteX
-                </Text>
+                <Text style={styles.sectionTitle}>Explore RouteX</Text>
               </View>
 
-              <TouchableOpacity
+              <NeuTouchable
                 style={styles.featureCard}
                 onPress={openBooking}
                 activeOpacity={0.8}
               >
-                <GlassBlur blurTarget={blurTargetRef} />
-
-                <View style={styles.featureIcon}>
-                  <Ionicons
-                    name="bus-outline"
-                    size={26}
-                    color={C.blue}
-                  />
-                </View>
+                <NeuView small style={styles.featureIcon}>
+                  <Ionicons name="bus-outline" size={26} color={C.blue} />
+                </NeuView>
 
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.featureTitle}>
-                    Book a Bus
-                  </Text>
+                  <Text style={styles.featureTitle}>Book a Bus</Text>
 
                   <Text style={styles.featureDescription}>
                     Browse available buses and reserve your seat.
                   </Text>
                 </View>
 
-                <Ionicons
-                  name="chevron-forward"
-                  size={20}
-                  color={C.gray}
-                />
-              </TouchableOpacity>
+                <Ionicons name="chevron-forward" size={20} color={C.muted} />
+              </NeuTouchable>
 
-              <TouchableOpacity
+              <NeuTouchable
                 style={styles.featureCard}
                 onPress={openTracking}
                 activeOpacity={0.8}
               >
-                <GlassBlur blurTarget={blurTargetRef} />
-
-                <View style={styles.featureIcon}>
-                  <Ionicons
-                    name="map-outline"
-                    size={26}
-                    color={C.blue}
-                  />
-                </View>
+                <NeuView small style={styles.featureIcon}>
+                  <Ionicons name="map-outline" size={26} color={C.blue} />
+                </NeuView>
 
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.featureTitle}>
-                    Live Bus Tracking
-                  </Text>
+                  <Text style={styles.featureTitle}>Live Bus Tracking</Text>
 
                   <Text style={styles.featureDescription}>
                     Check the live location of buses during their trips.
                   </Text>
                 </View>
 
-                <Ionicons
-                  name="chevron-forward"
-                  size={20}
-                  color={C.gray}
-                />
-              </TouchableOpacity>
+                <Ionicons name="chevron-forward" size={20} color={C.muted} />
+              </NeuTouchable>
 
               {/* INFORMATION CARD */}
 
-              <View style={styles.infoCard}>
-                <GlassBlur blurTarget={blurTargetRef} />
-
+              <NeuView style={styles.infoCard}>
                 <Ionicons
                   name="information-circle-outline"
                   size={23}
@@ -1546,16 +1252,14 @@ export default function HomeScreen({ navigation }) {
                 />
 
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.infoTitle}>
-                    Travel made easier
-                  </Text>
+                  <Text style={styles.infoTitle}>Travel made easier</Text>
 
                   <Text style={styles.infoDescription}>
                     Book your bus, manage your reservations, and keep
                     track of your journey using RouteX.
                   </Text>
                 </View>
-              </View>
+              </NeuView>
             </>
           )}
 
@@ -1587,45 +1291,34 @@ export default function HomeScreen({ navigation }) {
         onRequestClose={closeGcashQR}
       >
         <View style={styles.gcashModalOverlay}>
-          <View style={styles.gcashModalContainer}>
+          <NeuView style={styles.gcashModalContainer}>
             <View style={styles.gcashModalHeader}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.gcashModalTitle}>
-                  My GCash QR Code
-                </Text>
+                <Text style={styles.gcashModalTitle}>My GCash QR Code</Text>
 
                 <Text style={styles.gcashModalSubtitle}>
                   Your registered GCash payment details
                 </Text>
               </View>
 
-              <TouchableOpacity
+              <NeuTouchable
+                small
                 style={styles.gcashCloseButton}
                 onPress={closeGcashQR}
                 activeOpacity={0.8}
               >
-                <Ionicons
-                  name="close"
-                  size={23}
-                  color={C.blue}
-                />
-              </TouchableOpacity>
+                <Ionicons name="close" size={23} color={C.blue} />
+              </NeuTouchable>
             </View>
 
-            <View style={styles.gcashAccountContainer}>
+            <NeuView inset style={styles.gcashAccountContainer}>
               <View style={styles.gcashAccountRow}>
-                <View style={styles.gcashAccountIcon}>
-                  <Ionicons
-                    name="person-outline"
-                    size={19}
-                    color={C.blue}
-                  />
-                </View>
+                <NeuView small style={styles.gcashAccountIcon}>
+                  <Ionicons name="person-outline" size={19} color={C.blue} />
+                </NeuView>
 
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.gcashAccountLabel}>
-                    ACCOUNT NAME
-                  </Text>
+                  <Text style={styles.gcashAccountLabel}>ACCOUNT NAME</Text>
 
                   <Text style={styles.gcashAccountValue}>
                     {profile?.gcash_account_name || "Not provided"}
@@ -1636,13 +1329,13 @@ export default function HomeScreen({ navigation }) {
               <View style={styles.gcashAccountDivider} />
 
               <View style={styles.gcashAccountRow}>
-                <View style={styles.gcashAccountIcon}>
+                <NeuView small style={styles.gcashAccountIcon}>
                   <Ionicons
                     name="phone-portrait-outline"
                     size={19}
                     color={C.blue}
                   />
-                </View>
+                </NeuView>
 
                 <View style={{ flex: 1 }}>
                   <Text style={styles.gcashAccountLabel}>
@@ -1654,15 +1347,12 @@ export default function HomeScreen({ navigation }) {
                   </Text>
                 </View>
               </View>
-            </View>
+            </NeuView>
 
             <View style={styles.gcashQRImageContainer}>
               {gcashQRLoading ? (
                 <View style={styles.gcashQRMessage}>
-                  <ActivityIndicator
-                    size="large"
-                    color={C.blue}
-                  />
+                  <ActivityIndicator size="large" color={C.blue} />
 
                   <Text style={styles.gcashQRMessageText}>
                     Loading your GCash QR code...
@@ -1670,11 +1360,7 @@ export default function HomeScreen({ navigation }) {
                 </View>
               ) : gcashQRError || !gcashQRUrl ? (
                 <View style={styles.gcashQRMessage}>
-                  <Ionicons
-                    name="image-outline"
-                    size={55}
-                    color={C.gray}
-                  />
+                  <Ionicons name="image-outline" size={55} color={C.muted} />
 
                   <Text style={styles.gcashQRErrorTitle}>
                     No QR Code Available
@@ -1690,15 +1376,9 @@ export default function HomeScreen({ navigation }) {
                     onPress={openGcashQR}
                     activeOpacity={0.85}
                   >
-                    <Ionicons
-                      name="refresh"
-                      size={17}
-                      color={C.white}
-                    />
+                    <Ionicons name="refresh" size={17} color={C.white} />
 
-                    <Text style={styles.gcashRetryText}>
-                      Try Again
-                    </Text>
+                    <Text style={styles.gcashRetryText}>Try Again</Text>
                   </TouchableOpacity>
                 </View>
               ) : (
@@ -1710,10 +1390,8 @@ export default function HomeScreen({ navigation }) {
               )}
             </View>
 
-            <Text style={styles.gcashModalFooter}>
-              RouteX • GCash Payment
-            </Text>
-          </View>
+            <Text style={styles.gcashModalFooter}>RouteX • GCash Payment</Text>
+          </NeuView>
         </View>
       </Modal>
     </>
@@ -1725,8 +1403,7 @@ export default function HomeScreen({ navigation }) {
 // =====================================
 
 const styles = StyleSheet.create({
-
-  // MAIN BACKGROUND
+  // ---------- MAIN BACKGROUND ----------
 
   screenRoot: {
     flex: 1,
@@ -1735,23 +1412,15 @@ const styles = StyleSheet.create({
 
   container: {
     flex: 1,
-    backgroundColor: "transparent",
+    backgroundColor: C.background,
   },
 
   content: {
-    padding: 20,
+    padding: 22,
     paddingBottom: 40,
   },
 
-  // SHARED BLUR BACKGROUND
-
-  blurBackdrop: {
-    flex: 1,
-    backgroundColor: C.background,
-    overflow: "hidden",
-  },
-
-  // LOADING
+  // ---------- LOADING ----------
 
   loadingContainer: {
     flex: 1,
@@ -1761,26 +1430,18 @@ const styles = StyleSheet.create({
   },
 
   loadingLogo: {
-    width: 75,
-    height: 75,
-    borderRadius: 25,
-    backgroundColor: C.glass,
-    borderWidth: 1.3,
-    borderColor: C.glassBorder,
+    width: 80,
+    height: 80,
+    borderRadius: 26,
     alignItems: "center",
     justifyContent: "center",
-    elevation: 6,
-    shadowColor: "#4B91C4",
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.16,
-    shadowRadius: 12,
   },
 
   loadingBrand: {
     color: C.blue,
     fontSize: 25,
     fontWeight: "900",
-    marginTop: 13,
+    marginTop: 16,
   },
 
   loadingText: {
@@ -1789,7 +1450,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
 
-  // HEADER
+  // ---------- HEADER ----------
 
   header: {
     flexDirection: "row",
@@ -1805,29 +1466,10 @@ const styles = StyleSheet.create({
     marginBottom: 19,
   },
 
-  brandIcon: {
-    width: 29,
-    height: 29,
-    borderRadius: 9,
-    backgroundColor: C.glassLight,
-    borderWidth: 1,
-    borderColor: C.glassBorder,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 8,
-  },
-
-  brandText: {
-    color: C.blue,
-    fontSize: 17,
-    fontWeight: "900",
-    letterSpacing: 0.5,
-  },
-
   greeting: {
     color: C.blue,
     fontSize: 10,
-    fontWeight: "800",
+    fontWeight: "900",
     letterSpacing: 1.5,
   },
 
@@ -1845,40 +1487,34 @@ const styles = StyleSheet.create({
   },
 
   profileButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
+    width: 50,
+    height: 50,
+    borderRadius: 17,
     backgroundColor: C.blue,
-    borderWidth: 1,
-    borderColor: C.glassBorder,
     alignItems: "center",
     justifyContent: "center",
-    elevation: 5,
-    shadowColor: C.blue,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.18,
-    shadowRadius: 9,
+    ...blueGlow,
   },
 
   notificationDot: {
     position: "absolute",
     top: 9,
     right: 10,
-    width: 9,
-    height: 9,
+    width: 10,
+    height: 10,
     borderRadius: 5,
-    backgroundColor: C.cyan,
-    borderWidth: 1,
+    backgroundColor: C.lightBlue,
+    borderWidth: 1.5,
     borderColor: C.white,
   },
 
-  // SECTION HEADERS
+  // ---------- SECTION HEADERS ----------
 
   sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 14,
+    marginBottom: 16,
     marginTop: 12,
   },
 
@@ -1888,96 +1524,14 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
 
-  // MAIN GLASS CARD
-
- glassCard: {
-  backgroundColor: "rgba(190, 220, 245, 0.13)",
-  borderWidth: 1.2,
-  borderColor: "rgba(255, 255, 255, 0.72)",
-  borderRadius: 22,
-  overflow: "hidden",
-
-  elevation: 8,
-  shadowColor: "#5A95FC",
-  shadowOffset: { width: 0, height: 5 },
-  shadowOpacity: 0.16,
-  shadowRadius: 12,
-},
-
-glassReflection: {
-  position: "absolute",
-  top: 0,
-  left: 0,
-  right: 0,
-  height: "38%",
-  backgroundColor: "rgba(255, 255, 255, 0.075)",
-  borderTopLeftRadius: 22,
-  borderTopRightRadius: 22,
-},
-
-glassHighlight: {
-  position: "absolute",
-  top: 1,
-  left: 1,
-  right: 1,
-  height: 1.2,
-  backgroundColor: "rgba(255, 255, 255, 0.95)",
-},
-
-glassShine: {
-  position: "absolute",
-  top: 0,
-  left: 12,
-  width: "30%",
-  height: "100%",
-  backgroundColor: "rgba(255, 255, 255, 0.035)",
-},
-
-glassContent: {
-  position: "relative",
-  zIndex: 2,
-},
-
-// BLUR REFLECTIONS
-
-glassBlurReflection: {
-  position: "absolute",
-  top: 0,
-  left: 0,
-  right: 0,
-  height: "35%",
-  backgroundColor: "rgba(255, 255, 255, 0.055)",
-},
-
-glassBlurHighlight: {
-  position: "absolute",
-  top: 1,
-  left: 1,
-  right: 1,
-  height: 1,
-  backgroundColor: "rgba(255, 255, 255, 0.75)",
-},
-
-glassBlurShine: {
-  position: "absolute",
-  top: 0,
-  left: 12,
-  width: "28%",
-  height: "100%",
-  backgroundColor: "rgba(255, 255, 255, 0.025)",
-},
-
-  // ASSIGNED BADGE
+  // ---------- ASSIGNED BADGE ----------
 
   assignedBadge: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: C.glassLight,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderRadius: 20,
-    borderWidth: 1,
-    borderColor: C.glassBorder,
   },
 
   greenDot: {
@@ -1994,11 +1548,11 @@ glassBlurShine: {
     fontWeight: "800",
   },
 
-  // BUS CARD
+  // ---------- BUS CARD ----------
 
   busCard: {
-    padding: 19,
-    marginBottom: 24,
+    padding: 20,
+    marginBottom: 26,
   },
 
   busCardTop: {
@@ -2008,25 +1562,19 @@ glassBlurShine: {
   },
 
   busIconContainer: {
-    width: 55,
-    height: 55,
-    borderRadius: 17,
-    backgroundColor: C.glassLight,
-    borderWidth: 1,
-    borderColor: C.glassBorder,
-    justifyContent: "center",
+    width: 56,
+    height: 56,
+    borderRadius: 18,
     alignItems: "center",
+    justifyContent: "center",
   },
 
   busStatusContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: C.glassLight,
-    paddingHorizontal: 11,
+    paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 20,
-    borderWidth: 1,
-    borderColor: C.glassBorder,
   },
 
   statusDot: {
@@ -2057,16 +1605,15 @@ glassBlurShine: {
   },
 
   plateContainer: {
-    backgroundColor: "rgba(40, 109, 246, 0.88)",
-    borderRadius: 15,
+    backgroundColor: C.blue,
+    borderRadius: 16,
     padding: 14,
     marginTop: 18,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.75)",
+    ...blueGlow,
   },
 
   plateLabel: {
-    color: "#D9EEFF",
+    color: C.lightBlue,
     fontSize: 9,
     fontWeight: "800",
     letterSpacing: 1.5,
@@ -2099,21 +1646,18 @@ glassBlurShine: {
     marginLeft: 6,
   },
 
-  // EMPTY BUS
+  // ---------- EMPTY BUS ----------
 
   emptyCard: {
-    padding: 25,
+    padding: 26,
     alignItems: "center",
-    marginBottom: 24,
+    marginBottom: 26,
   },
 
   emptyIcon: {
-    width: 65,
-    height: 65,
-    borderRadius: 21,
-    backgroundColor: C.glassLight,
-    borderWidth: 1,
-    borderColor: C.glassBorder,
+    width: 66,
+    height: 66,
+    borderRadius: 22,
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 14,
@@ -2134,11 +1678,11 @@ glassBlurShine: {
     marginTop: 9,
   },
 
-  // TRIP CARD
+  // ---------- TRIP CARD ----------
 
   tripCard: {
-    padding: 18,
-    marginBottom: 24,
+    padding: 19,
+    marginBottom: 26,
   },
 
   tripCardHeader: {
@@ -2147,12 +1691,9 @@ glassBlurShine: {
   },
 
   tripIcon: {
-    width: 47,
-    height: 47,
-    borderRadius: 15,
-    backgroundColor: C.glassLight,
-    borderWidth: 1,
-    borderColor: C.glassBorder,
+    width: 48,
+    height: 48,
+    borderRadius: 16,
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
@@ -2172,20 +1713,13 @@ glassBlurShine: {
   },
 
   tripStatusBadge: {
-    paddingHorizontal: 10,
+    paddingHorizontal: 11,
     paddingVertical: 7,
     borderRadius: 20,
-    borderWidth: 1,
-    borderColor: C.glassBorder,
   },
 
   activeBadge: {
-    backgroundColor: C.glassLight,
-    borderColor: C.glassBorder,
-  },
-
-  inactiveBadge: {
-    backgroundColor: C.glassLight,
+    backgroundColor: C.paleBlue,
   },
 
   tripStatusText: {
@@ -2203,10 +1737,9 @@ glassBlurShine: {
   },
 
   destinationContainer: {
-    borderTopWidth: 1,
-    borderTopColor: C.glassBorder,
+    borderRadius: 16,
     marginTop: 17,
-    paddingTop: 14,
+    padding: 14,
   },
 
   destinationLabel: {
@@ -2223,23 +1756,17 @@ glassBlurShine: {
     marginTop: 6,
   },
 
-  // PRIMARY BUTTON
+  // ---------- PRIMARY BUTTON ----------
 
   primaryButton: {
     backgroundColor: C.blue,
-    borderRadius: 15,
+    borderRadius: 16,
     padding: 15,
     marginTop: 18,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderColor: C.glassBorder,
-    elevation: 4,
-    shadowColor: C.blue,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
+    ...blueGlow,
   },
 
   primaryButtonText: {
@@ -2249,45 +1776,33 @@ glassBlurShine: {
   },
 
   disabledButton: {
-    backgroundColor: "#7892AA",
-    borderColor: C.glassBorder,
+    backgroundColor: C.lightBlue,
     elevation: 0,
     shadowOpacity: 0,
   },
 
-  // QUICK ACTIONS
+  // ---------- QUICK ACTIONS ----------
 
   actionGrid: {
     flexDirection: "row",
-    gap: 13,
-    marginBottom: 16,
+    gap: 16,
+    marginBottom: 18,
   },
 
   actionCard: {
+    backgroundColor: C.card,
     flex: 1,
-    backgroundColor: "rgba(90, 149, 252, 0.18)",
-    borderRadius: 20,
+    borderRadius: 22,
     padding: 16,
-    borderWidth: 1.3,
-    borderColor: C.glassBorder,
-    overflow: "hidden",
-    elevation: 6,
-    shadowColor: "#4B91C4",
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
   },
 
   actionIcon: {
-    width: 49,
-    height: 49,
-    borderRadius: 15,
-    backgroundColor: C.glassLight,
+    width: 50,
+    height: 50,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 13,
-    borderWidth: 1,
-    borderColor: C.glassBorder,
   },
 
   actionTitle: {
@@ -2303,32 +1818,21 @@ glassBlurShine: {
     lineHeight: 16,
   },
 
-  // SHORTCUT CARDS
+  // ---------- SHORTCUT CARDS ----------
 
   shortcutCard: {
+    backgroundColor: C.card,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(90, 149, 252, 0.18)",
-    borderRadius: 19,
+    borderRadius: 20,
     padding: 15,
-    marginBottom: 13,
-    borderWidth: 1.3,
-    borderColor: C.glassBorder,
-    overflow: "hidden",
-    elevation: 6,
-    shadowColor: "#4B91C4",
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
+    marginBottom: 16,
   },
 
   shortcutIcon: {
-    width: 47,
-    height: 47,
-    borderRadius: 15,
-    backgroundColor: C.glassLight,
-    borderWidth: 1,
-    borderColor: C.glassBorder,
+    width: 48,
+    height: 48,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
     marginRight: 13,
@@ -2347,50 +1851,91 @@ glassBlurShine: {
     lineHeight: 15,
   },
 
-  // PASSENGER HERO
+  // ---------- PASSENGER HERO ----------
 
   passengerHero: {
-    minHeight: 245,
-    borderRadius: 24,
-    padding: 22,
+    minHeight: 250,
+    borderRadius: 28,
+    marginBottom: 22,
+    backgroundColor: C.blue,
+  },
+
+  heroClip: {
+    flex: 1,
+    minHeight: 246,
+    borderRadius: 26,
+    padding: 24,
     justifyContent: "center",
     overflow: "hidden",
-    backgroundColor: C.blue,
-    borderWidth: 1,
-    borderColor: C.glassBorder,
-    marginBottom: 24,
-    elevation: 6,
-    shadowColor: C.blue,
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.18,
-    shadowRadius: 13,
+    backgroundColor: "#06143A",
   },
 
   heroImage: {
-    borderRadius: 24,
-    opacity: 0.55,
+    borderRadius: 26,
+    opacity: 0.45,
   },
 
   heroOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(20, 93, 168, 0.82)",
+    backgroundColor: "rgba(4, 16, 48, 0.6)",
   },
 
   heroTextContainer: {
+    justifyContent: "center",
+  },
+
+  // STATS
+
+  statsRow: {
+    flexDirection: "row",
+    gap: 14,
+    marginBottom: 20,
+  },
+
+  statCard: {
+    backgroundColor: C.card,
     flex: 1,
-    zIndex: 2,
-    elevation: 2,
+    borderRadius: 20,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+
+  statIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 8,
+  },
+
+  statValue: {
+    color: C.text,
+    fontSize: 20,
+    fontWeight: "900",
+  },
+
+  statLabel: {
+    color: C.textSecondary,
+    fontSize: 10,
+    fontWeight: "700",
+    marginTop: 2,
   },
 
   heroTag: {
     flexDirection: "row",
     alignItems: "center",
+    alignSelf: "flex-start",
     gap: 6,
-    marginBottom: 12,
+    marginBottom: 14,
+    backgroundColor: C.white,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    borderRadius: 14,
   },
 
   heroEyebrow: {
-    color: "#D9EEFF",
+    color: C.blue,
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 1.5,
@@ -2398,49 +1943,44 @@ glassBlurShine: {
 
   heroTitle: {
     color: C.white,
-    fontSize: 25,
+    fontSize: 27,
     fontWeight: "900",
-    lineHeight: 32,
-    maxWidth: 260,
-    textShadowColor: "rgba(8, 27, 51, 0.35)",
-    textShadowOffset: { width: 1, height: 2 },
-    textShadowRadius: 5,
+    lineHeight: 34,
+    maxWidth: 250,
   },
 
   heroSubtitle: {
-    color: "#E4F1FC",
+    color: "#E3EEFE",
     fontSize: 12,
     lineHeight: 19,
     marginTop: 10,
-    maxWidth: 260,
+    maxWidth: 240,
   },
 
   heroButton: {
-    backgroundColor: C.blue,
-    borderRadius: 14,
-    paddingHorizontal: 18,
+    backgroundColor: C.white,
+    borderRadius: 15,
+    paddingHorizontal: 20,
     paddingVertical: 13,
     alignSelf: "flex-start",
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
     marginTop: 19,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.55)",
-    elevation: 4,
-    shadowColor: C.blue,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 7,
+    elevation: 6,
+    shadowColor: "#0B2F80",
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
   },
 
   heroButtonText: {
-    color: C.white,
+    color: C.blue,
     fontSize: 13,
     fontWeight: "900",
   },
 
-  // PASSENGER BOOKINGS
+  // ---------- PASSENGER BOOKINGS ----------
 
   bookingSectionSubtitle: {
     color: C.textSecondary,
@@ -2448,10 +1988,18 @@ glassBlurShine: {
     marginTop: 5,
   },
 
-  bookingLoading: {
-    padding: 25,
+  refreshButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 13,
     alignItems: "center",
-    marginBottom: 18,
+    justifyContent: "center",
+  },
+
+  bookingLoading: {
+    padding: 26,
+    alignItems: "center",
+    marginBottom: 20,
   },
 
   bookingLoadingText: {
@@ -2461,18 +2009,15 @@ glassBlurShine: {
   },
 
   noBookingsCard: {
-    padding: 23,
+    padding: 24,
     alignItems: "center",
-    marginBottom: 20,
+    marginBottom: 22,
   },
 
   noBookingsIcon: {
-    width: 63,
-    height: 63,
-    borderRadius: 20,
-    backgroundColor: C.glassLight,
-    borderWidth: 1,
-    borderColor: C.glassBorder,
+    width: 64,
+    height: 64,
+    borderRadius: 21,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -2498,15 +2043,11 @@ glassBlurShine: {
     justifyContent: "center",
     gap: 8,
     backgroundColor: C.blue,
-    paddingHorizontal: 19,
+    paddingHorizontal: 20,
     paddingVertical: 12,
-    borderRadius: 13,
+    borderRadius: 14,
     marginTop: 17,
-    elevation: 4,
-    shadowColor: C.blue,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.2,
-    shadowRadius: 7,
+    ...blueGlow,
   },
 
   bookNowButtonText: {
@@ -2516,18 +2057,10 @@ glassBlurShine: {
   },
 
   bookingCard: {
-    backgroundColor: "rgba(90, 149, 252, 0.18)",
-    borderRadius: 19,
-    padding: 15,
-    marginBottom: 13,
-    borderWidth: 1.3,
-    borderColor: C.glassBorder,
-    overflow: "hidden",
-    elevation: 6,
-    shadowColor: "#4B91C4",
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
+    backgroundColor: C.card,
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 16,
   },
 
   bookingTopRow: {
@@ -2536,19 +2069,16 @@ glassBlurShine: {
   },
 
   bookingIcon: {
-    width: 43,
-    height: 43,
-    borderRadius: 14,
-    backgroundColor: C.glassLight,
-    borderWidth: 1,
-    borderColor: C.glassBorder,
+    width: 44,
+    height: 44,
+    borderRadius: 15,
     alignItems: "center",
     justifyContent: "center",
   },
 
   bookingMainInfo: {
     flex: 1,
-    marginLeft: 11,
+    marginLeft: 12,
   },
 
   bookingReference: {
@@ -2564,11 +2094,9 @@ glassBlurShine: {
   },
 
   bookingStatusBadge: {
-    paddingHorizontal: 9,
+    paddingHorizontal: 10,
     paddingVertical: 7,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: C.glassBorder,
+    borderRadius: 11,
   },
 
   bookingStatusText: {
@@ -2577,8 +2105,9 @@ glassBlurShine: {
   },
 
   bookingDivider: {
-    height: 1,
-    backgroundColor: "rgba(255, 255, 255, 0.65)",
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: C.inset,
     marginVertical: 14,
   },
 
@@ -2623,17 +2152,14 @@ glassBlurShine: {
 
   viewTicketButton: {
     backgroundColor: C.blue,
-    borderRadius: 11,
-    paddingHorizontal: 12,
+    borderRadius: 12,
+    paddingHorizontal: 13,
     paddingVertical: 10,
     flexDirection: "row",
     alignItems: "center",
     gap: 7,
-    elevation: 3,
-    shadowColor: C.blue,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.18,
-    shadowRadius: 6,
+    ...blueGlow,
+    elevation: 4,
   },
 
   viewTicketText: {
@@ -2657,8 +2183,8 @@ glassBlurShine: {
   continuePaymentHint: {
     flexDirection: "row",
     alignItems: "center",
-    borderTopWidth: 1,
-    borderTopColor: "rgba(255, 255, 255, 0.65)",
+    borderTopWidth: 2,
+    borderTopColor: C.inset,
     marginTop: 13,
     paddingTop: 11,
     gap: 6,
@@ -2685,32 +2211,21 @@ glassBlurShine: {
     fontWeight: "900",
   },
 
-  // PASSENGER FEATURES
+  // ---------- PASSENGER FEATURES ----------
 
   featureCard: {
-    backgroundColor: "rgba(90, 149, 252, 0.18)",
-    borderRadius: 19,
+    backgroundColor: C.card,
+    borderRadius: 20,
     padding: 16,
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 13,
-    borderWidth: 1.3,
-    borderColor: C.glassBorder,
-    overflow: "hidden",
-    elevation: 6,
-    shadowColor: "#4B91C4",
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
+    marginBottom: 16,
   },
 
   featureIcon: {
-    width: 49,
-    height: 49,
-    borderRadius: 15,
-    backgroundColor: C.glassLight,
-    borderWidth: 1,
-    borderColor: C.glassBorder,
+    width: 50,
+    height: 50,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
     marginRight: 13,
@@ -2730,24 +2245,16 @@ glassBlurShine: {
     paddingRight: 5,
   },
 
-  // INFORMATION CARD
+  // ---------- INFORMATION CARD ----------
 
   infoCard: {
-    backgroundColor: "rgba(90, 149, 252, 0.18)",
-    borderRadius: 18,
-    padding: 16,
+    backgroundColor: C.card,
+    borderRadius: 20,
+    padding: 17,
     flexDirection: "row",
     alignItems: "flex-start",
     marginTop: 12,
-    borderWidth: 1.3,
-    borderColor: C.glassBorder,
     gap: 11,
-    overflow: "hidden",
-    elevation: 5,
-    shadowColor: "#4B91C4",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.13,
-    shadowRadius: 10,
   },
 
   infoTitle: {
@@ -2763,7 +2270,7 @@ glassBlurShine: {
     marginTop: 5,
   },
 
-  // FOOTER
+  // ---------- FOOTER ----------
 
   footer: {
     alignItems: "center",
@@ -2773,9 +2280,9 @@ glassBlurShine: {
 
   footerLine: {
     width: 45,
-    height: 3,
+    height: 4,
     borderRadius: 5,
-    backgroundColor: C.blue,
+    backgroundColor: C.secondary,
     marginBottom: 12,
   },
 
@@ -2792,11 +2299,11 @@ glassBlurShine: {
     marginTop: 5,
   },
 
-  // SWEET ALERT MODAL
+  // ---------- ALERT MODAL ----------
 
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(8, 27, 51, 0.48)",
+    backgroundColor: "rgba(22, 52, 107, 0.45)",
     justifyContent: "center",
     alignItems: "center",
     padding: 25,
@@ -2805,23 +2312,15 @@ glassBlurShine: {
   alertBox: {
     width: "100%",
     maxWidth: 360,
-    backgroundColor: C.blue,
-    borderRadius: 23,
+    borderRadius: 26,
     padding: 24,
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: C.glassBorder,
-    elevation: 15,
-    shadowColor: C.blue,
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.22,
-    shadowRadius: 15,
   },
 
   alertIcon: {
     width: 85,
     height: 85,
-    borderRadius: 45,
+    borderRadius: 43,
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 15,
@@ -2830,13 +2329,13 @@ glassBlurShine: {
   alertTitle: {
     fontSize: 21,
     fontWeight: "900",
-    color: C.white,
+    color: C.text,
     textAlign: "center",
   },
 
   alertMessage: {
     fontSize: 13,
-    color: "#E4F1FC",
+    color: C.textSecondary,
     textAlign: "center",
     lineHeight: 21,
     marginTop: 10,
@@ -2845,10 +2344,11 @@ glassBlurShine: {
   alertButton: {
     width: "100%",
     padding: 14,
-    borderRadius: 12,
+    borderRadius: 14,
     alignItems: "center",
     marginTop: 23,
-    elevation: 3,
+    ...blueGlow,
+    elevation: 4,
   },
 
   alertButtonText: {
@@ -2857,11 +2357,11 @@ glassBlurShine: {
     fontSize: 14,
   },
 
-  // GCASH MODAL
+  // ---------- GCASH MODAL ----------
 
   gcashModalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(8, 27, 51, 0.55)",
+    backgroundColor: "rgba(22, 52, 107, 0.5)",
     justifyContent: "center",
     alignItems: "center",
     padding: 22,
@@ -2870,16 +2370,8 @@ glassBlurShine: {
   gcashModalContainer: {
     width: "100%",
     maxWidth: 380,
-    backgroundColor: C.blue,
-    borderRadius: 23,
+    borderRadius: 26,
     padding: 20,
-    borderWidth: 1,
-    borderColor: C.glassBorder,
-    elevation: 15,
-    shadowColor: C.blue,
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.22,
-    shadowRadius: 15,
   },
 
   gcashModalHeader: {
@@ -2890,37 +2382,29 @@ glassBlurShine: {
   },
 
   gcashModalTitle: {
-    color: C.white,
+    color: C.text,
     fontSize: 19,
     fontWeight: "900",
   },
 
   gcashModalSubtitle: {
-    color: "#E4F1FC",
+    color: C.textSecondary,
     fontSize: 11,
     marginTop: 5,
   },
 
   gcashCloseButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: C.glass,
-    borderWidth: 1,
-    borderColor: C.glassBorder,
+    width: 40,
+    height: 40,
+    borderRadius: 13,
     justifyContent: "center",
     alignItems: "center",
   },
 
-  // GCASH ACCOUNT DETAILS
-
   gcashAccountContainer: {
-    backgroundColor: "rgba(148, 209, 255, 0.22)",
-    borderRadius: 16,
+    borderRadius: 18,
     padding: 14,
-    marginBottom: 15,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.50)",
+    marginBottom: 16,
   },
 
   gcashAccountRow: {
@@ -2931,48 +2415,45 @@ glassBlurShine: {
   gcashAccountIcon: {
     width: 40,
     height: 40,
-    borderRadius: 12,
-    backgroundColor: C.glassLight,
-    borderWidth: 1,
-    borderColor: C.glassBorder,
+    borderRadius: 13,
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
   },
 
   gcashAccountLabel: {
-    color: "#D9EEFF",
+    color: C.muted,
     fontSize: 9,
     fontWeight: "900",
     letterSpacing: 0.8,
   },
 
   gcashAccountValue: {
-    color: C.white,
+    color: C.text,
     fontSize: 13,
     fontWeight: "800",
     marginTop: 5,
   },
 
   gcashAccountDivider: {
-    height: 1,
-    backgroundColor: "rgba(255, 255, 255, 0.35)",
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: C.lightBlue,
+    opacity: 0.5,
     marginVertical: 12,
   },
-
-  // GCASH QR IMAGE
 
   gcashQRImageContainer: {
     width: "100%",
     height: 320,
     backgroundColor: C.white,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: C.glassBorder,
+    borderRadius: 18,
     justifyContent: "center",
     alignItems: "center",
     padding: 12,
     overflow: "hidden",
+    borderWidth: 3,
+    borderColor: C.lightBlue,
   },
 
   gcashQRImage: {
@@ -3008,9 +2489,11 @@ glassBlurShine: {
     backgroundColor: C.blue,
     paddingHorizontal: 17,
     paddingVertical: 10,
-    borderRadius: 10,
+    borderRadius: 12,
     marginTop: 16,
     gap: 7,
+    ...blueGlow,
+    elevation: 4,
   },
 
   gcashRetryText: {
@@ -3020,7 +2503,7 @@ glassBlurShine: {
   },
 
   gcashModalFooter: {
-    color: "#E4F1FC",
+    color: C.muted,
     fontSize: 10,
     textAlign: "center",
     marginTop: 15,

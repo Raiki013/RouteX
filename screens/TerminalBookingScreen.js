@@ -1,3 +1,4 @@
+
 import React, {
   useCallback,
   useEffect,
@@ -20,35 +21,38 @@ import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "../config/supabase";
 import CustomAlert from "../components/CustomAlert";
 
+import {
+  C,
+  NeuView,
+  NeuTouchable,
+  NeuCard,
+} from "../theme/theme";
+
 // =============================================
-// COLORS
+// ROUTEX - BLUE SOFT NEUMORPHISM
 // =============================================
 
 const COLORS = {
-  background: "#D6E6F3",
-
-  // Main cards remain light glass
-  glass: "#EAF2F8",
-  glassBorder: "rgba(255, 255, 255, 0.95)",
-
-  // Interactive elements get a distinct color
-  interactive: "#D7E8FA",
-  interactiveBorder: "#9BBCE2",
-  interactivePressed: "#C5DCF5",
-
-  text: "#081B33",
-  secondary: "#496681",
-  primary: "#286DF6",
-  darkBlue: "#145DA8",
-
-  white: "#FFFFFF",
-  green: "#16A34A",
-  orange: "#D97706",
-  red: "#DC2626",
-  gray: "#94A3B8",
-
-  lightGreen: "rgba(220, 252, 231, 0.75)",
-  lightOrange: "rgba(255, 251, 235, 0.80)",
+  background: C.background,
+  glass: C.surface,
+  glassBorder: C.darkShadow,
+  interactive: C.surface,
+  interactiveBorder: C.darkShadow,
+  interactivePressed: C.inset,
+  text: C.text,
+  secondary: C.textSecondary,
+  primary: C.blue,
+  darkBlue: C.text,
+  white: C.white,
+  green: C.secondary,
+  orange: C.secondary,
+  red: C.red,
+  gray: C.muted,
+  lightGreen: C.paleBlue,
+  lightOrange: C.paleBlue,
+  control: C.inset,
+  controlBorder: C.darkShadow,
+  controlActive: C.paleBlue,
 };
 
 // =============================================
@@ -67,15 +71,13 @@ const PASSENGER_TYPES = [
 ];
 
 // =============================================
-// GLASS COMPONENT
+// NEUMORPHIC CARD
 // =============================================
 
 const GlassCard = ({ children, style }) => (
-  <View style={[styles.glassCard, style]}>
-    <View style={styles.glassContent}>
-      {children}
-    </View>
-  </View>
+  <NeuCard style={[styles.glassCard, style]}>
+    {children}
+  </NeuCard>
 );
 
 // =============================================
@@ -149,9 +151,7 @@ export default function TerminalBookingScreen({
       onClose: null,
     }));
 
-    if (callback) {
-      callback();
-    }
+    if (callback) callback();
   };
 
   // =============================================
@@ -166,6 +166,26 @@ export default function TerminalBookingScreen({
         maximumFractionDigits: 2,
       }
     )}`;
+  };
+
+  const formatDepartureTime = (time) => {
+    if (!time) return "Not scheduled";
+
+    const [hours, minutes] = String(time).split(":");
+
+    const date = new Date();
+    date.setHours(
+      Number(hours),
+      Number(minutes),
+      0,
+      0
+    );
+
+    return date.toLocaleTimeString("en-PH", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
   };
 
   const normalizeLocation = (value) =>
@@ -745,12 +765,12 @@ export default function TerminalBookingScreen({
       <View style={styles.loadingContainer}>
         <StatusBar
           barStyle="dark-content"
-          backgroundColor={COLORS.background}
+          backgroundColor={C.background}
         />
 
         <ActivityIndicator
           size="large"
-          color={COLORS.primary}
+          color={C.blue}
         />
 
         <Text style={styles.loadingText}>
@@ -777,23 +797,24 @@ export default function TerminalBookingScreen({
     <View style={styles.container}>
       <StatusBar
         barStyle="dark-content"
-        backgroundColor={COLORS.background}
+        backgroundColor={C.background}
       />
 
       {/* HEADER */}
+
       <View style={styles.header}>
         <View style={styles.headerContent}>
-          <TouchableOpacity
+          <NeuTouchable
+            small
             style={styles.backButton}
             onPress={() => navigation.goBack()}
-            activeOpacity={0.8}
           >
             <Ionicons
               name="arrow-back"
               size={22}
-              color={COLORS.darkBlue}
+              color={C.blue}
             />
-          </TouchableOpacity>
+          </NeuTouchable>
 
           <Text style={styles.headerTitle}>
             Book a Bus
@@ -804,25 +825,32 @@ export default function TerminalBookingScreen({
       </View>
 
       <ScrollView
+        style={styles.scrollView}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor={COLORS.primary}
+            tintColor={C.blue}
+            colors={[C.blue]}
           />
         }
         contentContainerStyle={styles.scrollContent}
       >
         {/* BUS INFORMATION */}
+
         <GlassCard style={styles.busCard}>
-          <View style={styles.busIconContainer}>
+          <NeuView
+            inset
+            style={styles.busIconContainer}
+          >
             <Ionicons
               name="bus"
               size={30}
-              color={COLORS.primary}
+              color={C.blue}
             />
-          </View>
+          </NeuView>
 
           <View style={styles.busInfo}>
             <Text style={styles.busName}>
@@ -838,7 +866,7 @@ export default function TerminalBookingScreen({
               <Ionicons
                 name="location-outline"
                 size={13}
-                color={COLORS.secondary}
+                color={C.secondary}
               />
 
               <Text style={styles.terminalName}>
@@ -855,80 +883,75 @@ export default function TerminalBookingScreen({
         </GlassCard>
 
         {/* TRIP INFORMATION */}
+
         <GlassCard style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>
             Trip Information
           </Text>
 
-          <View style={styles.infoRow}>
-            <View style={styles.infoIcon}>
-              <Ionicons
-                name="navigate-outline"
-                size={19}
-                color={COLORS.primary}
-              />
-            </View>
+          {[
+            {
+              icon: "navigate-outline",
+              label: "Assigned Route",
+              value:
+                selectedBus?.route?.route_name ||
+                "Not specified",
+            },
+            {
+              icon: "flag-outline",
+              label: "Bus Trip Destination",
+              value:
+                selectedBus?.trip?.destination ||
+                "Not specified",
+            },
+            {
+              icon: "time-outline",
+              label: "Scheduled Departure",
+              value: formatDepartureTime(
+                selectedBus?.trip?.departure_time
+              ),
+            },
+            {
+              icon: "location-outline",
+              label: "Boarding Terminal",
+              value:
+                selectedBus?.terminal?.terminal_name ||
+                "Not specified",
+            },
+          ].map((item, index) => (
+            <React.Fragment key={item.label}>
+              {index > 0 && (
+                <View style={styles.infoDivider} />
+              )}
 
-            <View style={styles.infoTextContainer}>
-              <Text style={styles.infoLabel}>
-                Assigned Route
-              </Text>
+              <View style={styles.infoRow}>
+                <NeuView
+                  inset
+                  style={styles.infoIcon}
+                >
+                  <Ionicons
+                    name={item.icon}
+                    size={19}
+                    color={C.blue}
+                  />
+                </NeuView>
 
-              <Text style={styles.infoValue}>
-                {selectedBus?.route?.route_name ||
-                  "Not specified"}
-              </Text>
-            </View>
-          </View>
+                <View style={styles.infoTextContainer}>
+                  <Text style={styles.infoLabel}>
+                    {item.label}
+                  </Text>
 
-          <View style={styles.infoDivider} />
-
-          <View style={styles.infoRow}>
-            <View style={styles.infoIcon}>
-              <Ionicons
-                name="flag-outline"
-                size={19}
-                color={COLORS.primary}
-              />
-            </View>
-
-            <View style={styles.infoTextContainer}>
-              <Text style={styles.infoLabel}>
-                Bus Trip Destination
-              </Text>
-
-              <Text style={styles.infoValue}>
-                {selectedBus?.trip?.destination ||
-                  "Not specified"}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.infoDivider} />
-
-          <View style={styles.infoRow}>
-            <View style={styles.infoIcon}>
-              <Ionicons
-                name="location-outline"
-                size={19}
-                color={COLORS.primary}
-              />
-            </View>
-
-            <View style={styles.infoTextContainer}>
-              <Text style={styles.infoLabel}>
-                Boarding Terminal
-              </Text>
-
-              <Text style={styles.infoValue}>
-                {selectedBus?.terminal?.terminal_name ||
-                  "Not specified"}
-              </Text>
-            </View>
-          </View>
+                  <Text style={styles.infoValue}>
+                    {item.value}
+                  </Text>
+                </View>
+              </View>
+            </React.Fragment>
+          ))}
         </GlassCard>
 
         {/* AVAILABLE SEATS */}
+
         <GlassCard style={styles.availabilityCard}>
           <View>
             <Text style={styles.availabilityLabel}>
@@ -942,37 +965,39 @@ export default function TerminalBookingScreen({
             </Text>
           </View>
 
-          <View style={styles.seatIconContainer}>
+          <NeuView
+            inset
+            style={styles.seatIconContainer}
+          >
             <Ionicons
               name="people-outline"
               size={27}
-              color={COLORS.primary}
+              color={C.blue}
             />
-          </View>
+          </NeuView>
         </GlassCard>
 
         {/* DESTINATION SELECTION */}
+
         <GlassCard style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>
             Select Your Destination
           </Text>
 
           <Text style={styles.sectionDescription}>
-            Choose a destination along the bus's assigned
-            route.
+            Choose a destination along the bus's assigned route.
           </Text>
 
-          <TouchableOpacity
+          <NeuTouchable
             style={styles.selectButton}
             onPress={openDestinationSelection}
             disabled={destinationOptions.length === 0}
-            activeOpacity={0.8}
           >
             <View style={styles.selectButtonLeft}>
               <Ionicons
                 name="location-outline"
                 size={20}
-                color={COLORS.primary}
+                color={C.white}
               />
 
               <Text
@@ -990,9 +1015,9 @@ export default function TerminalBookingScreen({
             <Ionicons
               name="chevron-down"
               size={20}
-              color={COLORS.secondary}
+              color={C.white}
             />
-          </TouchableOpacity>
+          </NeuTouchable>
 
           {selectedDestination && selectedFare && (
             <View style={styles.selectedFareContainer}>
@@ -1011,7 +1036,7 @@ export default function TerminalBookingScreen({
               <Ionicons
                 name="information-circle-outline"
                 size={18}
-                color={COLORS.orange}
+                color={C.secondary}
               />
 
               <Text style={styles.missingFareText}>
@@ -1023,6 +1048,7 @@ export default function TerminalBookingScreen({
         </GlassCard>
 
         {/* PASSENGERS */}
+
         <GlassCard style={styles.sectionCard}>
           <View style={styles.sectionHeaderRow}>
             <View style={{ flex: 1 }}>
@@ -1035,11 +1061,14 @@ export default function TerminalBookingScreen({
               </Text>
             </View>
 
-            <View style={styles.passengerCountBadge}>
+            <NeuView
+              inset
+              style={styles.passengerCountBadge}
+            >
               <Text style={styles.passengerCountText}>
                 {passengerTypes.length}
               </Text>
-            </View>
+            </NeuView>
           </View>
 
           {passengerTypes.map((type, index) => (
@@ -1047,18 +1076,20 @@ export default function TerminalBookingScreen({
               key={`passenger-${index}`}
               style={styles.passengerRow}
             >
-              <View style={styles.passengerNumber}>
+              <NeuView
+                small
+                style={styles.passengerNumber}
+              >
                 <Text style={styles.passengerNumberText}>
                   {index + 1}
                 </Text>
-              </View>
+              </NeuView>
 
-              <TouchableOpacity
+              <NeuTouchable
                 style={styles.passengerSelect}
                 onPress={() =>
                   openPassengerSelection(index)
                 }
-                activeOpacity={0.8}
               >
                 <View>
                   <Text style={styles.passengerLabel}>
@@ -1073,9 +1104,9 @@ export default function TerminalBookingScreen({
                 <Ionicons
                   name="chevron-down"
                   size={19}
-                  color={COLORS.secondary}
+                  color={C.secondary}
                 />
-              </TouchableOpacity>
+              </NeuTouchable>
 
               <TouchableOpacity
                 style={styles.removeButton}
@@ -1088,43 +1119,39 @@ export default function TerminalBookingScreen({
                   size={19}
                   color={
                     passengerTypes.length <= 1
-                      ? "#CBD5E1"
-                      : COLORS.red
+                      ? C.darkShadow
+                      : C.red
                   }
                 />
               </TouchableOpacity>
             </View>
           ))}
 
-          <TouchableOpacity
-            style={[
-              styles.addPassengerButton,
-              passengerTypes.length >= availableSeats &&
-                styles.disabledButton,
-            ]}
+          <NeuTouchable
+            small
+            style={styles.addPassengerButton}
             onPress={addPassenger}
             disabled={
               passengerTypes.length >= availableSeats ||
               loadingAvailability
             }
-            activeOpacity={0.8}
           >
             <Ionicons
               name="add-circle-outline"
               size={20}
-              color={COLORS.primary}
+              color={C.white}
             />
 
             <Text style={styles.addPassengerText}>
               Add Passenger
             </Text>
-          </TouchableOpacity>
+          </NeuTouchable>
 
           <View style={styles.discountNotice}>
             <Ionicons
               name="information-circle-outline"
               size={17}
-              color={COLORS.primary}
+              color={C.blue}
             />
 
             <Text style={styles.discountNoticeText}>
@@ -1136,6 +1163,7 @@ export default function TerminalBookingScreen({
         </GlassCard>
 
         {/* FARE SUMMARY */}
+
         <GlassCard style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>
             Fare Summary
@@ -1159,12 +1187,8 @@ export default function TerminalBookingScreen({
                     key={`fare-${index}`}
                     style={styles.farePassenger}
                   >
-                    <View
-                      style={styles.farePassengerHeader}
-                    >
-                      <Text
-                        style={styles.farePassengerTitle}
-                      >
+                    <View style={styles.farePassengerHeader}>
+                      <Text style={styles.farePassengerTitle}>
                         Passenger {index + 1} (
                         {getPassengerLabel(
                           passenger.passenger_type
@@ -1191,13 +1215,11 @@ export default function TerminalBookingScreen({
 
                     <View style={styles.fareDetailRow}>
                       <Text style={styles.discountText}>
-                        Discount (
-                        {passenger.discount_rate}%)
+                        Discount ({passenger.discount_rate}%)
                       </Text>
 
                       <Text style={styles.discountText}>
-                        -
-                        {formatMoney(
+                        -{formatMoney(
                           passenger.discount_amount
                         )}
                       </Text>
@@ -1242,7 +1264,8 @@ export default function TerminalBookingScreen({
         </GlassCard>
 
         {/* BOOKING BUTTON */}
-        <TouchableOpacity
+
+        <NeuTouchable
           style={[
             styles.bookButton,
             (!selectedDestination ||
@@ -1260,10 +1283,9 @@ export default function TerminalBookingScreen({
             booking ||
             loadingAvailability
           }
-          activeOpacity={0.85}
         >
           {booking ? (
-            <ActivityIndicator color={COLORS.white} />
+            <ActivityIndicator color={C.white} />
           ) : (
             <>
               <Text style={styles.bookButtonText}>
@@ -1273,11 +1295,11 @@ export default function TerminalBookingScreen({
               <Ionicons
                 name="arrow-forward"
                 size={20}
-                color={COLORS.white}
+                color={C.white}
               />
             </>
           )}
-        </TouchableOpacity>
+        </NeuTouchable>
 
         <Text style={styles.footerNote}>
           Your reservation will be held for 15 minutes.
@@ -1286,6 +1308,7 @@ export default function TerminalBookingScreen({
       </ScrollView>
 
       {/* DESTINATION / PASSENGER SELECTION MODAL */}
+
       <Modal
         visible={selectionVisible}
         transparent
@@ -1303,18 +1326,19 @@ export default function TerminalBookingScreen({
                   : "Select Passenger Type"}
               </Text>
 
-              <TouchableOpacity
+              <NeuTouchable
+                small
+                style={styles.closeButton}
                 onPress={() =>
                   setSelectionVisible(false)
                 }
-                style={styles.closeButton}
               >
                 <Ionicons
                   name="close"
                   size={22}
-                  color={COLORS.secondary}
+                  color={C.blue}
                 />
-              </TouchableOpacity>
+              </NeuTouchable>
             </View>
 
             <ScrollView
@@ -1324,8 +1348,9 @@ export default function TerminalBookingScreen({
             >
               {selectionMode === "destination"
                 ? destinationOptions.map((item) => (
-                    <TouchableOpacity
+                    <NeuTouchable
                       key={item.fare_id}
+                      small
                       style={[
                         styles.optionRow,
                         normalizeLocation(selectedDestination) ===
@@ -1337,16 +1362,18 @@ export default function TerminalBookingScreen({
                           item.destination_location
                         )
                       }
-                      activeOpacity={0.75}
                     >
                       <View style={styles.optionLeft}>
-                        <View style={styles.optionIcon}>
+                        <NeuView
+                          inset
+                          style={styles.optionIcon}
+                        >
                           <Ionicons
                             name="location-outline"
                             size={19}
-                            color={COLORS.primary}
+                            color={C.blue}
                           />
-                        </View>
+                        </NeuView>
 
                         <View style={{ flex: 1 }}>
                           <Text style={styles.optionText}>
@@ -1354,9 +1381,7 @@ export default function TerminalBookingScreen({
                           </Text>
 
                           {!item.hasFare && (
-                            <Text
-                              style={styles.missingOptionText}
-                            >
+                            <Text style={styles.missingOptionText}>
                               Fare not yet available
                             </Text>
                           )}
@@ -1385,15 +1410,16 @@ export default function TerminalBookingScreen({
                           <Ionicons
                             name="checkmark-circle"
                             size={20}
-                            color={COLORS.primary}
+                            color={C.blue}
                           />
                         )}
                       </View>
-                    </TouchableOpacity>
+                    </NeuTouchable>
                   ))
                 : PASSENGER_TYPES.map((item) => (
-                    <TouchableOpacity
+                    <NeuTouchable
                       key={item.value}
+                      small
                       style={[
                         styles.optionRow,
                         passengerTypes[selectedPassengerIndex] ===
@@ -1403,16 +1429,18 @@ export default function TerminalBookingScreen({
                       onPress={() =>
                         handleSelection(item.value)
                       }
-                      activeOpacity={0.75}
                     >
                       <View style={styles.optionLeft}>
-                        <View style={styles.optionIcon}>
+                        <NeuView
+                          inset
+                          style={styles.optionIcon}
+                        >
                           <Ionicons
                             name="person-outline"
                             size={19}
-                            color={COLORS.primary}
+                            color={C.blue}
                           />
-                        </View>
+                        </NeuView>
 
                         <View>
                           <Text style={styles.optionText}>
@@ -1433,10 +1461,10 @@ export default function TerminalBookingScreen({
                         <Ionicons
                           name="checkmark-circle"
                           size={20}
-                          color={COLORS.primary}
+                          color={C.blue}
                         />
                       )}
-                    </TouchableOpacity>
+                    </NeuTouchable>
                   ))}
             </ScrollView>
           </GlassCard>
@@ -1444,6 +1472,7 @@ export default function TerminalBookingScreen({
       </Modal>
 
       {/* CONFIRMATION MODAL */}
+
       <Modal
         visible={confirmVisible}
         transparent
@@ -1454,13 +1483,16 @@ export default function TerminalBookingScreen({
       >
         <View style={styles.modalOverlay}>
           <GlassCard style={styles.confirmModal}>
-            <View style={styles.confirmIcon}>
+            <NeuView
+              inset
+              style={styles.confirmIcon}
+            >
               <Ionicons
                 name="receipt-outline"
                 size={30}
-                color={COLORS.primary}
+                color={C.blue}
               />
-            </View>
+            </NeuView>
 
             <Text style={styles.confirmTitle}>
               Confirm Your Booking
@@ -1478,6 +1510,18 @@ export default function TerminalBookingScreen({
 
               <Text style={styles.confirmValue}>
                 {selectedDestination}
+              </Text>
+            </View>
+
+            <View style={styles.confirmDetailRow}>
+              <Text style={styles.confirmLabel}>
+                Scheduled Departure
+              </Text>
+
+              <Text style={styles.confirmValue}>
+                {formatDepartureTime(
+                  selectedBus?.trip?.departure_time
+                )}
               </Text>
             </View>
 
@@ -1511,20 +1555,19 @@ export default function TerminalBookingScreen({
               </Text>
             </View>
 
-            <TouchableOpacity
+            <NeuTouchable
               style={styles.confirmButton}
               onPress={confirmReservation}
               disabled={booking}
-              activeOpacity={0.85}
             >
               {booking ? (
-                <ActivityIndicator color={COLORS.white} />
+                <ActivityIndicator color={C.white} />
               ) : (
                 <Text style={styles.confirmButtonText}>
                   Confirm Reservation
                 </Text>
               )}
-            </TouchableOpacity>
+            </NeuTouchable>
 
             <TouchableOpacity
               style={styles.cancelButton}
@@ -1543,6 +1586,7 @@ export default function TerminalBookingScreen({
       </Modal>
 
       {/* CUSTOM ALERT */}
+
       <CustomAlert
         visible={alertData.visible}
         title={alertData.title}
@@ -1560,63 +1604,39 @@ export default function TerminalBookingScreen({
 // =============================================
 
 const styles = StyleSheet.create({
-
-  // ---------------------------------------------
-  // GLASS EFFECT
-  // ---------------------------------------------
+  // CARD
 
   glassCard: {
-    backgroundColor: COLORS.glass,
-    borderWidth: 1,
-    borderColor: COLORS.glassBorder,
-    borderRadius: 20,
-    overflow: "hidden",
-
-    shadowColor: "#54718D",
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.07,
-    shadowRadius: 10,
-    elevation: 2,
+    backgroundColor: C.surface,
+    borderRadius: 22,
   },
 
-  glassContent: {
-    backgroundColor: COLORS.glass,
-  },
-
-  // ---------------------------------------------
-  // MAIN CONTAINER
-  // ---------------------------------------------
+  // MAIN
 
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: C.background,
   },
 
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: COLORS.background,
+    backgroundColor: C.background,
   },
 
   loadingText: {
     marginTop: 12,
-    color: COLORS.secondary,
+    color: C.textSecondary,
     fontSize: 14,
+    fontWeight: "600",
   },
 
-  // ---------------------------------------------
   // HEADER
-  // ---------------------------------------------
 
   header: {
-    height: 62,
-    backgroundColor: COLORS.glass,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.glassBorder,
+    height: 65,
+    backgroundColor: C.background,
   },
 
   headerContent: {
@@ -1627,50 +1647,49 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
   },
 
- backButton: {
-  width: 42,
-  height: 42,
-  borderRadius: 13,
-  alignItems: "center",
-  justifyContent: "center",
-  backgroundColor: COLORS.interactive,
-  borderWidth: 1,
-  borderColor: COLORS.interactiveBorder,
-},
+  backButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: C.surface,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 
   headerTitle: {
     fontSize: 19,
-    fontWeight: "800",
-    color: COLORS.text,
+    fontWeight: "900",
+    color: C.text,
   },
 
-  // ---------------------------------------------
-  // SCROLL CONTENT
-  // ---------------------------------------------
+  // SCROLL VIEW
+
+  scrollView: {
+    flex: 1,
+  },
 
   scrollContent: {
     padding: 18,
-    paddingBottom: 40,
+
+    // IMPORTANT:
+    // Extra bottom space keeps the booking button
+    // above the bottom tab navigation.
+    paddingBottom: 150,
   },
 
-  // ---------------------------------------------
   // BUS INFORMATION
-  // ---------------------------------------------
 
   busCard: {
     flexDirection: "row",
     alignItems: "center",
     padding: 17,
-    marginBottom: 16,
+    marginBottom: 17,
   },
 
   busIconContainer: {
     width: 54,
     height: 54,
-    borderRadius: 16,
-    backgroundColor: COLORS.control,
-    borderWidth: 1,
-    borderColor: COLORS.controlBorder,
+    borderRadius: 17,
     justifyContent: "center",
     alignItems: "center",
     marginRight: 13,
@@ -1682,77 +1701,77 @@ const styles = StyleSheet.create({
 
   busName: {
     fontSize: 16,
-    fontWeight: "800",
-    color: COLORS.text,
+    fontWeight: "900",
+    color: C.text,
   },
 
   plateNumber: {
     fontSize: 13,
-    color: COLORS.secondary,
-    marginTop: 3,
+    color: C.textSecondary,
+    marginTop: 4,
+    fontWeight: "600",
   },
 
   terminalRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 5,
+    marginTop: 6,
   },
 
   terminalName: {
-    fontSize: 12,
-    color: COLORS.secondary,
-    marginLeft: 3,
+    fontSize: 11,
+    color: C.muted,
+    marginLeft: 4,
+    fontWeight: "600",
   },
 
   dockedBadge: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: COLORS.lightGreen,
-    paddingHorizontal: 9,
-    paddingVertical: 6,
-    borderRadius: 20,
+    backgroundColor: C.paleBlue,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 12,
   },
 
   statusDot: {
     width: 7,
     height: 7,
     borderRadius: 5,
-    backgroundColor: COLORS.green,
+    backgroundColor: C.blue,
     marginRight: 5,
   },
 
   dockedText: {
     fontSize: 11,
-    fontWeight: "700",
-    color: "#15803D",
+    fontWeight: "800",
+    color: C.blue,
   },
 
-  // ---------------------------------------------
   // SECTION CARDS
-  // ---------------------------------------------
 
   sectionCard: {
     padding: 18,
-    marginBottom: 16,
+    marginBottom: 17,
+    backgroundColor: C.surface,
   },
 
   sectionTitle: {
     fontSize: 16,
-    fontWeight: "800",
-    color: COLORS.text,
+    fontWeight: "900",
+    color: C.text,
   },
 
   sectionDescription: {
     fontSize: 12,
-    color: COLORS.secondary,
-    marginTop: 5,
-    marginBottom: 14,
+    color: C.muted,
+    marginTop: 6,
+    marginBottom: 15,
     lineHeight: 18,
+    fontWeight: "500",
   },
 
-  // ---------------------------------------------
   // TRIP INFORMATION
-  // ---------------------------------------------
 
   infoRow: {
     flexDirection: "row",
@@ -1761,15 +1780,12 @@ const styles = StyleSheet.create({
   },
 
   infoIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 13,
-    backgroundColor: COLORS.control,
-    borderWidth: 1,
-    borderColor: COLORS.controlBorder,
+    width: 41,
+    height: 41,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 12,
+    marginRight: 13,
   },
 
   infoTextContainer: {
@@ -1777,143 +1793,134 @@ const styles = StyleSheet.create({
   },
 
   infoLabel: {
-    fontSize: 12,
-    color: COLORS.secondary,
+    fontSize: 11,
+    color: C.muted,
+    fontWeight: "600",
   },
 
   infoValue: {
     fontSize: 14,
-    color: COLORS.text,
-    fontWeight: "700",
-    marginTop: 3,
+    color: C.text,
+    fontWeight: "800",
+    marginTop: 4,
   },
 
   infoDivider: {
     height: 1,
-    backgroundColor: "rgba(255, 255, 255, 0.65)",
+    backgroundColor: C.darkShadow,
+    opacity: 0.6,
   },
 
-  // ---------------------------------------------
   // AVAILABLE SEATS
-  // ---------------------------------------------
 
   availabilityCard: {
-    padding: 18,
-    marginBottom: 16,
+    padding: 19,
+    marginBottom: 17,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    backgroundColor: C.surface,
   },
 
   availabilityLabel: {
     fontSize: 13,
-    color: COLORS.darkBlue,
+    color: C.textSecondary,
     fontWeight: "700",
   },
 
   availabilityNumber: {
-    fontSize: 29,
-    fontWeight: "800",
-    color: COLORS.darkBlue,
-    marginTop: 3,
+    fontSize: 30,
+    fontWeight: "900",
+    color: C.blue,
+    marginTop: 4,
   },
 
   seatIconContainer: {
-    width: 49,
-    height: 49,
-    borderRadius: 15,
-    backgroundColor: COLORS.control,
-    borderWidth: 1,
-    borderColor: COLORS.controlBorder,
+    width: 52,
+    height: 52,
+    borderRadius: 17,
     justifyContent: "center",
     alignItems: "center",
   },
 
-  // ---------------------------------------------
   // DESTINATION
-  // ---------------------------------------------
 
   selectButton: {
-  minHeight: 56,
-  borderWidth: 1.5,
-  borderColor: COLORS.interactiveBorder,
-  borderRadius: 14,
-  paddingHorizontal: 14,
-  flexDirection: "row",
-  alignItems: "center",
-  justifyContent: "space-between",
-  backgroundColor: COLORS.interactive,
-
-  shadowColor: "#286DF6",
-  shadowOffset: { width: 0, height: 2 },
-  shadowOpacity: 0.08,
-  shadowRadius: 4,
-  elevation: 1,
-},
-
-  selectButtonLeft: {
-  flexDirection: "row",
-  alignItems: "center",
-  flex: 1,
-},
-
-selectButtonText: {
-  fontSize: 14,
-  fontWeight: "700",
-  color: COLORS.text,
-  marginLeft: 10,
-},
-
-  placeholderText: {
-    color: COLORS.gray,
-    fontWeight: "400",
+    minHeight: 56,
+    borderRadius: 15,
+    paddingHorizontal: 15,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: C.blue,
+    shadowColor: C.blue,
+    shadowOffset: {
+      width: 3,
+      height: 4,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 4,
   },
 
- selectedFareContainer: {
-  flexDirection: "row",
-  alignItems: "center",
-  justifyContent: "space-between",
-  marginTop: 13,
-  padding: 13,
-  backgroundColor: "#DCEFE8",
-  borderRadius: 12,
-  borderWidth: 1,
-  borderColor: "#A8D5C0",
-},
+  selectButtonLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+
+  selectButtonText: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: C.white,
+    marginLeft: 11,
+  },
+
+  placeholderText: {
+    color: C.white,
+    fontWeight: "600",
+  },
+
+  selectedFareContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 14,
+    padding: 14,
+    backgroundColor: C.paleBlue,
+    borderRadius: 14,
+  },
 
   selectedFareLabel: {
-    fontSize: 13,
-    color: COLORS.secondary,
+    fontSize: 12,
+    color: C.textSecondary,
+    fontWeight: "600",
   },
 
   selectedFareAmount: {
     fontSize: 17,
-    fontWeight: "800",
-    color: COLORS.darkBlue,
+    fontWeight: "900",
+    color: C.blue,
   },
 
   missingFareNotice: {
     flexDirection: "row",
     alignItems: "flex-start",
-    backgroundColor: COLORS.lightOrange,
-    borderRadius: 12,
+    backgroundColor: C.paleBlue,
+    borderRadius: 13,
     padding: 12,
     marginTop: 12,
-    borderWidth: 1,
-    borderColor: "#FDE68A",
   },
 
   missingFareText: {
     flex: 1,
     fontSize: 12,
     lineHeight: 18,
-    color: "#92400E",
+    color: C.textSecondary,
     marginLeft: 8,
   },
 
-  // ---------------------------------------------
   // PASSENGERS
-  // ---------------------------------------------
 
   sectionHeaderRow: {
     flexDirection: "row",
@@ -1921,77 +1928,63 @@ selectButtonText: {
     alignItems: "center",
   },
 
- passengerCountBadge: {
-  width: 34,
-  height: 34,
-  borderRadius: 11,
-  backgroundColor: "#D3E5F8",
-  borderWidth: 1,
-  borderColor: COLORS.interactiveBorder,
-  alignItems: "center",
-  justifyContent: "center",
-},
-
+  passengerCountBadge: {
+    width: 36,
+    height: 36,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 
   passengerCountText: {
     fontSize: 14,
-    fontWeight: "800",
-    color: COLORS.primary,
+    fontWeight: "900",
+    color: C.blue,
   },
 
   passengerRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 11,
+    marginBottom: 13,
   },
 
- passengerNumber: {
-  width: 33,
-  height: 33,
-  borderRadius: 10,
-  backgroundColor: "#D3E5F8",
-  borderWidth: 1,
-  borderColor: COLORS.interactiveBorder,
-  alignItems: "center",
-  justifyContent: "center",
-  marginRight: 9,
-},
+  passengerNumber: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 10,
+  },
 
   passengerNumberText: {
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: "800",
-    color: COLORS.darkBlue,
+    color: C.blue,
   },
 
   passengerSelect: {
-  flex: 1,
-  minHeight: 58,
-  borderWidth: 1.5,
-  borderColor: COLORS.interactiveBorder,
-  borderRadius: 13,
-  paddingHorizontal: 13,
-  flexDirection: "row",
-  alignItems: "center",
-  justifyContent: "space-between",
-  backgroundColor: COLORS.interactive,
-
-  shadowColor: "#286DF6",
-  shadowOffset: { width: 0, height: 2 },
-  shadowOpacity: 0.07,
-  shadowRadius: 4,
-  elevation: 1,
-},
+    flex: 1,
+    minHeight: 58,
+    borderRadius: 15,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: C.surface,
+  },
 
   passengerLabel: {
     fontSize: 11,
-    color: COLORS.secondary,
+    color: C.muted,
+    fontWeight: "600",
   },
 
   passengerType: {
     fontSize: 14,
-    color: COLORS.text,
-    fontWeight: "700",
-    marginTop: 3,
+    color: C.text,
+    fontWeight: "800",
+    marginTop: 4,
   },
 
   removeButton: {
@@ -1999,42 +1992,42 @@ selectButtonText: {
     height: 45,
     alignItems: "center",
     justifyContent: "center",
-    marginLeft: 4,
+    marginLeft: 5,
   },
 
+  // ADD PASSENGER BUTTON
+
   addPassengerButton: {
-  minHeight: 49,
-  borderWidth: 1.5,
-  borderStyle: "dashed",
-  borderColor: COLORS.interactiveBorder,
-  borderRadius: 13,
-  alignItems: "center",
-  justifyContent: "center",
-  flexDirection: "row",
-  marginTop: 3,
-  backgroundColor: COLORS.interactive,
-},
+    minHeight: 49,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    marginTop: 4,
+    backgroundColor: C.blue,
+    shadowColor: C.blue,
+    shadowOffset: {
+      width: 3,
+      height: 4,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 4,
+  },
 
-
- addPassengerText: {
-  color: COLORS.darkBlue,
-  fontWeight: "800",
-  fontSize: 13,
-  marginLeft: 7,
-},
-
-  disabledButton: {
-    opacity: 0.4,
+  addPassengerText: {
+    color: C.white,
+    fontWeight: "900",
+    fontSize: 13,
+    marginLeft: 8,
   },
 
   discountNotice: {
     flexDirection: "row",
-    backgroundColor: COLORS.glass,
-    borderWidth: 1,
-    borderColor: COLORS.glassBorder,
-    padding: 12,
-    borderRadius: 12,
-    marginTop: 14,
+    backgroundColor: C.inset,
+    padding: 13,
+    borderRadius: 13,
+    marginTop: 15,
     alignItems: "flex-start",
   },
 
@@ -2042,67 +2035,66 @@ selectButtonText: {
     flex: 1,
     fontSize: 11,
     lineHeight: 17,
-    color: COLORS.darkBlue,
+    color: C.textSecondary,
     marginLeft: 8,
+    fontWeight: "500",
   },
 
-  // ---------------------------------------------
   // FARE SUMMARY
-  // ---------------------------------------------
 
   farePassenger: {
-    paddingVertical: 13,
+    paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(255, 255, 255, 0.65)",
+    borderBottomColor: C.darkShadow,
   },
 
   farePassengerHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 9,
+    marginBottom: 10,
   },
 
   farePassengerTitle: {
     fontSize: 13,
-    fontWeight: "700",
-    color: COLORS.text,
+    fontWeight: "800",
+    color: C.text,
     flex: 1,
   },
 
   fareAmount: {
     fontSize: 14,
-    fontWeight: "800",
-    color: COLORS.text,
+    fontWeight: "900",
+    color: C.text,
   },
 
   fareDetailRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginTop: 7,
+    marginTop: 8,
   },
 
   fareDetailLabel: {
     fontSize: 12,
-    color: COLORS.secondary,
+    color: C.textSecondary,
   },
 
   fareDetailValue: {
     fontSize: 12,
-    color: COLORS.text,
-    fontWeight: "700",
+    color: C.text,
+    fontWeight: "800",
   },
 
   discountText: {
     fontSize: 12,
-    color: COLORS.green,
-    fontWeight: "700",
+    color: C.blue,
+    fontWeight: "800",
   },
 
   summaryDivider: {
     height: 1,
-    backgroundColor: COLORS.glassBorder,
-    marginVertical: 14,
+    backgroundColor: C.darkShadow,
+    marginVertical: 15,
   },
 
   totalRow: {
@@ -2110,81 +2102,77 @@ selectButtonText: {
     justifyContent: "space-between",
     alignItems: "center",
     marginTop: 17,
-    paddingTop: 13,
+    paddingTop: 14,
     borderTopWidth: 1,
-    borderTopColor: COLORS.glassBorder,
+    borderTopColor: C.darkShadow,
   },
 
   totalLabel: {
     fontSize: 15,
-    fontWeight: "800",
-    color: COLORS.text,
+    fontWeight: "900",
+    color: C.text,
   },
 
   totalAmount: {
     fontSize: 22,
-    fontWeight: "800",
-    color: COLORS.primary,
+    fontWeight: "900",
+    color: C.blue,
   },
 
   emptySummaryText: {
-    color: COLORS.secondary,
+    color: C.muted,
     fontSize: 13,
-    lineHeight: 19,
+    lineHeight: 20,
     marginTop: 12,
   },
 
-  // ---------------------------------------------
   // BOOKING BUTTON
-  // ---------------------------------------------
 
   bookButton: {
-    minHeight: 54,
-    backgroundColor: COLORS.primary,
-    borderRadius: 15,
+    minHeight: 56,
+    borderRadius: 16,
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    marginTop: 3,
-    gap: 9,
-    elevation: 3,
-    shadowColor: COLORS.primary,
+    marginTop: 4,
+    gap: 10,
+    backgroundColor: C.blue,
+    shadowColor: C.darkShadow,
     shadowOffset: {
-      width: 0,
-      height: 3,
+      width: 5,
+      height: 6,
     },
-    shadowOpacity: 0.18,
-    shadowRadius: 5,
+    shadowOpacity: 0.45,
+    shadowRadius: 8,
+    elevation: 5,
   },
 
   bookButtonDisabled: {
-    backgroundColor: "#A0AEC0",
-    elevation: 0,
+    backgroundColor: C.muted,
     shadowOpacity: 0,
+    elevation: 0,
   },
 
   bookButtonText: {
-    color: COLORS.white,
+    color: C.white,
     fontSize: 15,
-    fontWeight: "800",
+    fontWeight: "900",
   },
 
   footerNote: {
     fontSize: 11,
-    color: COLORS.secondary,
+    color: C.muted,
     textAlign: "center",
-    lineHeight: 17,
-    marginTop: 14,
+    lineHeight: 18,
+    marginTop: 15,
     paddingHorizontal: 10,
   },
 
-  // ---------------------------------------------
   // MODALS
-  // ---------------------------------------------
 
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(20, 34, 56, 0.50)",
+    backgroundColor: "rgba(22, 52, 107, 0.42)",
     justifyContent: "center",
     alignItems: "center",
     padding: 20,
@@ -2194,53 +2182,48 @@ selectButtonText: {
     width: "100%",
     maxHeight: "75%",
     padding: 19,
+    backgroundColor: C.surface,
   },
 
   modalHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingBottom: 16,
+    paddingBottom: 15,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.glassBorder,
-    marginBottom: 5,
+    borderBottomColor: C.darkShadow,
+    marginBottom: 7,
   },
 
   modalTitle: {
     fontSize: 18,
-    fontWeight: "800",
-    color: COLORS.text,
+    fontWeight: "900",
+    color: C.text,
   },
 
-closeButton: {
-  width: 36,
-  height: 36,
-  borderRadius: 11,
-  backgroundColor: COLORS.interactive,
-  borderWidth: 1,
-  borderColor: COLORS.interactiveBorder,
-  alignItems: "center",
-  justifyContent: "center",
-},
+  closeButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 13,
+    backgroundColor: C.surface,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 
   optionRow: {
-  minHeight: 65,
-  flexDirection: "row",
-  justifyContent: "space-between",
-  alignItems: "center",
-  borderWidth: 1,
-  borderColor: "#D5E4F3",
-  backgroundColor: "#F4F8FC",
-  borderRadius: 13,
-  paddingHorizontal: 11,
-  paddingVertical: 11,
-  marginTop: 8,
-},
+    minHeight: 66,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    borderRadius: 15,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    marginTop: 10,
+    backgroundColor: C.surface,
+  },
 
   optionRowSelected: {
-    backgroundColor: COLORS.controlActive,
-    borderWidth: 1,
-    borderColor: COLORS.controlBorder,
+    backgroundColor: C.paleBlue,
   },
 
   optionLeft: {
@@ -2250,26 +2233,23 @@ closeButton: {
   },
 
   optionIcon: {
-  width: 40,
-  height: 40,
-  borderRadius: 13,
-  backgroundColor: "#DCEBFA",
-  borderWidth: 1,
-  borderColor: COLORS.interactiveBorder,
-  alignItems: "center",
-  justifyContent: "center",
-  marginRight: 11,
-},
+    width: 41,
+    height: 41,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 11,
+  },
 
   optionText: {
     fontSize: 14,
-    color: COLORS.text,
-    fontWeight: "700",
+    color: C.text,
+    fontWeight: "800",
   },
 
   optionSubtext: {
     fontSize: 11,
-    color: COLORS.secondary,
+    color: C.muted,
     marginTop: 4,
   },
 
@@ -2282,84 +2262,80 @@ closeButton: {
 
   optionFare: {
     fontSize: 13,
-    fontWeight: "800",
-    color: COLORS.primary,
+    fontWeight: "900",
+    color: C.blue,
   },
 
   unavailableFare: {
-    color: COLORS.orange,
+    color: C.muted,
   },
 
   missingOptionText: {
     fontSize: 11,
-    color: COLORS.orange,
+    color: C.muted,
     marginTop: 4,
   },
 
-  // ---------------------------------------------
   // CONFIRMATION MODAL
-  // ---------------------------------------------
 
   confirmModal: {
     width: "100%",
     padding: 22,
+    backgroundColor: C.surface,
   },
 
   confirmIcon: {
-    width: 60,
-    height: 60,
-    borderRadius: 19,
-    backgroundColor: COLORS.control,
-    borderWidth: 1,
-    borderColor: COLORS.controlBorder,
+    width: 62,
+    height: 62,
+    borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
     alignSelf: "center",
-    marginBottom: 14,
+    marginBottom: 15,
   },
 
   confirmTitle: {
     fontSize: 19,
-    fontWeight: "800",
-    color: COLORS.text,
+    fontWeight: "900",
+    color: C.text,
     textAlign: "center",
   },
 
   confirmDescription: {
     fontSize: 12,
     lineHeight: 18,
-    color: COLORS.secondary,
+    color: C.muted,
     textAlign: "center",
-    marginTop: 7,
-    marginBottom: 20,
+    marginTop: 8,
+    marginBottom: 21,
   },
 
   confirmDetailRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 14,
+    marginBottom: 15,
     gap: 12,
   },
 
   confirmLabel: {
     fontSize: 13,
-    color: COLORS.secondary,
+    color: C.textSecondary,
   },
 
   confirmValue: {
     fontSize: 13,
-    fontWeight: "700",
-    color: COLORS.text,
+    fontWeight: "800",
+    color: C.text,
     textAlign: "right",
     flex: 1,
   },
 
   confirmTotalRow: {
     borderTopWidth: 1,
-    borderTopColor: COLORS.glassBorder,
-    paddingTop: 15,
-    marginTop: 3,
-    marginBottom: 18,
+    borderTopColor: C.darkShadow,
+    paddingTop: 16,
+    marginTop: 4,
+    marginBottom: 19,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
@@ -2367,40 +2343,40 @@ closeButton: {
 
   confirmTotalLabel: {
     fontSize: 14,
-    fontWeight: "800",
-    color: COLORS.text,
+    fontWeight: "900",
+    color: C.text,
   },
 
   confirmTotalAmount: {
     fontSize: 21,
-    fontWeight: "800",
-    color: COLORS.primary,
+    fontWeight: "900",
+    color: C.blue,
   },
 
   confirmButton: {
-    minHeight: 52,
-    borderRadius: 14,
-    backgroundColor: COLORS.primary,
+    minHeight: 53,
+    borderRadius: 15,
+    backgroundColor: C.blue,
     justifyContent: "center",
     alignItems: "center",
   },
 
   confirmButtonText: {
     fontSize: 14,
-    fontWeight: "800",
-    color: COLORS.white,
+    fontWeight: "900",
+    color: C.white,
   },
 
   cancelButton: {
     minHeight: 46,
     justifyContent: "center",
     alignItems: "center",
-    marginTop: 5,
+    marginTop: 6,
   },
 
   cancelButtonText: {
     fontSize: 13,
-    fontWeight: "700",
-    color: COLORS.red,
+    fontWeight: "800",
+    color: C.red,
   },
 });

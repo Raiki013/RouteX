@@ -26,33 +26,21 @@ import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "../config/supabase";
 import { PassengerHailButton } from "../components/HailingComponents";
 import CustomAlert from "../components/CustomAlert";
+import {
+  C,
+  NeuView,
+  NeuTouchable,
+  blueGlow,
+} from "../theme/theme";
 
 // ========================================
-// THEME
+// STATUS COLORS (semantic, kept distinct)
 // ========================================
 
-const C = {
-  primary: "#1A8AE5",
-  primaryDark: "#126BB5",
-  primaryLight: "#E8F3FE",
-  primaryPale: "#DBEAFE",
-
-  background: "#F8FAFC",
-  white: "#FFFFFF",
-
-  text: "#0F172A",
-  secondary: "#64748B",
-  muted: "#94A3B8",
-
-  border: "#E2E8F0",
-  lightBorder: "#F1F5F9",
-
+const STATUS = {
   success: "#16A34A",
   warning: "#D97706",
-  danger: "#DC2626",
-
-  ownBus: "#7C3AED",
-  ownBusDark: "#5B21B6",
+  danger: C.red,
 };
 
 const DEFAULT_REGION = {
@@ -74,9 +62,9 @@ const BUS_TYPE_OPTIONS = [
 // ========================================
 
 const STATUS_COLORS = {
-  available: C.success,
-  standing: C.warning,
-  not_available: C.danger,
+  available: STATUS.success,
+  standing: STATUS.warning,
+  not_available: STATUS.danger,
 };
 
 const STATUS_LABELS = {
@@ -220,7 +208,7 @@ html, body, #map {
   margin: 0;
   padding: 0;
   overflow: hidden;
-  background: #e2e8f0;
+  background: #DDE6F4;
 }
 
 body {
@@ -232,7 +220,7 @@ body {
   height: 100%;
   font-family: Arial, sans-serif;
   touch-action: none;
-  background: #e2e8f0;
+  background: #DDE6F4;
 }
 
 .leaflet-control-attribution {
@@ -242,7 +230,7 @@ body {
 /* OTHER BUSES */
 
 .bus-marker {
-  background: #1A8AE5;
+  background: #286DF6;
   border: 3px solid white;
   border-radius: 50%;
   width: 42px;
@@ -252,14 +240,14 @@ body {
   justify-content: center;
   color: white;
   font-size: 21px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  box-shadow: 0 2px 8px rgba(22,52,107,0.35);
 }
 
 /* SELECTED OTHER BUS */
 
 .selected-marker {
-  background: #126BB5;
-  border-color: #DBEAFE;
+  background: #1B4FC0;
+  border-color: #D3E3FB;
   transform: scale(1.2);
 }
 
@@ -283,11 +271,11 @@ body {
 .passenger-marker {
   width: 22px;
   height: 22px;
-  background: #1A8AE5;
+  background: #286DF6;
   border: 4px solid white;
   border-radius: 50%;
   box-shadow:
-    0 0 0 7px rgba(26,138,229,0.20),
+    0 0 0 7px rgba(40,109,246,0.20),
     0 2px 8px rgba(0,0,0,0.3);
 }
 
@@ -1246,29 +1234,29 @@ export default function TrackingScreen() {
   }, []);
 
   const updateMap = useCallback(() => {
-  sendMapMessage({
-    type: "UPDATE_BUSES",
-    buses: filteredBuses,
-    selectedBusId,
-    currentUserId: user?.id,
-  });
-
-  // Show "Your location" only on the passenger screen
-  if (userLevel === "user" && currentLocation) {
     sendMapMessage({
-      type: "CURRENT_LOCATION",
-      latitude: currentLocation.latitude,
-      longitude: currentLocation.longitude,
+      type: "UPDATE_BUSES",
+      buses: filteredBuses,
+      selectedBusId,
+      currentUserId: user?.id,
     });
-  }
-}, [
-  filteredBuses,
-  selectedBusId,
-  currentLocation,
-  user?.id,
-  userLevel,
-  sendMapMessage,
-]);
+
+    // Show "Your location" only on the passenger screen
+    if (userLevel === "user" && currentLocation) {
+      sendMapMessage({
+        type: "CURRENT_LOCATION",
+        latitude: currentLocation.latitude,
+        longitude: currentLocation.longitude,
+      });
+    }
+  }, [
+    filteredBuses,
+    selectedBusId,
+    currentLocation,
+    user?.id,
+    userLevel,
+    sendMapMessage,
+  ]);
 
   const handleMapMessage = useCallback(event => {
     try {
@@ -1346,13 +1334,13 @@ export default function TrackingScreen() {
     return (
       <View style={styles.dropdownSection}>
         <View style={styles.dropdownLabelRow}>
-          <View style={styles.dropdownIcon}>
+          <NeuView small style={styles.dropdownIcon}>
             <Ionicons
               name={icon}
-              size={17}
-              color={C.primary}
+              size={16}
+              color={C.blue}
             />
-          </View>
+          </NeuView>
 
           <Text style={styles.dropdownLabel}>
             {title}
@@ -1366,35 +1354,38 @@ export default function TrackingScreen() {
         </View>
 
         <TouchableOpacity
-          style={[
-            styles.dropdownButton,
-            isOpen && styles.dropdownButtonActive,
-            value && styles.dropdownButtonSelected,
-          ]}
           onPress={() => {
             setOpenDropdown(isOpen ? "" : dropdownKey);
           }}
-          activeOpacity={0.8}
+          activeOpacity={0.85}
         >
-          <Text
+          <NeuView
+            inset
             style={[
-              styles.dropdownValue,
-              !value && styles.dropdownPlaceholder,
+              styles.dropdownButton,
+              value && styles.dropdownButtonSelected,
             ]}
-            numberOfLines={1}
           >
-            {value || `Select ${title}`}
-          </Text>
+            <Text
+              style={[
+                styles.dropdownValue,
+                !value && styles.dropdownPlaceholder,
+              ]}
+              numberOfLines={1}
+            >
+              {value || `Select ${title}`}
+            </Text>
 
-          <Ionicons
-            name={isOpen ? "chevron-up" : "chevron-down"}
-            size={19}
-            color={isOpen ? C.primary : C.secondary}
-          />
+            <Ionicons
+              name={isOpen ? "chevron-up" : "chevron-down"}
+              size={19}
+              color={isOpen ? C.blue : C.muted}
+            />
+          </NeuView>
         </TouchableOpacity>
 
         {isOpen && (
-          <View style={styles.dropdownOptions}>
+          <NeuView style={styles.dropdownOptions}>
             <ScrollView
               nestedScrollEnabled
               keyboardShouldPersistTaps="handled"
@@ -1420,7 +1411,7 @@ export default function TrackingScreen() {
                   <Ionicons
                     name="checkmark-circle"
                     size={19}
-                    color={C.primary}
+                    color={C.blue}
                   />
                 )}
               </TouchableOpacity>
@@ -1454,14 +1445,14 @@ export default function TrackingScreen() {
                       <Ionicons
                         name="checkmark-circle"
                         size={19}
-                        color={C.primary}
+                        color={C.blue}
                       />
                     )}
                   </TouchableOpacity>
                 );
               })}
             </ScrollView>
-          </View>
+          </NeuView>
         )}
       </View>
     );
@@ -1696,15 +1687,19 @@ export default function TrackingScreen() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <View style={styles.loadingIcon}>
+        <NeuView style={styles.loadingIcon}>
           <Ionicons
             name="bus"
-            size={32}
-            color={C.primary}
+            size={36}
+            color={C.blue}
           />
-        </View>
+        </NeuView>
 
-        <ActivityIndicator size="large" color={C.primary} />
+        <ActivityIndicator
+          size="large"
+          color={C.blue}
+          style={{ marginTop: 20 }}
+        />
 
         <Text style={styles.loadingText}>
           Loading live tracking...
@@ -1760,7 +1755,7 @@ export default function TrackingScreen() {
 
       {/* FLOATING HEADER */}
 
-      <View style={styles.header}>
+      <NeuView style={styles.header}>
         <View style={styles.headerTextContainer}>
           <View style={styles.headerTitleRow}>
             <View style={styles.liveIndicator} />
@@ -1776,38 +1771,38 @@ export default function TrackingScreen() {
           </Text>
         </View>
 
-        <TouchableOpacity
+        <NeuTouchable
+          small
           style={styles.headerButton}
           onPress={handleRefresh}
           disabled={refreshing}
-          activeOpacity={0.8}
         >
           {refreshing ? (
-            <ActivityIndicator color={C.primary} size="small" />
+            <ActivityIndicator color={C.blue} size="small" />
           ) : (
             <Ionicons
               name="refresh"
               size={21}
-              color={C.primary}
+              color={C.blue}
             />
           )}
-        </TouchableOpacity>
-      </View>
+        </NeuTouchable>
+      </NeuView>
 
       {/* FILTER BUTTON */}
 
-      <TouchableOpacity
+      <NeuTouchable
+        small
         style={styles.filterButton}
         onPress={() => {
           setFilterVisible(true);
           setOpenDropdown("");
         }}
-        activeOpacity={0.85}
       >
         <Ionicons
           name="options-outline"
           size={20}
-          color={C.primary}
+          color={C.blue}
         />
 
         <Text style={styles.filterButtonText}>
@@ -1825,20 +1820,20 @@ export default function TrackingScreen() {
         <Ionicons
           name="chevron-down"
           size={17}
-          color={C.secondary}
+          color={C.muted}
         />
-      </TouchableOpacity>
+      </NeuTouchable>
 
       {/* MAP CONTROLS */}
 
-      <View style={styles.mapControls}>
+      <NeuView small style={styles.mapControls}>
         <TouchableOpacity
           style={styles.mapControlButton}
           onPress={() => {
             sendMapMessage({ type: "ZOOM_IN" });
           }}
         >
-          <Ionicons name="add" size={27} color={C.primary} />
+          <Ionicons name="add" size={27} color={C.blue} />
         </TouchableOpacity>
 
         <View style={styles.mapControlDivider} />
@@ -1849,7 +1844,7 @@ export default function TrackingScreen() {
             sendMapMessage({ type: "ZOOM_OUT" });
           }}
         >
-          <Ionicons name="remove" size={27} color={C.primary} />
+          <Ionicons name="remove" size={27} color={C.blue} />
         </TouchableOpacity>
 
         <View style={styles.mapControlDivider} />
@@ -1858,9 +1853,9 @@ export default function TrackingScreen() {
           style={styles.mapControlButton}
           onPress={handleCenterPassenger}
         >
-          <Ionicons name="locate" size={22} color={C.primary} />
+          <Ionicons name="locate" size={22} color={C.blue} />
         </TouchableOpacity>
-      </View>
+      </NeuView>
 
       {/* LOCATION WARNING */}
 
@@ -1869,7 +1864,7 @@ export default function TrackingScreen() {
           <Ionicons
             name="location-outline"
             size={16}
-            color={C.warning}
+            color={STATUS.warning}
           />
 
           <Text style={styles.locationWarningText}>
@@ -1881,11 +1876,11 @@ export default function TrackingScreen() {
       {/* SELECTED BUS */}
 
       {selectedBus && (
-        <View style={styles.selectedBusPopup}>
+        <NeuView style={styles.selectedBusPopup}>
           <View style={styles.popupHeader}>
-            <View style={styles.popupBusIcon}>
-              <Ionicons name="bus" size={27} color={C.primary} />
-            </View>
+            <NeuView small style={styles.popupBusIcon}>
+              <Ionicons name="bus" size={27} color={C.blue} />
+            </NeuView>
 
             <View style={styles.popupBusInfo}>
               <Text style={styles.popupBusName}>
@@ -1897,19 +1892,20 @@ export default function TrackingScreen() {
               </Text>
             </View>
 
-            <TouchableOpacity
+            <NeuTouchable
+              small
               style={styles.closePopupButton}
               onPress={() => setSelectedBusId(null)}
             >
-              <Ionicons name="close" size={22} color={C.secondary} />
-            </TouchableOpacity>
+              <Ionicons name="close" size={21} color={C.blue} />
+            </NeuTouchable>
           </View>
 
           <View style={styles.popupDivider} />
 
-          <View style={styles.distanceDetailsRow}>
+          <NeuView inset style={styles.distanceDetailsRow}>
             <View style={styles.distanceDetailsLeft}>
-              <Ionicons name="navigate" size={18} color={C.primary} />
+              <Ionicons name="navigate" size={18} color={C.blue} />
 
               <Text style={styles.distanceDetailsLabel}>
                 Distance from you
@@ -1921,7 +1917,7 @@ export default function TrackingScreen() {
                 ? formatDistance(selectedBusDistance)
                 : "GPS unavailable"}
             </Text>
-          </View>
+          </NeuView>
 
           <View style={styles.popupDetailsRow}>
             <Text style={styles.popupLabel}>Destination</Text>
@@ -1972,7 +1968,7 @@ export default function TrackingScreen() {
               Select a bus to view its live information.
             </Text>
           )}
-        </View>
+        </NeuView>
       )}
 
       {/* FILTER SIDEBAR */}
@@ -2001,21 +1997,24 @@ export default function TrackingScreen() {
                   <Ionicons
                     name="bus"
                     size={25}
-                    color="#FFFFFF"
+                    color={C.white}
                   />
                 </View>
 
-                <TouchableOpacity
+                <NeuTouchable
+                  small
                   style={styles.sidebarCloseButton}
                   onPress={() => setFilterVisible(false)}
                 >
                   <Ionicons
                     name="close"
                     size={21}
-                    color="#64748B"
+                    color={C.blue}
                   />
-                </TouchableOpacity>
+                </NeuTouchable>
               </View>
+
+              <Text style={styles.greeting}>FILTERS</Text>
 
               <Text style={styles.sidebarTitle}>
                 Find Your Bus
@@ -2025,12 +2024,12 @@ export default function TrackingScreen() {
                 Choose your bus type, company, route, and destination.
               </Text>
 
-              <View style={styles.sidebarStats}>
+              <NeuView inset style={styles.sidebarStats}>
                 <View style={styles.sidebarStatItem}>
                   <Ionicons
                     name="bus-outline"
                     size={16}
-                    color={C.primary}
+                    color={C.blue}
                   />
 
                   <Text style={styles.sidebarStatText}>
@@ -2047,7 +2046,7 @@ export default function TrackingScreen() {
                     Live tracking
                   </Text>
                 </View>
-              </View>
+              </NeuView>
             </View>
 
             {/* SIDEBAR CONTENT */}
@@ -2099,7 +2098,7 @@ export default function TrackingScreen() {
 
               {filterOptionsLoading && (
                 <View style={styles.filterLoadingRow}>
-                  <ActivityIndicator size="small" color={C.primary} />
+                  <ActivityIndicator size="small" color={C.blue} />
                   <Text style={styles.filterLoadingText}>
                     Loading companies, routes and stops...
                   </Text>
@@ -2119,11 +2118,11 @@ export default function TrackingScreen() {
                   </Text>
                 </View>
 
-                <View style={styles.resultsCount}>
+                <NeuView small style={styles.resultsCount}>
                   <Text style={styles.resultsCountText}>
                     {filteredBuses.length}
                   </Text>
-                </View>
+                </NeuView>
               </View>
 
               {/* BUS LIST */}
@@ -2138,23 +2137,23 @@ export default function TrackingScreen() {
                   );
 
                   return (
-                    <TouchableOpacity
+                    <NeuTouchable
                       key={String(bus.bus_id)}
+                      small
                       style={[
                         styles.busListItem,
                         isSelected && styles.busListItemSelected,
                       ]}
                       onPress={() => handleSelectBus(bus)}
-                      activeOpacity={0.85}
                     >
                       <View style={styles.busListTop}>
-                        <View style={styles.busListIcon}>
+                        <NeuView small style={styles.busListIcon}>
                           <Ionicons
                             name="bus"
-                            size={25}
-                            color={C.primary}
+                            size={24}
+                            color={C.blue}
                           />
-                        </View>
+                        </NeuView>
 
                         <View style={styles.busListInfo}>
                           <Text style={styles.busListName}>
@@ -2170,7 +2169,7 @@ export default function TrackingScreen() {
                           <Ionicons
                             name="checkmark-circle"
                             size={23}
-                            color={C.primary}
+                            color={C.blue}
                           />
                         ) : (
                           <Ionicons
@@ -2185,7 +2184,7 @@ export default function TrackingScreen() {
                         <Ionicons
                           name="location"
                           size={15}
-                          color={C.primary}
+                          color={C.blue}
                         />
 
                         <Text style={styles.busListDestinationText}>
@@ -2241,7 +2240,7 @@ export default function TrackingScreen() {
                             size={13}
                             color={
                               bus.location
-                                ? C.success
+                                ? STATUS.success
                                 : C.muted
                             }
                           />
@@ -2256,18 +2255,18 @@ export default function TrackingScreen() {
                           </Text>
                         </View>
                       </View>
-                    </TouchableOpacity>
+                    </NeuTouchable>
                   );
                 })
               ) : (
                 <View style={styles.emptyBusList}>
-                  <View style={styles.emptyBusIcon}>
+                  <NeuView small style={styles.emptyBusIcon}>
                     <Ionicons
                       name="bus-outline"
-                      size={35}
-                      color={C.muted}
+                      size={34}
+                      color={C.blue}
                     />
-                  </View>
+                  </NeuView>
 
                   <Text style={styles.emptyBusTitle}>
                     No buses found
@@ -2277,14 +2276,15 @@ export default function TrackingScreen() {
                     Try changing or clearing your filters to find buses.
                   </Text>
 
-                  <TouchableOpacity
+                  <NeuTouchable
+                    small
                     style={styles.emptyClearButton}
                     onPress={clearFilters}
                   >
                     <Text style={styles.emptyClearText}>
                       Clear Filters
                     </Text>
-                  </TouchableOpacity>
+                  </NeuTouchable>
                 </View>
               )}
             </ScrollView>
@@ -2292,21 +2292,21 @@ export default function TrackingScreen() {
             {/* SIDEBAR FOOTER */}
 
             <View style={styles.sidebarFooter}>
-              <TouchableOpacity
+              <NeuTouchable
+                small
                 style={styles.sidebarClearButton}
                 onPress={clearFilters}
-                activeOpacity={0.8}
               >
                 <Ionicons
                   name="refresh-outline"
                   size={17}
-                  color={C.primary}
+                  color={C.blue}
                 />
 
                 <Text style={styles.sidebarClearText}>
                   Reset
                 </Text>
-              </TouchableOpacity>
+              </NeuTouchable>
 
               <TouchableOpacity
                 style={styles.sidebarDoneButton}
@@ -2323,7 +2323,7 @@ export default function TrackingScreen() {
                 <Ionicons
                   name="checkmark"
                   size={18}
-                  color="#FFFFFF"
+                  color={C.white}
                 />
               </TouchableOpacity>
             </View>
@@ -2345,15 +2345,15 @@ export default function TrackingScreen() {
         }}
       >
         <View style={styles.alertOverlay}>
-          <View style={styles.locationModal}>
+          <NeuView style={styles.locationModal}>
 
-            <View style={styles.locationModalIcon}>
+            <NeuView style={styles.locationModalIcon}>
               <Ionicons
                 name="location"
-                size={32}
-                color={C.primary}
+                size={34}
+                color={C.blue}
               />
-            </View>
+            </NeuView>
 
             <Text style={styles.locationModalTitle}>
               Location Services Disabled
@@ -2366,18 +2366,18 @@ export default function TrackingScreen() {
             </Text>
 
             <View style={styles.locationModalButtons}>
-              <TouchableOpacity
+              <NeuTouchable
+                small
                 style={styles.locationCancelButton}
                 onPress={() => {
                   gpsPromptVisibleRef.current = false;
                   resolveLocationPrompt(false);
                 }}
-                activeOpacity={0.8}
               >
                 <Text style={styles.locationCancelText}>
                   Cancel
                 </Text>
-              </TouchableOpacity>
+              </NeuTouchable>
 
               <TouchableOpacity
                 style={styles.locationEnableButton}
@@ -2433,7 +2433,7 @@ export default function TrackingScreen() {
                 />
               </TouchableOpacity>
             </View>
-          </View>
+          </NeuView>
         </View>
       </Modal>
 
@@ -2452,22 +2452,19 @@ export default function TrackingScreen() {
   );
 }
 
-
-const GLASS = {
-  background: "#F1F5F9",
-  card: "rgba(255, 255, 255, 0.72)",
-  cardStrong: "rgba(255, 255, 255, 0.92)",
-  cardSoft: "rgba(255, 255, 255, 0.48)",
-  border: "rgba(255, 255, 255, 0.90)",
-  borderSoft: "rgba(255, 255, 255, 0.55)",
-  shadow: "#64748B",
-  text: "#26384A",
-  secondary: "#64798D",
-  muted: "#8A9CAD",
-  selected: "rgba(255, 255, 255, 0.85)",
-};
+// ========================================
+// STYLES
+// ========================================
 
 const styles = StyleSheet.create({
+  greeting: {
+    color: C.blue,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1.5,
+    marginTop: 16,
+  },
+
   // ========================================
   // FILTER LOADING
   // ========================================
@@ -2480,7 +2477,7 @@ const styles = StyleSheet.create({
   },
 
   filterLoadingText: {
-    color: GLASS.secondary,
+    color: C.textSecondary,
     fontSize: 12,
   },
 
@@ -2490,12 +2487,12 @@ const styles = StyleSheet.create({
 
   container: {
     flex: 1,
-    backgroundColor: GLASS.background,
+    backgroundColor: C.background,
   },
 
   map: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "#E2E8F0",
+    backgroundColor: C.background,
   },
 
   // ========================================
@@ -2506,31 +2503,27 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: GLASS.background,
+    backgroundColor: C.background,
   },
 
   loadingIcon: {
-    width: 65,
-    height: 65,
-    borderRadius: 20,
-    backgroundColor: GLASS.card,
-    borderWidth: 1,
-    borderColor: GLASS.border,
+    width: 80,
+    height: 80,
+    borderRadius: 26,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 20,
   },
 
   loadingText: {
     marginTop: 12,
-    color: GLASS.text,
-    fontSize: 15,
-    fontWeight: "600",
+    color: C.text,
+    fontSize: 14,
+    fontWeight: "900",
   },
 
   loadingSubtext: {
     marginTop: 5,
-    color: GLASS.secondary,
+    color: C.textSecondary,
     fontSize: 12,
   },
 
@@ -2540,23 +2533,15 @@ const styles = StyleSheet.create({
 
   header: {
     position: "absolute",
-    top: 10,
-    left: 12,
-    right: 12,
+    top: 12,
+    left: 14,
+    right: 14,
     paddingVertical: 12,
     paddingHorizontal: 15,
-    backgroundColor: GLASS.card,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: GLASS.border,
-    elevation: 5,
-    shadowColor: GLASS.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.13,
-    shadowRadius: 10,
+    borderRadius: 20,
   },
 
   headerTextContainer: {
@@ -2573,29 +2558,26 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: C.success,
+    backgroundColor: C.blue,
   },
 
   headerTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: GLASS.text,
+    fontSize: 17,
+    fontWeight: "900",
+    color: C.text,
   },
 
   headerSubtitle: {
-    fontSize: 12,
-    color: GLASS.secondary,
+    fontSize: 11,
+    color: C.textSecondary,
     marginTop: 3,
     marginLeft: 15,
   },
 
   headerButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: GLASS.cardSoft,
-    borderWidth: 1,
-    borderColor: GLASS.border,
+    width: 42,
+    height: 42,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2606,35 +2588,27 @@ const styles = StyleSheet.create({
 
   filterButton: {
     position: "absolute",
-    top: 88,
-    left: 15,
+    top: 92,
+    left: 16,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: GLASS.card,
     paddingHorizontal: 14,
     paddingVertical: 11,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: GLASS.border,
+    borderRadius: 16,
     gap: 8,
-    elevation: 5,
-    shadowColor: GLASS.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.13,
-    shadowRadius: 9,
   },
 
   filterButtonText: {
-    color: GLASS.text,
-    fontSize: 13,
-    fontWeight: "600",
+    color: C.text,
+    fontSize: 12,
+    fontWeight: "900",
   },
 
   filterCount: {
     width: 21,
     height: 21,
     borderRadius: 11,
-    backgroundColor: C.primary,
+    backgroundColor: C.blue,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2642,7 +2616,7 @@ const styles = StyleSheet.create({
   filterCountText: {
     color: C.white,
     fontSize: 11,
-    fontWeight: "bold",
+    fontWeight: "900",
   },
 
   // ========================================
@@ -2651,18 +2625,10 @@ const styles = StyleSheet.create({
 
   mapControls: {
     position: "absolute",
-    right: 13,
-    top: 88,
-    backgroundColor: GLASS.card,
-    borderRadius: 15,
+    right: 16,
+    top: 92,
+    borderRadius: 16,
     padding: 4,
-    borderWidth: 1,
-    borderColor: GLASS.border,
-    elevation: 5,
-    shadowColor: GLASS.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.13,
-    shadowRadius: 9,
   },
 
   mapControlButton: {
@@ -2673,9 +2639,10 @@ const styles = StyleSheet.create({
   },
 
   mapControlDivider: {
-    height: 1,
-    backgroundColor: GLASS.borderSoft,
-    marginHorizontal: 5,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: C.inset,
+    marginHorizontal: 6,
   },
 
   // ========================================
@@ -2684,25 +2651,24 @@ const styles = StyleSheet.create({
 
   locationWarning: {
     position: "absolute",
-    top: 143,
-    left: 15,
-    right: 15,
-    backgroundColor: "#FFFBEB",
-    borderColor: "#FDE68A",
-    borderWidth: 1,
-    borderRadius: 13,
+    top: 148,
+    left: 16,
+    right: 76,
+    backgroundColor: "#FFF4DC",
+    borderRadius: 14,
     padding: 11,
     flexDirection: "row",
     alignItems: "center",
     gap: 7,
-    elevation: 3,
+    boxShadow: "4px 4px 8px #D8C9A8, -3px -3px 8px #FFFFFF",
   },
 
   locationWarningText: {
-    color: "#92400E",
+    color: "#8A4B0F",
     fontSize: 11,
     flex: 1,
     lineHeight: 16,
+    fontWeight: "600",
   },
 
   // ========================================
@@ -2710,25 +2676,17 @@ const styles = StyleSheet.create({
   // ========================================
 
   selectedBusPopup: {
-  position: "absolute",
-  left: 14,
-  right: 14,
+    position: "absolute",
+    left: 16,
+    right: 16,
 
-  // Keep the bus information above the bottom tab navigation
-  bottom: 85,
+    // Keep the bus information above the bottom tab navigation
+    bottom: 85,
 
-  backgroundColor: GLASS.cardStrong,
-  borderRadius: 22,
-  padding: 16,
-  borderWidth: 1,
-  borderColor: GLASS.border,
-  elevation: 9,
-  shadowColor: GLASS.shadow,
-  shadowOffset: { width: 0, height: 5 },
-  shadowOpacity: 0.16,
-  shadowRadius: 12,
-  zIndex: 10,
-},
+    borderRadius: 24,
+    padding: 16,
+    zIndex: 10,
+  },
 
   popupHeader: {
     flexDirection: "row",
@@ -2736,12 +2694,9 @@ const styles = StyleSheet.create({
   },
 
   popupBusIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 15,
-    backgroundColor: GLASS.cardSoft,
-    borderWidth: 1,
-    borderColor: GLASS.border,
+    width: 50,
+    height: 50,
+    borderRadius: 16,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -2753,44 +2708,39 @@ const styles = StyleSheet.create({
 
   popupBusName: {
     fontSize: 16,
-    fontWeight: "bold",
-    color: GLASS.text,
+    fontWeight: "900",
+    color: C.text,
   },
 
   popupBusPlate: {
-    fontSize: 12,
-    color: GLASS.secondary,
+    fontSize: 11,
+    color: C.textSecondary,
     marginTop: 3,
   },
 
   closePopupButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 11,
-    backgroundColor: GLASS.cardSoft,
-    borderWidth: 1,
-    borderColor: GLASS.border,
+    width: 38,
+    height: 38,
+    borderRadius: 13,
     alignItems: "center",
     justifyContent: "center",
   },
 
   popupDivider: {
-    height: 1,
-    backgroundColor: GLASS.borderSoft,
-    marginVertical: 12,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: C.inset,
+    marginVertical: 13,
   },
 
   distanceDetailsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    backgroundColor: GLASS.cardSoft,
-    borderWidth: 1,
-    borderColor: GLASS.border,
-    paddingHorizontal: 11,
-    paddingVertical: 11,
-    borderRadius: 12,
-    marginBottom: 12,
+    paddingHorizontal: 13,
+    paddingVertical: 12,
+    borderRadius: 14,
+    marginBottom: 13,
   },
 
   distanceDetailsLeft: {
@@ -2800,15 +2750,15 @@ const styles = StyleSheet.create({
   },
 
   distanceDetailsLabel: {
-    fontSize: 12,
-    color: GLASS.text,
-    fontWeight: "600",
+    fontSize: 11,
+    color: C.text,
+    fontWeight: "700",
   },
 
   distanceDetailsValue: {
     fontSize: 14,
-    color: C.primaryDark,
-    fontWeight: "bold",
+    color: C.blue,
+    fontWeight: "900",
   },
 
   popupDetailsRow: {
@@ -2819,20 +2769,20 @@ const styles = StyleSheet.create({
   },
 
   popupLabel: {
-    fontSize: 12,
-    color: GLASS.secondary,
+    fontSize: 11,
+    color: C.textSecondary,
   },
 
   popupValue: {
     fontSize: 12,
-    fontWeight: "600",
-    color: GLASS.text,
+    fontWeight: "800",
+    color: C.text,
     maxWidth: "60%",
     textAlign: "right",
   },
 
   operatorPopupText: {
-    color: GLASS.secondary,
+    color: C.textSecondary,
     fontSize: 12,
     textAlign: "center",
   },
@@ -2844,7 +2794,7 @@ const styles = StyleSheet.create({
   sidebarOverlay: {
     flex: 1,
     flexDirection: "row",
-    backgroundColor: "rgba(15, 23, 42, 0.30)",
+    backgroundColor: "rgba(22, 52, 107, 0.45)",
   },
 
   sidebarBackdrop: {
@@ -2852,65 +2802,61 @@ const styles = StyleSheet.create({
   },
 
   // ========================================
-  // SOLID WHITE SIDEBAR
+  // SIDEBAR
   // ========================================
 
   sidebar: {
     width: "88%",
     maxWidth: 400,
     height: "100%",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: C.background,
     paddingTop: 48,
-    borderRightWidth: 1,
-    borderRightColor: "#E2E8F0",
-    elevation: 15,
-    shadowColor: "#64748B",
-    shadowOffset: { width: 4, height: 0 },
-    shadowOpacity: 0.16,
-    shadowRadius: 12,
+    boxShadow: "8px 0px 20px rgba(22, 52, 107, 0.25)",
   },
 
   sidebarHeader: {
-    backgroundColor: "#FFFFFF",
     paddingHorizontal: 20,
     paddingTop: 8,
-    paddingBottom: 17,
-    borderBottomWidth: 1,
-    borderBottomColor: "#E2E8F0",
+    paddingBottom: 18,
+  },
+
+  sidebarHeaderTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
 
   sidebarHeaderIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 15,
-    backgroundColor: C.primary,
+    width: 50,
+    height: 50,
+    borderRadius: 17,
+    backgroundColor: C.blue,
     alignItems: "center",
     justifyContent: "center",
+    ...blueGlow,
   },
 
   sidebarTitle: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: GLASS.text,
+    fontSize: 24,
+    fontWeight: "900",
+    color: C.text,
+    marginTop: 5,
   },
 
   sidebarSubtitle: {
     fontSize: 12,
-    color: GLASS.secondary,
-    marginTop: 5,
+    color: C.textSecondary,
+    marginTop: 6,
     lineHeight: 18,
   },
 
   sidebarStats: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#F8FAFC",
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 12,
-    marginTop: 15,
+    paddingHorizontal: 13,
+    paddingVertical: 12,
+    borderRadius: 16,
+    marginTop: 16,
   },
 
   sidebarStatItem: {
@@ -2922,14 +2868,16 @@ const styles = StyleSheet.create({
 
   sidebarStatText: {
     fontSize: 11,
-    color: GLASS.text,
-    fontWeight: "600",
+    color: C.text,
+    fontWeight: "700",
   },
 
   sidebarStatDivider: {
-    width: 1,
+    width: 2,
     height: 17,
-    backgroundColor: "#E2E8F0",
+    borderRadius: 1,
+    backgroundColor: C.lightBlue,
+    opacity: 0.5,
     marginHorizontal: 10,
   },
 
@@ -2937,33 +2885,29 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: C.success,
+    backgroundColor: C.blue,
   },
 
   sidebarCloseButton: {
-    width: 37,
-    height: 37,
-    borderRadius: 12,
-    backgroundColor: "#F1F5F9",
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
+    width: 42,
+    height: 42,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
   },
 
   sidebarContent: {
     flex: 1,
-    paddingHorizontal: 18,
-    paddingTop: 19,
-    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 20,
+    paddingTop: 6,
   },
 
   filterHeading: {
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 1,
-    color: GLASS.secondary,
-    marginBottom: 15,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1.5,
+    color: C.blue,
+    marginBottom: 16,
   },
 
   // ========================================
@@ -2971,113 +2915,96 @@ const styles = StyleSheet.create({
   // ========================================
 
   dropdownSection: {
-    marginBottom: 16,
+    marginBottom: 18,
   },
 
   dropdownLabelRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 8,
+    marginBottom: 10,
   },
 
   dropdownIcon: {
-    width: 27,
-    height: 27,
-    borderRadius: 9,
-    backgroundColor: "#F1F5F9",
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
+    width: 32,
+    height: 32,
+    borderRadius: 11,
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 8,
+    marginRight: 10,
   },
 
   dropdownLabel: {
     flex: 1,
     fontSize: 12,
-    fontWeight: "700",
-    color: GLASS.text,
+    fontWeight: "900",
+    color: C.text,
   },
 
   dropdownReset: {
-    color: C.primary,
+    color: C.blue,
     fontSize: 11,
-    fontWeight: "700",
+    fontWeight: "900",
   },
 
   dropdownButton: {
-    minHeight: 49,
-    backgroundColor: "#F8FAFC",
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    borderRadius: 13,
-    paddingHorizontal: 14,
+    minHeight: 50,
+    borderRadius: 16,
+    paddingHorizontal: 15,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
 
-  dropdownButtonActive: {
-    borderColor: C.primary,
-    backgroundColor: "#FFFFFF",
-  },
-
   dropdownButtonSelected: {
-    borderColor: "rgba(26, 138, 229, 0.35)",
+    backgroundColor: C.paleBlue,
   },
 
   dropdownValue: {
     flex: 1,
     fontSize: 13,
-    color: GLASS.text,
-    fontWeight: "600",
+    color: C.text,
+    fontWeight: "800",
     marginRight: 10,
   },
 
   dropdownPlaceholder: {
-    color: GLASS.muted,
-    fontWeight: "400",
+    color: C.muted,
+    fontWeight: "500",
   },
 
   dropdownOptions: {
-    marginTop: 6,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    borderRadius: 13,
+    marginTop: 12,
+    borderRadius: 18,
     overflow: "hidden",
-    elevation: 3,
-    shadowColor: GLASS.shadow,
-    shadowOpacity: 0.10,
-    shadowRadius: 6,
   },
 
   dropdownOptionsScroll: {
-    maxHeight: 180,
+    maxHeight: 190,
   },
 
   dropdownOption: {
-    minHeight: 44,
-    paddingHorizontal: 14,
+    minHeight: 46,
+    paddingHorizontal: 15,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     borderBottomWidth: 1,
-    borderBottomColor: "#F1F5F9",
+    borderBottomColor: C.inset,
   },
 
   dropdownOptionActive: {
-    backgroundColor: "rgba(26, 138, 229, 0.07)",
+    backgroundColor: C.paleBlue,
   },
 
   dropdownOptionText: {
     fontSize: 12,
-    color: GLASS.secondary,
+    color: C.textSecondary,
+    fontWeight: "600",
   },
 
   dropdownOptionSelected: {
-    color: C.primary,
-    fontWeight: "700",
+    color: C.blue,
+    fontWeight: "900",
   },
 
   // ========================================
@@ -3088,41 +3015,36 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingTop: 18,
-    paddingBottom: 13,
-    borderTopWidth: 1,
-    borderTopColor: "#E2E8F0",
-    marginTop: 5,
+    paddingTop: 12,
+    paddingBottom: 16,
+    marginTop: 6,
   },
 
   resultsTitle: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: GLASS.text,
+    fontSize: 18,
+    fontWeight: "900",
+    color: C.text,
   },
 
   resultsSubtitle: {
     fontSize: 11,
-    color: GLASS.secondary,
+    color: C.textSecondary,
     marginTop: 4,
   },
 
   resultsCount: {
-    minWidth: 32,
-    height: 32,
+    minWidth: 38,
+    height: 38,
     paddingHorizontal: 8,
-    borderRadius: 11,
-    backgroundColor: GLASS.card,
-    borderWidth: 1,
-    borderColor: GLASS.border,
+    borderRadius: 13,
     alignItems: "center",
     justifyContent: "center",
   },
 
   resultsCountText: {
-    color: C.primary,
-    fontWeight: "800",
-    fontSize: 13,
+    color: C.blue,
+    fontWeight: "900",
+    fontSize: 14,
   },
 
   // ========================================
@@ -3130,40 +3052,28 @@ const styles = StyleSheet.create({
   // ========================================
 
   busListItem: {
-  backgroundColor: "#FFFFFF",
-  borderWidth: 1,
-  borderColor: "#FFFFFF",
-  borderRadius: 17,
-  padding: 13,
-  marginBottom: 11,
-  elevation: 2,
-  shadowColor: GLASS.shadow,
-  shadowOffset: { width: 0, height: 2 },
-  shadowOpacity: 0.08,
-  shadowRadius: 5,
-},
+    borderRadius: 20,
+    padding: 14,
+    marginBottom: 16,
+  },
 
   busListItemSelected: {
-  backgroundColor: "#FFFFFF",
-  borderColor: "#FFFFFF",
-},
+    backgroundColor: C.paleBlue,
+  },
 
   busListTop: {
-  flexDirection: "row",
-  alignItems: "center",
-},
+    flexDirection: "row",
+    alignItems: "center",
+  },
 
-busListIcon: {
-  width: 43,
-  height: 43,
-  borderRadius: 13,
-  backgroundColor: "#FFFFFF",
-  borderWidth: 1,
-  borderColor: "#FFFFFF",
-  alignItems: "center",
-  justifyContent: "center",
-  marginRight: 10,
-},
+  busListIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 11,
+  },
 
   busListInfo: {
     flex: 1,
@@ -3171,13 +3081,13 @@ busListIcon: {
 
   busListName: {
     fontSize: 13,
-    fontWeight: "800",
-    color: GLASS.text,
+    fontWeight: "900",
+    color: C.text,
   },
 
   busListPlate: {
     fontSize: 11,
-    color: GLASS.secondary,
+    color: C.textSecondary,
     marginTop: 4,
   },
 
@@ -3190,41 +3100,39 @@ busListIcon: {
 
   busListDestinationText: {
     fontSize: 12,
-    color: GLASS.text,
-    fontWeight: "600",
+    color: C.text,
+    fontWeight: "700",
   },
 
   busListTags: {
-  flexDirection: "row",
-  flexWrap: "wrap",
-  gap: 6,
-  marginTop: 10,
-},
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 10,
+  },
 
-busListTag: {
-  backgroundColor: "#FFFFFF",
-  borderWidth: 1,
-  borderColor: "#FFFFFF",
-  paddingHorizontal: 8,
-  paddingVertical: 5,
-  borderRadius: 7,
-},
+  busListTag: {
+    backgroundColor: C.paleBlue,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 9,
+  },
 
   busListTagText: {
     fontSize: 10,
-    color: GLASS.secondary,
-    fontWeight: "600",
+    color: C.blue,
+    fontWeight: "800",
   },
 
   busListBottom: {
-  flexDirection: "row",
-  alignItems: "center",
-  justifyContent: "space-between",
-  borderTopWidth: 1,
-  borderTopColor: "#E2E8F0",
-  marginTop: 12,
-  paddingTop: 10,
-},
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderTopWidth: 2,
+    borderTopColor: C.inset,
+    marginTop: 13,
+    paddingTop: 11,
+  },
 
   busListStatusRow: {
     flexDirection: "row",
@@ -3240,7 +3148,7 @@ busListTag: {
 
   busListStatus: {
     fontSize: 11,
-    fontWeight: "700",
+    fontWeight: "900",
   },
 
   gpsStatus: {
@@ -3251,12 +3159,12 @@ busListTag: {
 
   gpsStatusText: {
     fontSize: 10,
-    color: GLASS.muted,
-    fontWeight: "600",
+    color: C.muted,
+    fontWeight: "700",
   },
 
   gpsStatusActive: {
-    color: C.success,
+    color: STATUS.success,
   },
 
   // ========================================
@@ -3266,50 +3174,44 @@ busListTag: {
   emptyBusList: {
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 35,
+    paddingVertical: 30,
     paddingHorizontal: 15,
   },
 
   emptyBusIcon: {
-    width: 65,
-    height: 65,
-    borderRadius: 20,
-    backgroundColor: GLASS.card,
-    borderWidth: 1,
-    borderColor: GLASS.border,
+    width: 66,
+    height: 66,
+    borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
   },
 
   emptyBusTitle: {
-    fontSize: 15,
-    fontWeight: "bold",
-    color: GLASS.text,
-    marginTop: 12,
+    fontSize: 16,
+    fontWeight: "900",
+    color: C.text,
+    marginTop: 14,
   },
 
   emptyBusText: {
     fontSize: 12,
-    color: GLASS.secondary,
+    color: C.textSecondary,
     textAlign: "center",
-    marginTop: 5,
+    marginTop: 6,
     lineHeight: 18,
   },
 
   emptyClearButton: {
-    backgroundColor: GLASS.card,
-    borderWidth: 1,
-    borderColor: GLASS.border,
-    paddingHorizontal: 17,
-    paddingVertical: 10,
-    borderRadius: 11,
-    marginTop: 14,
+    paddingHorizontal: 18,
+    paddingVertical: 11,
+    borderRadius: 14,
+    marginTop: 16,
   },
 
   emptyClearText: {
     fontSize: 12,
-    fontWeight: "bold",
-    color: C.primaryDark,
+    fontWeight: "900",
+    color: C.blue,
   },
 
   // ========================================
@@ -3319,23 +3221,17 @@ busListTag: {
   sidebarFooter: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 18,
-    paddingTop: 12,
-    paddingBottom: 25,
-    borderTopWidth: 1,
-    borderTopColor: "#E2E8F0",
-    backgroundColor: "#FFFFFF",
+    gap: 14,
+    paddingHorizontal: 20,
+    paddingTop: 14,
+    paddingBottom: 26,
   },
 
   sidebarClearButton: {
-    height: 49,
-    minWidth: 95,
+    height: 50,
+    minWidth: 100,
     paddingHorizontal: 14,
-    borderRadius: 13,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    backgroundColor: "#F8FAFC",
+    borderRadius: 16,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -3343,31 +3239,27 @@ busListTag: {
   },
 
   sidebarClearText: {
-    color: C.primary,
+    color: C.blue,
     fontSize: 13,
-    fontWeight: "700",
+    fontWeight: "900",
   },
 
   sidebarDoneButton: {
-    height: 49,
+    height: 50,
     flex: 1,
-    backgroundColor: C.primary,
-    borderRadius: 13,
+    backgroundColor: C.blue,
+    borderRadius: 16,
     justifyContent: "center",
     alignItems: "center",
     flexDirection: "row",
     gap: 7,
-    elevation: 3,
-    shadowColor: C.primary,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.20,
-    shadowRadius: 6,
+    ...blueGlow,
   },
 
   sidebarDoneText: {
     fontSize: 14,
     color: C.white,
-    fontWeight: "800",
+    fontWeight: "900",
   },
 
   // ========================================
@@ -3376,51 +3268,40 @@ busListTag: {
 
   alertOverlay: {
     flex: 1,
-    backgroundColor: "rgba(15, 23, 42, 0.50)",
+    backgroundColor: "rgba(22, 52, 107, 0.45)",
     justifyContent: "center",
     alignItems: "center",
-    paddingHorizontal: 25,
+    padding: 25,
   },
 
   locationModal: {
     width: "100%",
     maxWidth: 380,
-    backgroundColor: GLASS.cardStrong,
-    borderWidth: 1,
-    borderColor: GLASS.border,
-    borderRadius: 24,
-    padding: 22,
+    borderRadius: 26,
+    padding: 24,
     alignItems: "center",
-    elevation: 15,
-    shadowColor: GLASS.shadow,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.20,
-    shadowRadius: 14,
   },
 
   locationModalIcon: {
-    width: 68,
-    height: 68,
-    borderRadius: 22,
-    backgroundColor: GLASS.card,
-    borderWidth: 1,
-    borderColor: GLASS.border,
+    width: 85,
+    height: 85,
+    borderRadius: 43,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 17,
+    marginBottom: 16,
   },
 
   locationModalTitle: {
-    fontSize: 19,
-    fontWeight: "800",
-    color: GLASS.text,
+    fontSize: 20,
+    fontWeight: "900",
+    color: C.text,
     textAlign: "center",
   },
 
   locationModalMessage: {
     fontSize: 13,
     lineHeight: 20,
-    color: GLASS.secondary,
+    color: C.textSecondary,
     textAlign: "center",
     marginTop: 10,
   },
@@ -3428,41 +3309,39 @@ busListTag: {
   locationModalButtons: {
     flexDirection: "row",
     width: "100%",
-    gap: 10,
-    marginTop: 23,
+    gap: 14,
+    marginTop: 24,
   },
 
   locationCancelButton: {
     flex: 1,
     height: 48,
-    borderRadius: 13,
-    backgroundColor: GLASS.card,
-    borderWidth: 1,
-    borderColor: GLASS.border,
+    borderRadius: 14,
     justifyContent: "center",
     alignItems: "center",
   },
 
   locationCancelText: {
     fontSize: 13,
-    fontWeight: "700",
-    color: GLASS.secondary,
+    fontWeight: "900",
+    color: C.textSecondary,
   },
 
   locationEnableButton: {
     flex: 1.4,
     height: 48,
-    borderRadius: 13,
-    backgroundColor: C.primary,
+    borderRadius: 14,
+    backgroundColor: C.blue,
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
     gap: 7,
+    ...blueGlow,
   },
 
   locationEnableText: {
     fontSize: 13,
-    fontWeight: "700",
+    fontWeight: "900",
     color: C.white,
   },
 });

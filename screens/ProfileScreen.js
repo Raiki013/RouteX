@@ -1,4 +1,3 @@
-
 import { useState, useCallback } from "react";
 
 import {
@@ -11,7 +10,6 @@ import {
   Alert,
   StatusBar,
   Modal,
-  Pressable,
   ActivityIndicator,
   Image,
 } from "react-native";
@@ -23,55 +21,16 @@ import * as Notifications from "expo-notifications";
 import * as Location from "expo-location";
 
 import { supabase } from "../config/supabase";
+import {
+  C,
+  NeuView,
+  NeuTouchable,
+  NeuCard,
+  blueGlow,
+  redGlow,
+} from "../theme/theme";
 
 const BUCKET_NAME = "profile-photos";
-
-// =====================================
-// ROUTEX WHITE GLASS COLOR PALETTE
-// =====================================
-
-const COLORS = {
-  background: "#D6E6F3",
-  background2: "#C9DEEF",
-
-  navy: "#145DA8",
-  blue: "#286DF6",
-  cyan: "#087FAF",
-
-  white: "#FFFFFF",
-  gray: "#496681",
-
-  // Same glass surface for every card
-  glass: "rgba(255, 255, 255, 0.72)",
-  glassLight: "transparent",
-  glassBorder: "rgba(255, 255, 255, 0.95)",
-  glassStrong: "rgba(255, 255, 255, 0.72)",
-
-  text: "#081B33",
-  textSecondary: "#263F59",
-
-  shadow: "rgba(20, 55, 90, 0.12)",
-
-  danger: "#DC2626",
-  dangerLight: "rgba(220, 38, 38, 0.10)",
-  inactive: "#71869B",
-};
-
-// =====================================
-// SUBTLE GLASS HIGHLIGHT
-// =====================================
-
-function GlassReflection() {
-  return (
-    <View
-      pointerEvents="none"
-      style={StyleSheet.absoluteFill}
-    >
-      <View style={styles.glassTopHighlight} />
-      <View style={styles.glassSideHighlight} />
-    </View>
-  );
-}
 
 // =====================================
 // PROFILE SCREEN
@@ -141,22 +100,12 @@ export default function ProfileScreen({ navigation }) {
         avatarUrl: profile?.avatar_url || null,
       });
 
-      setNotificationsOn(
-        profile?.notifications_enabled ?? true
-      );
-
-      setLocationOn(
-        profile?.location_enabled ?? true
-      );
-
+      setNotificationsOn(profile?.notifications_enabled ?? true);
+      setLocationOn(profile?.location_enabled ?? true);
     } catch (error) {
       console.log("PROFILE LOAD ERROR:", error.message);
 
-      Alert.alert(
-        "Error",
-        "Unable to load your account information."
-      );
-
+      Alert.alert("Error", "Unable to load your account information.");
     } finally {
       setLoading(false);
     }
@@ -209,16 +158,12 @@ export default function ProfileScreen({ navigation }) {
     switch (user?.userLevel?.toLowerCase()) {
       case "admin":
         return "Administrator";
-
       case "cashier":
         return "Cashier";
-
       case "operator":
         return "Bus Operator";
-
       case "user":
         return "Passenger";
-
       default:
         return "Unknown Role";
     }
@@ -271,11 +216,8 @@ export default function ProfileScreen({ navigation }) {
       const blob = await response.blob();
 
       const extension =
-        selectedImage.uri
-          .split(".")
-          .pop()
-          ?.split("?")[0]
-          ?.toLowerCase() || "jpg";
+        selectedImage.uri.split(".").pop()?.split("?")[0]?.toLowerCase() ||
+        "jpg";
 
       const allowedExtensions = ["jpg", "jpeg", "png", "webp"];
 
@@ -321,11 +263,7 @@ export default function ProfileScreen({ navigation }) {
         avatarUrl: photoUrl,
       }));
 
-      Alert.alert(
-        "Success",
-        "Your profile picture has been updated."
-      );
-
+      Alert.alert("Success", "Your profile picture has been updated.");
     } catch (error) {
       console.log("PROFILE PHOTO ERROR:", error.message);
 
@@ -333,7 +271,6 @@ export default function ProfileScreen({ navigation }) {
         "Upload Failed",
         error.message || "Unable to upload your profile picture."
       );
-
     } finally {
       setUploadingPhoto(false);
     }
@@ -350,10 +287,7 @@ export default function ProfileScreen({ navigation }) {
       "Remove Profile Picture",
       "Are you sure you want to remove your profile picture?",
       [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
+        { text: "Cancel", style: "cancel" },
         {
           text: "Remove",
           style: "destructive",
@@ -377,15 +311,10 @@ export default function ProfileScreen({ navigation }) {
                 "Success",
                 "Your profile picture has been removed."
               );
-
             } catch (error) {
               console.log("REMOVE PHOTO ERROR:", error.message);
 
-              Alert.alert(
-                "Error",
-                "Unable to remove your profile picture."
-              );
-
+              Alert.alert("Error", "Unable to remove your profile picture.");
             } finally {
               setUploadingPhoto(false);
             }
@@ -402,15 +331,12 @@ export default function ProfileScreen({ navigation }) {
   const handleNotificationToggle = async (value) => {
     try {
       if (value) {
-        const currentPermission =
-          await Notifications.getPermissionsAsync();
+        const currentPermission = await Notifications.getPermissionsAsync();
 
         let finalStatus = currentPermission.status;
 
         if (finalStatus !== "granted") {
-          const requested =
-            await Notifications.requestPermissionsAsync();
-
+          const requested = await Notifications.requestPermissionsAsync();
           finalStatus = requested.status;
         }
 
@@ -425,14 +351,10 @@ export default function ProfileScreen({ navigation }) {
 
       await savePreference("notifications_enabled", value);
       setNotificationsOn(value);
-
     } catch (error) {
       console.log("NOTIFICATION ERROR:", error.message);
 
-      Alert.alert(
-        "Error",
-        "Unable to update notification settings."
-      );
+      Alert.alert("Error", "Unable to update notification settings.");
     }
   };
 
@@ -451,7 +373,6 @@ export default function ProfileScreen({ navigation }) {
         if (finalStatus !== "granted") {
           const requested =
             await Location.requestForegroundPermissionsAsync();
-
           finalStatus = requested.status;
         }
 
@@ -466,14 +387,10 @@ export default function ProfileScreen({ navigation }) {
 
       await savePreference("location_enabled", value);
       setLocationOn(value);
-
     } catch (error) {
       console.log("LOCATION ERROR:", error.message);
 
-      Alert.alert(
-        "Error",
-        "Unable to update location settings."
-      );
+      Alert.alert("Error", "Unable to update location settings.");
     }
   };
 
@@ -483,10 +400,7 @@ export default function ProfileScreen({ navigation }) {
 
   const openGCashSettings = () => {
     if (user?.userLevel !== "operator") {
-      Alert.alert(
-        "Access Denied",
-        "Only bus operators can configure GCash."
-      );
+      Alert.alert("Access Denied", "Only bus operators can configure GCash.");
       return;
     }
 
@@ -498,43 +412,34 @@ export default function ProfileScreen({ navigation }) {
   // =====================================
 
   const handleLogout = () => {
-    Alert.alert(
-      "Log Out",
-      "Are you sure you want to log out?",
-      [
-        {
-          text: "Cancel",
-          style: "cancel",
+    Alert.alert("Log Out", "Are you sure you want to log out?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Log Out",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            setLoggingOut(true);
+
+            const { error } = await supabase.auth.signOut();
+
+            if (error) throw error;
+
+            setUser(null);
+            navigation.replace("Login");
+          } catch (error) {
+            console.log("LOGOUT ERROR:", error.message);
+
+            Alert.alert(
+              "Logout Failed",
+              "Unable to log out. Please try again."
+            );
+          } finally {
+            setLoggingOut(false);
+          }
         },
-        {
-          text: "Log Out",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              setLoggingOut(true);
-
-              const { error } = await supabase.auth.signOut();
-
-              if (error) throw error;
-
-              setUser(null);
-              navigation.replace("Login");
-
-            } catch (error) {
-              console.log("LOGOUT ERROR:", error.message);
-
-              Alert.alert(
-                "Logout Failed",
-                "Unable to log out. Please try again."
-              );
-
-            } finally {
-              setLoggingOut(false);
-            }
-          },
-        },
-      ]
-    );
+      },
+    ]);
   };
 
   // =====================================
@@ -597,25 +502,25 @@ export default function ProfileScreen({ navigation }) {
   };
 
   // =====================================
-  // LOADING
+  // LOADING SCREEN
   // =====================================
 
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <StatusBar
-          barStyle="dark-content"
-          backgroundColor={COLORS.background}
-        />
+        <StatusBar barStyle="dark-content" backgroundColor={C.background} />
+
+        <NeuView style={styles.loadingLogo}>
+          <Ionicons name="person" size={36} color={C.blue} />
+        </NeuView>
 
         <ActivityIndicator
           size="large"
-          color={COLORS.blue}
+          color={C.blue}
+          style={{ marginTop: 20 }}
         />
 
-        <Text style={styles.loadingText}>
-          Loading profile...
-        </Text>
+        <Text style={styles.loadingText}>Loading profile...</Text>
       </View>
     );
   }
@@ -626,23 +531,28 @@ export default function ProfileScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <StatusBar
-        barStyle="dark-content"
-        backgroundColor={COLORS.background}
-      />
+      <StatusBar barStyle="dark-content" backgroundColor={C.background} />
 
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
+        {/* PAGE HEADER */}
+
+        <View style={styles.pageHeader}>
+          <Text style={styles.greeting}>ACCOUNT</Text>
+          <Text style={styles.pageTitle}>My Profile</Text>
+          <Text style={styles.pageSubtitle}>
+            Manage your account and preferences
+          </Text>
+        </View>
+
         {/* PROFILE CARD */}
 
-        <View style={styles.profileCard}>
-          <GlassReflection />
-
+        <NeuCard style={styles.profileCard}>
           <View style={styles.profileContent}>
-            <View style={styles.avatarWrapper}>
-              <View style={styles.avatar}>
+            <NeuView style={styles.avatarOuter}>
+              <View style={styles.avatarInner}>
                 {user?.avatarUrl ? (
                   <Image
                     source={{ uri: user.avatarUrl }}
@@ -659,76 +569,60 @@ export default function ProfileScreen({ navigation }) {
                 style={styles.cameraButton}
                 onPress={handleChangePhoto}
                 disabled={uploadingPhoto}
+                activeOpacity={0.8}
               >
                 {uploadingPhoto ? (
-                  <ActivityIndicator
-                    color={COLORS.white}
-                    size="small"
-                  />
+                  <ActivityIndicator color={C.white} size="small" />
                 ) : (
-                  <Ionicons
-                    name="camera"
-                    size={18}
-                    color={COLORS.white}
-                  />
+                  <Ionicons name="camera" size={17} color={C.white} />
                 )}
               </TouchableOpacity>
-            </View>
+            </NeuView>
 
-            <Text style={styles.name}>
-              {user?.fullName || "User"}
-            </Text>
+            <Text style={styles.name}>{user?.fullName || "User"}</Text>
 
-            <Text style={styles.email}>
-              {user?.email || "—"}
-            </Text>
+            <Text style={styles.email}>{user?.email || "—"}</Text>
 
-            <View style={styles.badge}>
-              <Ionicons
-                name="checkmark-circle"
-                size={15}
-                color={COLORS.blue}
-              />
+            <NeuView inset style={styles.roleBadge}>
+              <Ionicons name="checkmark-circle" size={15} color={C.blue} />
 
-              <Text style={styles.badgeText}>
-                {getUserRole()}
-              </Text>
-            </View>
+              <Text style={styles.roleBadgeText}>{getUserRole()}</Text>
+            </NeuView>
 
             <View style={styles.photoActions}>
-              <TouchableOpacity
+              <NeuTouchable
+                small
+                style={styles.photoButton}
                 onPress={handleChangePhoto}
                 disabled={uploadingPhoto}
               >
-                <Text style={styles.photoActionText}>
-                  Change Photo
-                </Text>
-              </TouchableOpacity>
+                <Ionicons name="camera-outline" size={15} color={C.blue} />
+
+                <Text style={styles.photoActionText}>Change Photo</Text>
+              </NeuTouchable>
 
               {user?.avatarUrl && (
                 <TouchableOpacity
+                  style={styles.removePhotoButton}
                   onPress={handleRemovePhoto}
                   disabled={uploadingPhoto}
+                  activeOpacity={0.8}
                 >
-                  <Text style={styles.removePhotoText}>
-                    Remove
-                  </Text>
+                  <Ionicons name="trash-outline" size={15} color={C.danger} />
+
+                  <Text style={styles.removePhotoText}>Remove</Text>
                 </TouchableOpacity>
               )}
             </View>
           </View>
-        </View>
+        </NeuCard>
 
         {/* ACCOUNT INFORMATION */}
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>
-            Account Information
-          </Text>
+          <Text style={styles.sectionTitle}>Account Information</Text>
 
-          <View style={styles.card}>
-            <GlassReflection />
-
+          <NeuCard style={styles.card}>
             <View style={styles.cardContent}>
               <InfoRow
                 icon="person-outline"
@@ -740,7 +634,7 @@ export default function ProfileScreen({ navigation }) {
 
               <InfoRow
                 icon="mail-outline"
-                label="Email"
+                label="Email Address"
                 value={user?.email || "—"}
               />
 
@@ -748,7 +642,7 @@ export default function ProfileScreen({ navigation }) {
 
               <InfoRow
                 icon="call-outline"
-                label="Phone"
+                label="Phone Number"
                 value={user?.phone || "—"}
               />
 
@@ -760,67 +654,34 @@ export default function ProfileScreen({ navigation }) {
                 value={getUserRole()}
               />
             </View>
-          </View>
+          </NeuCard>
         </View>
 
         {/* OPERATOR SETTINGS */}
 
         {user?.userLevel === "operator" && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>
-              Operator Settings
-            </Text>
+            <Text style={styles.sectionTitle}>Operator Settings</Text>
 
-            <View style={styles.card}>
-              <GlassReflection />
-
+            <NeuCard style={styles.card}>
               <View style={styles.cardContent}>
-                <TouchableOpacity
-                  style={styles.row}
+                <LinkRow
+                  icon="wallet-outline"
+                  label="GCash Payment Settings"
+                  description="Manage your GCash number and QR code"
                   onPress={openGCashSettings}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.rowLeft}>
-                    <View style={styles.iconBox}>
-                      <Ionicons
-                        name="wallet-outline"
-                        size={20}
-                        color={COLORS.blue}
-                      />
-                    </View>
-
-                    <View style={styles.infoText}>
-                      <Text style={styles.rowLabel}>
-                        GCash Payment Settings
-                      </Text>
-
-                      <Text style={styles.rowValue}>
-                        Manage your GCash number and QR code
-                      </Text>
-                    </View>
-                  </View>
-
-                  <Ionicons
-                    name="chevron-forward"
-                    size={20}
-                    color={COLORS.inactive}
-                  />
-                </TouchableOpacity>
+                />
               </View>
-            </View>
+            </NeuCard>
           </View>
         )}
 
         {/* APP SETTINGS */}
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>
-            App Settings
-          </Text>
+          <Text style={styles.sectionTitle}>App Settings</Text>
 
-          <View style={styles.card}>
-            <GlassReflection />
-
+          <NeuCard style={styles.card}>
             <View style={styles.cardContent}>
               <ToggleRow
                 icon="notifications-outline"
@@ -840,19 +701,15 @@ export default function ProfileScreen({ navigation }) {
                 onToggle={handleLocationToggle}
               />
             </View>
-          </View>
+          </NeuCard>
         </View>
 
         {/* MORE */}
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>
-            More
-          </Text>
+          <Text style={styles.sectionTitle}>More</Text>
 
-          <View style={styles.card}>
-            <GlassReflection />
-
+          <NeuCard style={styles.card}>
             <View style={styles.cardContent}>
               <LinkRow
                 icon="document-text-outline"
@@ -881,7 +738,7 @@ export default function ProfileScreen({ navigation }) {
                 }
               />
             </View>
-          </View>
+          </NeuCard>
         </View>
 
         {/* LOGOUT */}
@@ -893,25 +750,23 @@ export default function ProfileScreen({ navigation }) {
           activeOpacity={0.85}
         >
           {loggingOut ? (
-            <ActivityIndicator color={COLORS.white} />
+            <ActivityIndicator color={C.white} />
           ) : (
             <>
-              <Ionicons
-                name="log-out-outline"
-                size={20}
-                color={COLORS.white}
-              />
+              <Ionicons name="log-out-outline" size={20} color={C.white} />
 
-              <Text style={styles.logoutText}>
-                Log Out
-              </Text>
+              <Text style={styles.logoutText}>Log Out</Text>
             </>
           )}
         </TouchableOpacity>
 
-        <Text style={styles.version}>
-          RouteX v2.1.0
-        </Text>
+        {/* FOOTER */}
+
+        <View style={styles.footer}>
+          <View style={styles.footerLine} />
+          <Text style={styles.footerText}>RouteX</Text>
+          <Text style={styles.footerSubtitle}>Version 2.1.0</Text>
+        </View>
       </ScrollView>
 
       {/* TERMS / PRIVACY MODAL */}
@@ -920,15 +775,14 @@ export default function ProfileScreen({ navigation }) {
         visible={modalVisible}
         transparent
         animationType="fade"
+        statusBarTranslucent
         onRequestClose={() => setModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalBox}>
-            <GlassReflection />
-
+          <NeuView style={styles.modalBox}>
             <View style={styles.modalContent}>
               <View style={styles.modalHeader}>
-                <View style={styles.modalIcon}>
+                <NeuView small style={styles.modalIcon}>
                   <Ionicons
                     name={
                       modalContent.title === "Terms & Conditions"
@@ -936,37 +790,31 @@ export default function ProfileScreen({ navigation }) {
                         : "shield-checkmark-outline"
                     }
                     size={23}
-                    color={COLORS.blue}
+                    color={C.blue}
                   />
-                </View>
+                </NeuView>
 
-                <Text style={styles.modalTitle}>
-                  {modalContent.title}
-                </Text>
+                <Text style={styles.modalTitle}>{modalContent.title}</Text>
               </View>
 
-              <ScrollView
-                style={styles.modalScroll}
-                showsVerticalScrollIndicator={false}
-              >
-                <Text style={styles.modalText}>
-                  {modalContent.body}
-                </Text>
-              </ScrollView>
+              <NeuView inset style={styles.modalScrollBox}>
+                <ScrollView
+                  style={styles.modalScroll}
+                  showsVerticalScrollIndicator={false}
+                >
+                  <Text style={styles.modalText}>{modalContent.body}</Text>
+                </ScrollView>
+              </NeuView>
 
-              <Pressable
+              <TouchableOpacity
                 onPress={() => setModalVisible(false)}
-                style={({ pressed }) => [
-                  styles.modalButton,
-                  pressed && styles.modalButtonPressed,
-                ]}
+                style={styles.modalButton}
+                activeOpacity={0.85}
               >
-                <Text style={styles.modalButtonText}>
-                  Close
-                </Text>
-              </Pressable>
+                <Text style={styles.modalButtonText}>Close</Text>
+              </TouchableOpacity>
             </View>
-          </View>
+          </NeuView>
         </View>
       </Modal>
     </View>
@@ -981,22 +829,13 @@ function InfoRow({ icon, label, value }) {
   return (
     <View style={styles.row}>
       <View style={styles.rowLeft}>
-        <View style={styles.iconBox}>
-          <Ionicons
-            name={icon}
-            size={19}
-            color={COLORS.blue}
-          />
-        </View>
+        <NeuView small style={styles.iconBox}>
+          <Ionicons name={icon} size={19} color={C.blue} />
+        </NeuView>
 
         <View style={styles.infoText}>
-          <Text style={styles.rowLabel}>
-            {label}
-          </Text>
-
-          <Text style={styles.rowValue}>
-            {value}
-          </Text>
+          <Text style={styles.rowLabel}>{label}</Text>
+          <Text style={styles.rowValue}>{value}</Text>
         </View>
       </View>
     </View>
@@ -1007,43 +846,25 @@ function InfoRow({ icon, label, value }) {
 // TOGGLE ROW
 // =====================================
 
-function ToggleRow({
-  icon,
-  label,
-  description,
-  value,
-  onToggle,
-}) {
+function ToggleRow({ icon, label, description, value, onToggle }) {
   return (
     <View style={styles.row}>
       <View style={styles.rowLeft}>
-        <View style={styles.iconBox}>
-          <Ionicons
-            name={icon}
-            size={19}
-            color={COLORS.blue}
-          />
-        </View>
+        <NeuView small style={styles.iconBox}>
+          <Ionicons name={icon} size={19} color={C.blue} />
+        </NeuView>
 
         <View style={styles.infoText}>
-          <Text style={styles.rowLabel}>
-            {label}
-          </Text>
-
-          <Text style={styles.rowValue}>
-            {description}
-          </Text>
+          <Text style={styles.rowLabel}>{label}</Text>
+          <Text style={styles.rowValue}>{description}</Text>
         </View>
       </View>
 
       <Switch
         value={value}
         onValueChange={onToggle}
-        trackColor={{
-          false: "#B8C9D9",
-          true: "#80B5E0",
-        }}
-        thumbColor={value ? COLORS.blue : "#F8FAFC"}
+        trackColor={{ false: "#B9C9E0", true: C.lightBlue }}
+        thumbColor={value ? C.blue : C.white}
       />
     </View>
   );
@@ -1053,32 +874,28 @@ function ToggleRow({
 // LINK ROW
 // =====================================
 
-function LinkRow({ icon, label, onPress }) {
+function LinkRow({ icon, label, description, onPress }) {
   return (
     <TouchableOpacity
       style={styles.row}
       onPress={onPress}
-      activeOpacity={0.7}
+      activeOpacity={0.75}
     >
       <View style={styles.rowLeft}>
-        <View style={styles.iconBox}>
-          <Ionicons
-            name={icon}
-            size={19}
-            color={COLORS.blue}
-          />
-        </View>
+        <NeuView small style={styles.iconBox}>
+          <Ionicons name={icon} size={19} color={C.blue} />
+        </NeuView>
 
-        <Text style={styles.rowLabel}>
-          {label}
-        </Text>
+        <View style={styles.infoText}>
+          <Text style={styles.rowLabel}>{label}</Text>
+
+          {description ? (
+            <Text style={styles.rowValue}>{description}</Text>
+          ) : null}
+        </View>
       </View>
 
-      <Ionicons
-        name="chevron-forward"
-        size={19}
-        color={COLORS.inactive}
-      />
+      <Ionicons name="chevron-forward" size={19} color={C.muted} />
     </TouchableOpacity>
   );
 }
@@ -1098,94 +915,90 @@ function Divider() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: C.background,
   },
+
+  content: {
+    padding: 22,
+    paddingBottom: 120,
+  },
+
+  // ---------- LOADING ----------
 
   loadingContainer: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: C.background,
     justifyContent: "center",
     alignItems: "center",
   },
 
+  loadingLogo: {
+    width: 80,
+    height: 80,
+    borderRadius: 26,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
   loadingText: {
+    color: C.textSecondary,
+    fontSize: 13,
     marginTop: 12,
-    color: COLORS.textSecondary,
-    fontWeight: "600",
   },
 
-  content: {
-    paddingTop: 5,
-    paddingBottom: 120,
+  // ---------- HEADER ----------
+
+  pageHeader: {
+    marginTop: 10,
+    marginBottom: 24,
   },
 
-  // =====================================
-  // GLASS HIGHLIGHTS
-  // =====================================
-
-  glassTopHighlight: {
-    position: "absolute",
-    top: 1,
-    left: 12,
-    right: 12,
-    height: 1,
-    backgroundColor: "rgba(255, 255, 255, 0.95)",
+  greeting: {
+    color: C.blue,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1.5,
   },
 
-  glassSideHighlight: {
-    position: "absolute",
-    top: 5,
-    left: 1,
-    bottom: 5,
-    width: 1,
-    backgroundColor: "rgba(255, 255, 255, 0.45)",
+  pageTitle: {
+    color: C.text,
+    fontSize: 26,
+    fontWeight: "900",
+    marginTop: 5,
   },
 
-  // =====================================
-  // PROFILE CARD
-  // =====================================
+  pageSubtitle: {
+    color: C.textSecondary,
+    fontSize: 12,
+    marginTop: 6,
+  },
+
+  // ---------- PROFILE CARD ----------
 
   profileCard: {
-    backgroundColor: COLORS.glass,
-    marginHorizontal: 22,
-    marginTop: 25,
     borderRadius: 28,
-    borderWidth: 1.5,
-    borderColor: COLORS.glassBorder,
-    overflow: "hidden",
-
-    elevation: 7,
-    shadowColor: "#FFFFFF",
-    shadowOffset: {
-      width: 0,
-      height: 5,
-    },
-    shadowOpacity: 0.20,
-    shadowRadius: 12,
+    marginBottom: 6,
   },
 
   profileContent: {
-    paddingVertical: 30,
+    paddingVertical: 28,
     paddingHorizontal: 20,
     alignItems: "center",
-    backgroundColor: "transparent",
-    zIndex: 2,
   },
 
-  avatarWrapper: {
-    borderWidth: 3,
-    borderColor: "rgba(255,255,255,0.95)",
-    borderRadius: 60,
-    padding: 4,
-    position: "relative",
-    backgroundColor: "transparent",
+  avatarOuter: {
+    width: 116,
+    height: 116,
+    borderRadius: 58,
+    justifyContent: "center",
+    alignItems: "center",
   },
 
-  avatar: {
-    width: 95,
-    height: 95,
+  avatarInner: {
+    width: 100,
+    height: 100,
     borderRadius: 50,
-    backgroundColor: "transparent",
+    backgroundColor: C.paleBlue,
     justifyContent: "center",
     alignItems: "center",
     overflow: "hidden",
@@ -1198,301 +1011,284 @@ const styles = StyleSheet.create({
 
   avatarText: {
     fontSize: 34,
-    fontWeight: "bold",
-    color: COLORS.blue,
+    fontWeight: "900",
+    color: C.blue,
   },
 
   cameraButton: {
     position: "absolute",
-    right: -3,
-    bottom: 0,
-    width: 34,
-    height: 34,
-    borderRadius: 18,
-    backgroundColor: COLORS.blue,
-    borderWidth: 2,
-    borderColor: COLORS.white,
+    right: -2,
+    bottom: 1,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: C.blue,
     justifyContent: "center",
     alignItems: "center",
-    elevation: 4,
-  },
-
-  photoActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 20,
-    marginTop: 16,
-  },
-
-  photoActionText: {
-    color: COLORS.blue,
-    fontWeight: "800",
-    textDecorationLine: "underline",
-  },
-
-  removePhotoText: {
-    color: COLORS.danger,
-    fontWeight: "700",
+    ...blueGlow,
   },
 
   name: {
     marginTop: 18,
-    fontSize: 25,
+    fontSize: 22,
     fontWeight: "900",
-    color: COLORS.text,
+    color: C.text,
     textAlign: "center",
   },
 
   email: {
     marginTop: 6,
-    color: COLORS.textSecondary,
-    fontSize: 13,
+    color: C.textSecondary,
+    fontSize: 12,
   },
 
-  badge: {
-    marginTop: 18,
+  roleBadge: {
+    marginTop: 16,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "transparent",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.80)",
-    paddingHorizontal: 15,
-    paddingVertical: 8,
     borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
   },
 
-  badgeText: {
-    marginLeft: 6,
-    color: COLORS.blue,
+  roleBadgeText: {
+    marginLeft: 7,
+    color: C.blue,
     fontWeight: "800",
     fontSize: 12,
   },
 
-  // =====================================
-  // SECTIONS
-  // =====================================
+  photoActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 14,
+    marginTop: 20,
+  },
+
+  photoButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 15,
+    paddingVertical: 11,
+    borderRadius: 14,
+  },
+
+  photoActionText: {
+    color: C.blue,
+    fontWeight: "800",
+    fontSize: 12,
+    marginLeft: 6,
+  },
+
+  removePhotoButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: C.paleRed,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    borderRadius: 14,
+  },
+
+  removePhotoText: {
+    color: C.danger,
+    fontWeight: "800",
+    fontSize: 12,
+    marginLeft: 5,
+  },
+
+  // ---------- SECTIONS ----------
 
   section: {
-    marginTop: 27,
+    marginTop: 22,
   },
 
   sectionTitle: {
-    marginBottom: 11,
-    paddingHorizontal: 24,
+    color: C.text,
+    fontSize: 18,
     fontWeight: "900",
-    fontSize: 14,
-    color: COLORS.text,
+    marginBottom: 16,
   },
 
-  // =====================================
-  // GLASS CARDS
-  // =====================================
-
   card: {
-    backgroundColor: COLORS.glass,
-    marginHorizontal: 22,
-    borderRadius: 23,
-    borderWidth: 1.3,
-    borderColor: COLORS.glassBorder,
-    overflow: "hidden",
-
-    elevation: 6,
-    shadowColor: "#FFFFFF",
-    shadowOffset: {
-      width: 0,
-      height: 5,
-    },
-    shadowOpacity: 0.18,
-    shadowRadius: 10,
+    borderRadius: 24,
   },
 
   cardContent: {
-    paddingHorizontal: 18,
-    backgroundColor: "transparent",
-    zIndex: 2,
+    paddingHorizontal: 17,
   },
 
-  // =====================================
-  // ROWS
-  // =====================================
+  // ---------- ROWS ----------
 
   row: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 17,
-    backgroundColor: "transparent",
+    paddingVertical: 15,
+    minHeight: 76,
   },
 
   rowLeft: {
     flexDirection: "row",
     alignItems: "center",
     flex: 1,
-    backgroundColor: "transparent",
+    paddingRight: 8,
   },
 
   infoText: {
     flex: 1,
-    backgroundColor: "transparent",
   },
 
   iconBox: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
-    backgroundColor: "transparent",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.75)",
+    width: 46,
+    height: 46,
+    borderRadius: 16,
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 14,
+    marginRight: 13,
   },
 
   rowLabel: {
-    fontWeight: "800",
-    color: COLORS.text,
+    fontWeight: "900",
+    color: C.text,
     fontSize: 13,
   },
 
   rowValue: {
-    color: COLORS.textSecondary,
-    marginTop: 4,
-    fontSize: 12,
+    color: C.textSecondary,
+    marginTop: 5,
+    fontSize: 11,
+    lineHeight: 16,
   },
 
   divider: {
-    height: 1,
-    backgroundColor: "rgba(255,255,255,0.85)",
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: C.inset,
+    marginLeft: 59,
   },
 
-  // =====================================
-  // LOGOUT
-  // =====================================
+  // ---------- LOGOUT ----------
 
   logoutButton: {
-    backgroundColor: COLORS.danger,
-    marginHorizontal: 22,
-    marginTop: 20,
-    borderRadius: 17,
-    paddingVertical: 17,
+    backgroundColor: C.danger,
+    marginTop: 28,
+    borderRadius: 16,
+    paddingVertical: 16,
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.65)",
-
-    shadowColor: COLORS.shadow,
-    shadowOffset: {
-      width: 0,
-      height: 5,
-    },
-    shadowOpacity: 1,
-    shadowRadius: 9,
-    elevation: 5,
+    ...redGlow,
   },
 
   logoutText: {
-    color: COLORS.white,
+    color: C.white,
     marginLeft: 10,
-    fontWeight: "800",
+    fontWeight: "900",
     fontSize: 14,
   },
 
-  version: {
-    textAlign: "center",
-    marginTop: 20,
-    color: COLORS.textSecondary,
-    fontSize: 11,
-    fontWeight: "600",
+  // ---------- FOOTER ----------
+
+  footer: {
+    alignItems: "center",
+    marginTop: 28,
+    marginBottom: 10,
   },
 
-  // =====================================
-  // MODAL
-  // =====================================
+  footerLine: {
+    width: 45,
+    height: 4,
+    borderRadius: 5,
+    backgroundColor: C.secondary,
+    marginBottom: 12,
+  },
+
+  footerText: {
+    color: C.blue,
+    fontSize: 14,
+    fontWeight: "900",
+    letterSpacing: 1,
+  },
+
+  footerSubtitle: {
+    color: C.textSecondary,
+    fontSize: 10,
+    marginTop: 5,
+  },
+
+  // ---------- MODAL ----------
 
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(8,27,51,0.42)",
+    backgroundColor: "rgba(22, 52, 107, 0.45)",
     justifyContent: "center",
     alignItems: "center",
-    paddingVertical: 30,
-    paddingHorizontal: 20,
+    padding: 22,
   },
 
   modalBox: {
-  backgroundColor: "rgba(255, 255, 255, 0.92)",
-  width: "100%",
-  maxWidth: 420,
-  maxHeight: "80%",
-  borderRadius: 24,
-  borderWidth: 1.5,
-  borderColor: "rgba(255, 255, 255, 0.98)",
-  overflow: "hidden",
-
-  elevation: 8,
-  shadowColor: "#FFFFFF",
-  shadowOffset: {
-    width: 0,
-    height: 6,
+    width: "100%",
+    maxWidth: 400,
+    maxHeight: "82%",
+    borderRadius: 26,
   },
-  shadowOpacity: 0.20,
-  shadowRadius: 12,
-},
 
-modalContent: {
-  padding: 22,
-  backgroundColor: "rgba(255, 255, 255, 0.92)",
-  zIndex: 2,
-  flexShrink: 1,
-},
+  modalContent: {
+    padding: 20,
+    flexShrink: 1,
+  },
 
-modalIcon: {
-  width: 42,
-  height: 42,
-  borderRadius: 13,
-  backgroundColor: "rgba(255, 255, 255, 0.85)",
-  borderWidth: 1,
-  borderColor: "rgba(255, 255, 255, 0.95)",
-  justifyContent: "center",
-  alignItems: "center",
-  marginRight: 12,
-},
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 18,
+  },
+
+  modalIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 15,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
 
   modalTitle: {
-    fontSize: 18,
+    fontSize: 19,
     fontWeight: "900",
-    color: COLORS.text,
+    color: C.text,
     flex: 1,
   },
 
-  modalScroll: {
+  modalScrollBox: {
+    borderRadius: 18,
+    padding: 14,
     marginBottom: 18,
     flexShrink: 1,
   },
 
+  modalScroll: {
+    flexShrink: 1,
+  },
+
   modalText: {
-    color: COLORS.textSecondary,
-    lineHeight: 23,
-    fontSize: 13,
+    color: C.textSecondary,
+    lineHeight: 22,
+    fontSize: 12,
   },
 
   modalButton: {
-    backgroundColor: COLORS.blue,
+    backgroundColor: C.blue,
     padding: 14,
-    borderRadius: 13,
+    borderRadius: 14,
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.65)",
+    ...blueGlow,
   },
 
   modalButtonText: {
-    color: COLORS.white,
+    color: C.white,
     fontWeight: "900",
     fontSize: 14,
-  },
-
-  modalButtonPressed: {
-    backgroundColor: COLORS.cyan,
-    transform: [{ scale: 0.98 }],
   },
 });

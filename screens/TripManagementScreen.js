@@ -1,5 +1,6 @@
 
 import React, { useCallback, useState } from "react";
+
 import {
   View,
   Text,
@@ -12,39 +13,26 @@ import {
 
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
+
 import { supabase } from "../config/supabase";
 import CustomAlert from "../components/CustomAlert";
 
+import {
+  C,
+  NeuView,
+  NeuTouchable,
+  NeuCard,
+} from "../theme/theme";
+
 // =====================================
-// THEME COLORS
+// ROUTEX - TRIP MANAGEMENT
+// BLUE SOFT NEUMORPHISM
 // =====================================
-const COLORS = {
-  background: "#F1F5F9",
-
-  // EXACT SAME COLOR FOR ALL CARD SURFACES
-  card: "#FFFFFF",
-  cardBorder: "#FFFFFF",
-
-  primary: "#286DF6",
-  darkBlue: "#145DA8",
-
-  text: "#172B45",
-  secondary: "#64748B",
-  muted: "#94A3B8",
-
-  green: "#16A34A",
-  lightGreen: "#DCFCE7",
-
-  orange: "#D97706",
-  lightOrange: "#FEF3C7",
-
-  lightBlue: "#DBEAFE",
-  red: "#DC2626",
-};
 
 export default function TripManagementScreen({ navigation }) {
   const [buses, setBuses] = useState([]);
   const [trips, setTrips] = useState([]);
+
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -55,6 +43,10 @@ export default function TripManagementScreen({ navigation }) {
     type: "info",
   });
 
+  // =====================================
+  // ALERT
+  // =====================================
+
   const showAlert = (title, message, type = "info") => {
     setAlertData({
       visible: true,
@@ -64,9 +56,17 @@ export default function TripManagementScreen({ navigation }) {
     });
   };
 
+  const closeAlert = () => {
+    setAlertData((previous) => ({
+      ...previous,
+      visible: false,
+    }));
+  };
+
   // =====================================
   // LOAD BUSES AND TRIPS
   // =====================================
+
   const loadData = async (refresh = false, silent = false) => {
     try {
       if (refresh) {
@@ -81,7 +81,10 @@ export default function TripManagementScreen({ navigation }) {
       } = await supabase.auth.getUser();
 
       if (authError) throw authError;
-      if (!user) throw new Error("You are not logged in.");
+
+      if (!user) {
+        throw new Error("You are not logged in.");
+      }
 
       const [busResult, tripResult] = await Promise.all([
         supabase
@@ -133,6 +136,7 @@ export default function TripManagementScreen({ navigation }) {
           "error"
         );
       }
+
     } finally {
       if (!silent) {
         setLoading(false);
@@ -145,6 +149,7 @@ export default function TripManagementScreen({ navigation }) {
   // =====================================
   // REALTIME SUBSCRIPTION
   // =====================================
+
   useFocusEffect(
     useCallback(() => {
       let isActive = true;
@@ -235,6 +240,7 @@ export default function TripManagementScreen({ navigation }) {
   // =====================================
   // GET BUS TRIP
   // =====================================
+
   const getBusTrip = (busId) => {
     const busTrips = trips.filter(
       (trip) => String(trip.bus_id) === String(busId)
@@ -248,22 +254,38 @@ export default function TripManagementScreen({ navigation }) {
   };
 
   // =====================================
-  // OPEN BUS MANAGEMENT
+  // OPEN BUS DOCKING
   // =====================================
-  const openBusManagement = (bus) => {
-    navigation.navigate("BusManagement", {
+
+  const openBusDocking = (bus) => {
+    const trip = getBusTrip(bus.bus_id);
+
+    if (!trip) {
+      showAlert(
+        "No Trip Available",
+        "This bus has no planned or active trip. Please create or select a trip first.",
+        "warning"
+      );
+
+      return;
+    }
+
+    navigation.navigate("OperatorDocking", {
+      tripId: trip.trip_id,
       busId: bus.bus_id,
     });
   };
 
   // =====================================
-  // BUS STATUS STYLE
+  // BUS STATUS
   // =====================================
+
   const getStatusStyle = (status) => {
     if (status === "in_transit") {
       return {
         badge: styles.transitBadge,
         dot: styles.transitDot,
+        text: styles.transitText,
       };
     }
 
@@ -271,24 +293,27 @@ export default function TripManagementScreen({ navigation }) {
       return {
         badge: styles.dockedBadge,
         dot: styles.dockedDot,
+        text: styles.dockedText,
       };
     }
 
     return {
       badge: styles.offlineBadge,
       dot: styles.offlineDot,
+      text: styles.offlineText,
     };
   };
 
   // =====================================
   // LOADING SCREEN
   // =====================================
+
   if (loading) {
     return (
-      <View style={styles.center}>
+      <View style={styles.loadingContainer}>
         <ActivityIndicator
           size="large"
-          color={COLORS.primary}
+          color={C.blue}
         />
 
         <Text style={styles.loadingText}>
@@ -300,12 +325,7 @@ export default function TripManagementScreen({ navigation }) {
           title={alertData.title}
           message={alertData.message}
           type={alertData.type}
-          onClose={() =>
-            setAlertData((previous) => ({
-              ...previous,
-              visible: false,
-            }))
-          }
+          onClose={closeAlert}
         />
       </View>
     );
@@ -314,6 +334,7 @@ export default function TripManagementScreen({ navigation }) {
   // =====================================
   // MAIN UI
   // =====================================
+
   return (
     <>
       <ScrollView
@@ -324,14 +345,15 @@ export default function TripManagementScreen({ navigation }) {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={() => loadData(true)}
-            tintColor={COLORS.primary}
-            colors={[COLORS.primary]}
+            tintColor={C.blue}
+            colors={[C.blue]}
           />
         }
       >
         {/* HEADER */}
+
         <View style={styles.header}>
-          <View>
+          <View style={styles.headerText}>
             <Text style={styles.eyebrow}>
               ROUTEX OPERATOR
             </Text>
@@ -345,30 +367,31 @@ export default function TripManagementScreen({ navigation }) {
             </Text>
           </View>
 
-          <TouchableOpacity
+          <NeuTouchable
+            small
             style={styles.refreshButton}
-            activeOpacity={0.7}
             onPress={() => loadData(true)}
           >
             <Ionicons
               name="refresh"
-              size={21}
-              color={COLORS.primary}
+              size={20}
+              color={C.blue}
             />
-          </TouchableOpacity>
+          </NeuTouchable>
         </View>
 
         {/* SUMMARY CARD */}
+
         <View style={styles.summaryCard}>
           <View style={styles.summaryIcon}>
             <Ionicons
               name="bus"
               size={27}
-              color={COLORS.primary}
+              color={C.white}
             />
           </View>
 
-          <View>
+          <View style={styles.summaryInfo}>
             <Text style={styles.summaryNumber}>
               {buses.length}
             </Text>
@@ -377,9 +400,17 @@ export default function TripManagementScreen({ navigation }) {
               Buses assigned to you
             </Text>
           </View>
+
+          <Ionicons
+            name="bus-outline"
+            size={65}
+            color="rgba(255,255,255,0.17)"
+            style={styles.summaryDecoration}
+          />
         </View>
 
         {/* SECTION HEADER */}
+
         <View style={styles.sectionHeader}>
           <View>
             <Text style={styles.sectionTitle}>
@@ -387,27 +418,34 @@ export default function TripManagementScreen({ navigation }) {
             </Text>
 
             <Text style={styles.sectionSubtitle}>
-              Tap a bus to open its management page
+              Tap a bus to open its docking page
             </Text>
           </View>
 
-          <View style={styles.countBadge}>
+          <NeuView
+            inset
+            style={styles.countBadge}
+          >
             <Text style={styles.countText}>
               {buses.length}
             </Text>
-          </View>
+          </NeuView>
         </View>
 
         {/* EMPTY STATE */}
+
         {buses.length === 0 ? (
-          <View style={styles.emptyCard}>
-            <View style={styles.emptyIcon}>
+          <NeuCard style={styles.emptyCard}>
+            <NeuView
+              inset
+              style={styles.emptyIcon}
+            >
               <Ionicons
                 name="bus-outline"
-                size={42}
-                color={COLORS.primary}
+                size={36}
+                color={C.blue}
               />
-            </View>
+            </NeuView>
 
             <Text style={styles.emptyTitle}>
               No Buses Found
@@ -417,31 +455,56 @@ export default function TripManagementScreen({ navigation }) {
               No buses are currently assigned to your account.
               Please check the operator_id column in your buses table.
             </Text>
-          </View>
+
+            <NeuTouchable
+              small
+              style={styles.emptyRefreshButton}
+              onPress={() => loadData(true)}
+            >
+              <Ionicons
+                name="refresh"
+                size={16}
+                color={C.blue}
+              />
+
+              <Text style={styles.emptyRefreshText}>
+                Refresh
+              </Text>
+            </NeuTouchable>
+          </NeuCard>
         ) : (
           buses.map((bus) => {
             const trip = getBusTrip(bus.bus_id);
-            const statusStyle = getStatusStyle(bus.bus_status);
+
+            const statusStyle = getStatusStyle(
+              bus.bus_status
+            );
 
             return (
-              <TouchableOpacity
+              <NeuTouchable
                 key={String(bus.bus_id)}
                 style={styles.busCard}
-                activeOpacity={0.75}
-                onPress={() => openBusManagement(bus)}
+                onPress={() => openBusDocking(bus)}
               >
                 {/* BUS INFORMATION */}
+
                 <View style={styles.busTopRow}>
-                  <View style={styles.busIcon}>
+                  <NeuView
+                    inset
+                    style={styles.busIcon}
+                  >
                     <Ionicons
                       name="bus"
-                      size={27}
-                      color={COLORS.primary}
+                      size={25}
+                      color={C.blue}
                     />
-                  </View>
+                  </NeuView>
 
                   <View style={styles.busInfo}>
-                    <Text style={styles.busName}>
+                    <Text
+                      style={styles.busName}
+                      numberOfLines={1}
+                    >
                       {bus.bus_name || "Unnamed Bus"}
                     </Text>
 
@@ -463,7 +526,12 @@ export default function TripManagementScreen({ navigation }) {
                       ]}
                     />
 
-                    <Text style={styles.statusText}>
+                    <Text
+                      style={[
+                        styles.statusText,
+                        statusStyle.text,
+                      ]}
+                    >
                       {(bus.bus_status || "offline").replace(
                         /_/g,
                         " "
@@ -473,12 +541,13 @@ export default function TripManagementScreen({ navigation }) {
                 </View>
 
                 {/* BUS DETAILS */}
+
                 <View style={styles.detailsRow}>
                   <View style={styles.detailItem}>
                     <Ionicons
                       name="car-outline"
                       size={16}
-                      color={COLORS.secondary}
+                      color={C.secondary}
                     />
 
                     <Text style={styles.detailText}>
@@ -490,7 +559,7 @@ export default function TripManagementScreen({ navigation }) {
                     <Ionicons
                       name="people-outline"
                       size={16}
-                      color={COLORS.secondary}
+                      color={C.secondary}
                     />
 
                     <Text style={styles.detailText}>
@@ -502,16 +571,32 @@ export default function TripManagementScreen({ navigation }) {
                 <View style={styles.divider} />
 
                 {/* TRIP INFORMATION */}
+
                 {trip ? (
                   <View style={styles.tripRow}>
-                    <View style={{ flex: 1 }}>
+                    <View style={styles.tripIcon}>
+                      <Ionicons
+                        name={
+                          trip.status === "active"
+                            ? "navigate"
+                            : "calendar-outline"
+                        }
+                        size={17}
+                        color={C.blue}
+                      />
+                    </View>
+
+                    <View style={styles.tripInfo}>
                       <Text style={styles.tripLabel}>
                         {trip.status === "active"
                           ? "CURRENT TRIP"
                           : "PLANNED TRIP"}
                       </Text>
 
-                      <Text style={styles.destination}>
+                      <Text
+                        style={styles.destination}
+                        numberOfLines={1}
+                      >
                         {trip.destination || "No destination"}
                       </Text>
 
@@ -534,7 +619,7 @@ export default function TripManagementScreen({ navigation }) {
                     <Ionicons
                       name="information-circle-outline"
                       size={18}
-                      color={COLORS.muted}
+                      color={C.muted}
                     />
 
                     <Text style={styles.noTripText}>
@@ -543,19 +628,22 @@ export default function TripManagementScreen({ navigation }) {
                   </View>
                 )}
 
-                {/* MANAGE BUTTON */}
+                {/* MANAGE ACTION */}
+
                 <View style={styles.manageRow}>
                   <Text style={styles.manageText}>
-                    Manage this bus
+                    Manage bus docking
                   </Text>
 
-                  <Ionicons
-                    name="arrow-forward-circle"
-                    size={23}
-                    color={COLORS.primary}
-                  />
+                  <View style={styles.manageIcon}>
+                    <Ionicons
+                      name="arrow-forward"
+                      size={17}
+                      color={C.white}
+                    />
+                  </View>
                 </View>
-              </TouchableOpacity>
+              </NeuTouchable>
             );
           })
         )}
@@ -564,17 +652,13 @@ export default function TripManagementScreen({ navigation }) {
       </ScrollView>
 
       {/* ALERT */}
+
       <CustomAlert
         visible={alertData.visible}
         title={alertData.title}
         message={alertData.message}
         type={alertData.type}
-        onClose={() =>
-          setAlertData((previous) => ({
-            ...previous,
-            visible: false,
-          }))
-        }
+        onClose={closeAlert}
       />
     </>
   );
@@ -583,262 +667,283 @@ export default function TripManagementScreen({ navigation }) {
 // =====================================
 // STYLES
 // =====================================
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: C.background,
   },
 
   content: {
-    paddingHorizontal: 18,
-    paddingTop: 20,
-    paddingBottom:60,
+    paddingHorizontal: 20,
+    paddingTop: 22,
+    paddingBottom: 60,
   },
 
-  center: {
+  loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: COLORS.background,
+    backgroundColor: C.background,
   },
 
   loadingText: {
-    marginTop: 12,
-    color: COLORS.secondary,
+    marginTop: 14,
+    color: C.textSecondary,
     fontSize: 13,
-    fontWeight: "600",
+    fontWeight: "700",
   },
 
   // HEADER
+
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 22,
+    marginBottom: 25,
+  },
+
+  headerText: {
+    flex: 1,
+    paddingRight: 12,
   },
 
   eyebrow: {
     fontSize: 10,
     fontWeight: "900",
-    color: COLORS.primary,
+    color: C.blue,
     letterSpacing: 1.5,
-    marginBottom: 5,
+    marginBottom: 6,
   },
 
   title: {
     fontSize: 25,
     fontWeight: "900",
-    color: COLORS.text,
+    color: C.text,
+    letterSpacing: -0.6,
   },
 
   subtitle: {
     fontSize: 12,
-    color: COLORS.secondary,
-    marginTop: 5,
+    color: C.muted,
+    marginTop: 6,
+    fontWeight: "600",
   },
 
   refreshButton: {
-    width: 44,
-    height: 44,
+    width: 46,
+    height: 46,
     borderRadius: 15,
-    backgroundColor: COLORS.card,
-    borderWidth: 1,
-    borderColor: COLORS.cardBorder,
+    backgroundColor: C.surface,
     justifyContent: "center",
     alignItems: "center",
-    shadowColor: "#64748B",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.08,
-    shadowRadius: 7,
-    elevation: 2,
   },
 
-  // SUMMARY CARD
+  // SUMMARY
+
   summaryCard: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: COLORS.primary,
-    borderRadius: 20,
+    backgroundColor: C.blue,
+    borderRadius: 23,
     padding: 20,
-    marginBottom: 27,
-    borderWidth: 1,
-    borderColor: COLORS.cardBorder,
-    shadowColor: "#64748B",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
+    marginBottom: 29,
+    minHeight: 112,
+    overflow: "hidden",
+
+    shadowColor: C.blue,
+    shadowOffset: {
+      width: 5,
+      height: 7,
+    },
+    shadowOpacity: 0.23,
     shadowRadius: 10,
-    elevation: 3,
+    elevation: 5,
   },
 
   summaryIcon: {
     width: 53,
     height: 53,
-    borderRadius: 16,
-    backgroundColor: COLORS.card,
+    borderRadius: 17,
+    backgroundColor: C.secondary,
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 15,
+    marginRight: 16,
+  },
+
+  summaryInfo: {
+    flex: 1,
   },
 
   summaryNumber: {
-    fontSize: 27,
+    fontSize: 29,
     fontWeight: "900",
-    color: COLORS.cardBorder,
+    color: C.white,
   },
 
   summaryLabel: {
     fontSize: 12,
-    color: COLORS.cardBorder,
+    color: C.white,
     marginTop: 3,
     fontWeight: "600",
+    opacity: 0.95,
+  },
+
+  summaryDecoration: {
+    position: "absolute",
+    right: 15,
+    bottom: -10,
   },
 
   // SECTION HEADER
+
   sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 14,
+    marginBottom: 17,
   },
 
   sectionTitle: {
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: "900",
-    color: COLORS.text,
+    color: C.text,
   },
 
   sectionSubtitle: {
     fontSize: 11,
-    color: COLORS.secondary,
-    marginTop: 4,
+    color: C.muted,
+    marginTop: 5,
+    fontWeight: "500",
   },
 
   countBadge: {
-    minWidth: 32,
-    height: 32,
-    borderRadius: 11,
-    backgroundColor: COLORS.card,
-    borderWidth: 1,
-    borderColor: COLORS.cardBorder,
+    minWidth: 37,
+    height: 37,
+    borderRadius: 13,
     justifyContent: "center",
     alignItems: "center",
-    paddingHorizontal: 9,
+    paddingHorizontal: 10,
   },
 
   countText: {
-    color: COLORS.primary,
-    fontSize: 12,
+    color: C.blue,
+    fontSize: 13,
     fontWeight: "900",
   },
 
-  // EMPTY CARD
+  // EMPTY STATE
+
   emptyCard: {
-    backgroundColor: COLORS.card,
-    borderRadius: 19,
     padding: 27,
     alignItems: "center",
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: COLORS.cardBorder,
-    shadowColor: "#64748B",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.07,
-    shadowRadius: 9,
-    elevation: 2,
+    borderRadius: 23,
+    backgroundColor: C.surface,
   },
 
   emptyIcon: {
-    width: 72,
-    height: 72,
-    borderRadius: 22,
-    backgroundColor: COLORS.card,
-    alignItems: "center",
+    width: 75,
+    height: 75,
+    borderRadius: 23,
     justifyContent: "center",
+    alignItems: "center",
   },
 
   emptyTitle: {
     fontSize: 17,
     fontWeight: "900",
-    color: COLORS.text,
-    marginTop: 13,
+    color: C.text,
+    marginTop: 18,
   },
 
   emptyText: {
-    color: COLORS.secondary,
+    color: C.muted,
     fontSize: 12,
     textAlign: "center",
     lineHeight: 19,
-    marginTop: 8,
+    marginTop: 9,
+  },
+
+  emptyRefreshButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 13,
+    backgroundColor: C.surface,
+  },
+
+  emptyRefreshText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: C.blue,
   },
 
   // BUS CARD
+
   busCard: {
-    backgroundColor: COLORS.card,
-    borderRadius: 19,
-    padding: 17,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: COLORS.cardBorder,
-    shadowColor: "#64748B",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 9,
-    elevation: 3,
+    backgroundColor: C.surface,
+    borderRadius: 23,
+    padding: 18,
+    marginBottom: 19,
   },
 
   busTopRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: COLORS.card,
   },
 
   busIcon: {
-    width: 49,
-    height: 49,
-    borderRadius: 15,
-    backgroundColor: COLORS.card,
+    width: 50,
+    height: 50,
+    borderRadius: 16,
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 12,
+    marginRight: 13,
   },
 
   busInfo: {
     flex: 1,
-    backgroundColor: COLORS.card,
+    paddingRight: 7,
   },
 
   busName: {
     fontSize: 15,
     fontWeight: "900",
-    color: COLORS.text,
+    color: C.text,
   },
 
   plate: {
     fontSize: 12,
-    color: COLORS.secondary,
-    marginTop: 4,
+    color: C.muted,
+    marginTop: 5,
+    fontWeight: "600",
   },
 
   // STATUS BADGES
+
   statusBadge: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 9,
-    paddingVertical: 7,
-    borderRadius: 20,
-    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 12,
+    gap: 6,
   },
 
   transitBadge: {
-    backgroundColor: "#DCFCE7",
+    backgroundColor: "#DDF3E8",
   },
 
   dockedBadge: {
-    backgroundColor: "#DBEAFE",
+    backgroundColor: C.paleBlue,
   },
 
   offlineBadge: {
-    backgroundColor: "#E9EEF3",
+    backgroundColor: "#E1E9F6",
   },
 
   statusDot: {
@@ -848,114 +953,148 @@ const styles = StyleSheet.create({
   },
 
   transitDot: {
-    backgroundColor: COLORS.green,
+    backgroundColor: "#249B62",
   },
 
   dockedDot: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: C.blue,
   },
 
   offlineDot: {
-    backgroundColor: COLORS.muted,
+    backgroundColor: C.muted,
   },
 
   statusText: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: "#334155",
+    fontSize: 9,
+    fontWeight: "900",
     textTransform: "capitalize",
   },
 
+  transitText: {
+    color: "#207A50",
+  },
+
+  dockedText: {
+    color: C.blue,
+  },
+
+  offlineText: {
+    color: C.muted,
+  },
+
   // BUS DETAILS
+
   detailsRow: {
     flexDirection: "row",
-    marginTop: 17,
-    gap: 20,
-    backgroundColor: COLORS.card,
+    alignItems: "center",
+    marginTop: 19,
+    gap: 22,
   },
 
   detailItem: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    backgroundColor: COLORS.card,
+    gap: 7,
   },
 
   detailText: {
     fontSize: 12,
-    color: COLORS.secondary,
-    fontWeight: "600",
+    color: C.textSecondary,
+    fontWeight: "700",
   },
 
   divider: {
     height: 1,
-    backgroundColor: "rgba(148, 163, 184, 0.20)",
-    marginVertical: 15,
+    backgroundColor: "#D5E0F0",
+    marginVertical: 17,
   },
 
   // TRIP INFORMATION
+
   tripRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: COLORS.card,
+  },
+
+  tripIcon: {
+    width: 39,
+    height: 39,
+    borderRadius: 13,
+    backgroundColor: C.inset,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+
+  tripInfo: {
+    flex: 1,
   },
 
   tripLabel: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: COLORS.muted,
-    letterSpacing: 0.8,
+    fontSize: 9,
+    fontWeight: "900",
+    color: C.muted,
+    letterSpacing: 1,
   },
 
   destination: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "900",
-    color: COLORS.text,
+    color: C.text,
     marginTop: 5,
   },
 
   tripStatus: {
     fontSize: 11,
-    fontWeight: "700",
+    fontWeight: "800",
     marginTop: 5,
   },
 
   activeText: {
-    color: COLORS.green,
+    color: "#249B62",
   },
 
   plannedText: {
-    color: COLORS.orange,
+    color: "#C18424",
   },
 
   noTripRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 7,
-    backgroundColor: COLORS.card,
+    gap: 8,
+    paddingVertical: 5,
   },
 
   noTripText: {
     fontSize: 12,
-    color: COLORS.secondary,
+    color: C.muted,
     fontWeight: "600",
   },
 
-  // MANAGE BUTTON
+  // MANAGE ACTION
+
   manageRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     borderTopWidth: 1,
-    borderTopColor: "rgba(148, 163, 184, 0.20)",
-    paddingTop: 12,
-    marginTop: 14,
-    backgroundColor: COLORS.card,
+    borderTopColor: "#D5E0F0",
+    paddingTop: 14,
+    marginTop: 16,
   },
 
   manageText: {
     fontSize: 12,
-    fontWeight: "800",
-    color: COLORS.primary,
+    fontWeight: "900",
+    color: C.blue,
+  },
+
+  manageIcon: {
+    width: 31,
+    height: 31,
+    borderRadius: 11,
+    backgroundColor: C.blue,
+    justifyContent: "center",
+    alignItems: "center",
   },
 });
