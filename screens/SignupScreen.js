@@ -1,3 +1,4 @@
+
 import React, { useState } from "react";
 
 import {
@@ -13,10 +14,12 @@ import {
   Platform,
   StatusBar,
   Image,
+  Modal,
 } from "react-native";
 
 import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "../config/supabase";
+
 import {
   C,
   NeuView,
@@ -24,6 +27,116 @@ import {
   NeuCard,
   blueGlow,
 } from "../theme/theme";
+
+// ========================================
+// TERMS AND PRIVACY CONTENT
+// ========================================
+
+const TERMS_CONTENT = `
+1. ACCEPTANCE OF TERMS
+
+By creating a RouteX account, you agree to follow these Terms and Conditions. If you do not agree, please do not use the application.
+
+2. ABOUT ROUTEX
+
+RouteX is a bus transportation application designed to help passengers access transportation-related services, including viewing available trips, booking seats, tracking buses, and receiving notifications.
+
+3. USER ACCOUNT
+
+You are responsible for providing accurate information when creating your account. You must keep your login credentials confidential and are responsible for activities performed using your account.
+
+4. BOOKING AND PAYMENTS
+
+Users must review their booking details before confirming a reservation. Payment instructions and applicable charges will be displayed through the application.
+
+5. CANCELLATIONS
+
+Booking cancellations are subject to the applicable cancellation rules and policies displayed in the application.
+
+6. LOCATION SERVICES
+
+Some RouteX features may require location access. Location information may be used to support bus tracking and transportation-related features.
+
+7. PROHIBITED ACTIVITIES
+
+Users must not misuse the application, provide false information, interfere with its operation, or attempt to access another person's account.
+
+8. SERVICE AVAILABILITY
+
+RouteX may experience interruptions due to maintenance, connectivity problems, or other technical issues. We cannot guarantee uninterrupted service.
+
+9. CHANGES TO THESE TERMS
+
+These Terms and Conditions may be updated when necessary. Updated terms will be made available through the application.
+
+10. CONTACT
+
+For questions or concerns regarding these terms, please contact the RouteX development or administration team.
+`;
+
+const PRIVACY_CONTENT = `
+1. INTRODUCTION
+
+RouteX respects your privacy. This Privacy Policy explains what information may be collected and how it may be used when you use the application.
+
+2. INFORMATION WE COLLECT
+
+Depending on the features you use, RouteX may collect:
+
+• Full name
+• Email address
+• Phone number
+• Account information
+• Booking and transaction information
+• Location information when location features are used
+• Device information required for application notifications
+
+3. HOW WE USE YOUR INFORMATION
+
+Your information may be used to:
+
+• Create and manage your account
+• Process bus bookings
+• Display trip and bus information
+• Support live bus tracking
+• Send booking updates and notifications
+• Improve application performance and security
+• Provide customer support
+
+4. LOCATION INFORMATION
+
+RouteX may use your device's location when you use location-dependent features. For example, location information may be used to support live bus tracking.
+
+Location access should only be requested when required by a feature.
+
+5. DATA STORAGE AND SECURITY
+
+RouteX uses its connected backend services to store and process account and application information. Reasonable measures should be maintained to protect user information against unauthorized access.
+
+However, no electronic system can guarantee absolute security.
+
+6. INFORMATION SHARING
+
+Information may be shared with authorized users or service providers when necessary to operate RouteX features, such as displaying booking details or bus tracking information.
+
+RouteX does not intend to sell personal information.
+
+7. DATA RETENTION
+
+Information may be retained for as long as necessary to provide application services, comply with applicable requirements, and resolve disputes.
+
+8. YOUR RIGHTS
+
+You may request access to, correction of, or deletion of your personal information, subject to applicable laws and legitimate service requirements.
+
+9. POLICY UPDATES
+
+This Privacy Policy may be updated when application features or data practices change. Updated versions will be made available through RouteX.
+
+10. CONTACT
+
+For privacy-related questions or requests, please contact the RouteX development or administration team.
+`;
 
 // ========================================
 // SIGNUP SCREEN
@@ -43,9 +156,28 @@ export default function SignupScreen({ navigation }) {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
+  // TERMS AND CONDITIONS
+
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [legalModalVisible, setLegalModalVisible] = useState(false);
+  const [legalDocument, setLegalDocument] = useState("");
+
   // LOADING
 
   const [loading, setLoading] = useState(false);
+
+  // ========================================
+  // OPEN LEGAL DOCUMENT
+  // ========================================
+
+  const openLegalDocument = (document) => {
+    setLegalDocument(document);
+    setLegalModalVisible(true);
+  };
+
+  const closeLegalDocument = () => {
+    setLegalModalVisible(false);
+  };
 
   // ========================================
   // SIGNUP FUNCTION
@@ -101,6 +233,16 @@ export default function SignupScreen({ navigation }) {
       return;
     }
 
+    // CHECK TERMS ACCEPTANCE
+
+    if (!acceptedTerms) {
+      Alert.alert(
+        "Acceptance Required",
+        "Please accept the Terms and Conditions and Privacy Policy before creating your account."
+      );
+      return;
+    }
+
     try {
       setLoading(true);
 
@@ -115,6 +257,8 @@ export default function SignupScreen({ navigation }) {
             full_name: fullName.trim(),
             phone: phone.trim(),
             user_level: "user",
+            accepted_terms: true,
+            accepted_terms_at: new Date().toISOString(),
           },
         },
       });
@@ -209,6 +353,7 @@ export default function SignupScreen({ navigation }) {
               onChangeText={setFullName}
               autoCapitalize="words"
               returnKeyType="next"
+              editable={!loading}
             />
           </NeuView>
 
@@ -229,6 +374,7 @@ export default function SignupScreen({ navigation }) {
               autoCapitalize="none"
               autoCorrect={false}
               returnKeyType="next"
+              editable={!loading}
             />
           </NeuView>
 
@@ -247,6 +393,7 @@ export default function SignupScreen({ navigation }) {
               onChangeText={setPhone}
               keyboardType="phone-pad"
               returnKeyType="next"
+              editable={!loading}
             />
           </NeuView>
 
@@ -266,6 +413,7 @@ export default function SignupScreen({ navigation }) {
               secureTextEntry={!showPassword}
               autoCapitalize="none"
               returnKeyType="next"
+              editable={!loading}
             />
 
             <NeuTouchable
@@ -302,6 +450,7 @@ export default function SignupScreen({ navigation }) {
               autoCapitalize="none"
               returnKeyType="done"
               onSubmitEditing={handleSignup}
+              editable={!loading}
             />
 
             <NeuTouchable
@@ -316,6 +465,52 @@ export default function SignupScreen({ navigation }) {
               />
             </NeuTouchable>
           </NeuView>
+
+          {/* TERMS AND CONDITIONS CHECKBOX */}
+
+          <View style={styles.termsContainer}>
+            <TouchableOpacity
+              style={styles.checkboxButton}
+              onPress={() => setAcceptedTerms(!acceptedTerms)}
+              disabled={loading}
+              activeOpacity={0.7}
+            >
+              <View
+                style={[
+                  styles.checkbox,
+                  acceptedTerms && styles.checkboxChecked,
+                ]}
+              >
+                {acceptedTerms && (
+                  <Ionicons name="checkmark" size={17} color={C.white} />
+                )}
+              </View>
+            </TouchableOpacity>
+
+            <View style={styles.termsTextContainer}>
+              <Text style={styles.termsText}>
+                I have read and agree to the{" "}
+              </Text>
+
+              <TouchableOpacity
+                onPress={() => openLegalDocument("terms")}
+                disabled={loading}
+              >
+                <Text style={styles.termsLink}>Terms and Conditions</Text>
+              </TouchableOpacity>
+
+              <Text style={styles.termsText}> and </Text>
+
+              <TouchableOpacity
+                onPress={() => openLegalDocument("privacy")}
+                disabled={loading}
+              >
+                <Text style={styles.termsLink}>Privacy Policy</Text>
+              </TouchableOpacity>
+
+              <Text style={styles.termsText}>.</Text>
+            </View>
+          </View>
 
           {/* SIGNUP BUTTON */}
 
@@ -358,6 +553,70 @@ export default function SignupScreen({ navigation }) {
           <Text style={styles.footer}>© RouteX. All rights reserved.</Text>
         </View>
       </ScrollView>
+
+      {/* ========================================
+          TERMS AND PRIVACY MODAL
+      ======================================== */}
+
+      <Modal
+        visible={legalModalVisible}
+        transparent
+        animationType="slide"
+        statusBarTranslucent
+        onRequestClose={closeLegalDocument}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            {/* MODAL HEADER */}
+
+            <View style={styles.modalHeader}>
+              <View style={styles.modalTitleContainer}>
+                <Text style={styles.modalTitle}>
+                  {legalDocument === "terms"
+                    ? "Terms and Conditions"
+                    : "Privacy Policy"}
+                </Text>
+
+                <Text style={styles.modalSubtitle}>
+                  RouteX Passenger Application
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={closeLegalDocument}
+              >
+                <Ionicons name="close" size={23} color={C.text} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalDivider} />
+
+            {/* DOCUMENT CONTENT */}
+
+            <ScrollView
+              style={styles.documentScroll}
+              showsVerticalScrollIndicator={true}
+            >
+              <Text style={styles.documentText}>
+                {legalDocument === "terms"
+                  ? TERMS_CONTENT
+                  : PRIVACY_CONTENT}
+              </Text>
+            </ScrollView>
+
+            {/* MODAL FOOTER */}
+
+            <TouchableOpacity
+              style={styles.modalButton}
+              onPress={closeLegalDocument}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.modalButtonText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -497,6 +756,57 @@ const styles = StyleSheet.create({
     marginLeft: 5,
   },
 
+  // TERMS CHECKBOX
+
+  termsContainer: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginTop: 23,
+    paddingHorizontal: 2,
+  },
+
+  checkboxButton: {
+    paddingRight: 10,
+    paddingTop: 1,
+  },
+
+  checkbox: {
+    width: 21,
+    height: 21,
+    borderWidth: 1.5,
+    borderColor: C.blue,
+    borderRadius: 5,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: C.background,
+  },
+
+  checkboxChecked: {
+    backgroundColor: C.blue,
+    borderColor: C.blue,
+  },
+
+  termsTextContainer: {
+    flex: 1,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+  },
+
+  termsText: {
+    color: C.textSecondary,
+    fontSize: 11,
+    lineHeight: 19,
+  },
+
+  termsLink: {
+    color: C.blue,
+    fontSize: 11,
+    fontWeight: "900",
+    textDecorationLine: "underline",
+    lineHeight: 19,
+  },
+
   // SIGNUP BUTTON
 
   signupButton: {
@@ -568,5 +878,91 @@ const styles = StyleSheet.create({
     color: C.muted,
     fontSize: 11,
     fontWeight: "600",
+  },
+
+  // LEGAL MODAL
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.45)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+
+  modalContent: {
+    width: "100%",
+    maxWidth: 480,
+    height: "82%",
+    backgroundColor: C.background,
+    borderRadius: 25,
+    padding: 22,
+    overflow: "hidden",
+  },
+
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+
+  modalTitleContainer: {
+    flex: 1,
+  },
+
+  modalTitle: {
+    fontSize: 19,
+    fontWeight: "900",
+    color: C.text,
+  },
+
+  modalSubtitle: {
+    fontSize: 11,
+    color: C.textSecondary,
+    marginTop: 5,
+  },
+
+  closeButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: C.background,
+    justifyContent: "center",
+    alignItems: "center",
+    marginLeft: 10,
+  },
+
+  modalDivider: {
+    height: 1,
+    backgroundColor: C.secondary,
+    marginTop: 18,
+    marginBottom: 15,
+  },
+
+  documentScroll: {
+    flex: 1,
+  },
+
+  documentText: {
+    fontSize: 13,
+    lineHeight: 23,
+    color: C.text,
+    paddingBottom: 15,
+  },
+
+  modalButton: {
+    height: 50,
+    backgroundColor: C.blue,
+    borderRadius: 14,
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 15,
+    ...blueGlow,
+  },
+
+  modalButtonText: {
+    color: C.white,
+    fontSize: 14,
+    fontWeight: "900",
   },
 });

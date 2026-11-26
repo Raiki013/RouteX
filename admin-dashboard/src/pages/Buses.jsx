@@ -39,8 +39,6 @@ const emptyForm = {
   capacity: "",
   company: "",
   operator_id: "",
-  bus_status: "offline",
-  availability_status: "available",
 };
 
 export default function Buses() {
@@ -63,7 +61,10 @@ export default function Buses() {
   const [editingBus, setEditingBus] = useState(null);
   const [formData, setFormData] = useState(emptyForm);
 
-  // Load buses, operators, and companies
+  // =====================================
+  // LOAD BUSES, OPERATORS, AND COMPANIES
+  // =====================================
+
   const loadBuses = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -109,7 +110,10 @@ export default function Buses() {
     loadBuses();
   }, [loadBuses]);
 
-  // Get assigned operator
+  // =====================================
+  // OPERATOR INFORMATION
+  // =====================================
+
   function getOperator(operatorId) {
     if (!operatorId) return null;
 
@@ -126,15 +130,21 @@ export default function Buses() {
     return operator.full_name || operator.email || "Unnamed operator";
   }
 
-  // Open Add Bus form
+  // =====================================
+  // ADD BUS
+  // =====================================
+
   function openAddForm() {
     setEditingBus(null);
-    setFormData(emptyForm);
+    setFormData({ ...emptyForm });
     setFormError("");
     setShowForm(true);
   }
 
-  // Open Edit Bus form
+  // =====================================
+  // EDIT BUS
+  // =====================================
+
   function openEditForm(bus) {
     setEditingBus(bus);
 
@@ -145,8 +155,6 @@ export default function Buses() {
       capacity: bus.capacity ?? "",
       company: bus.company || "",
       operator_id: bus.operator_id || "",
-      bus_status: bus.bus_status || "offline",
-      availability_status: bus.availability_status || "available",
     });
 
     setFormError("");
@@ -154,7 +162,10 @@ export default function Buses() {
     setShowForm(true);
   }
 
-  // Handle form input changes
+  // =====================================
+  // FORM INPUT CHANGES
+  // =====================================
+
   function handleFormChange(event) {
     const { name, value } = event.target;
 
@@ -164,7 +175,10 @@ export default function Buses() {
     }));
   }
 
-  // Add or update bus
+  // =====================================
+  // SAVE BUS
+  // =====================================
+
   async function handleSubmit(event) {
     event.preventDefault();
 
@@ -185,7 +199,9 @@ export default function Buses() {
     const capacity = Number(formData.capacity);
 
     if (!Number.isInteger(capacity) || capacity <= 0) {
-      setFormError("Passenger capacity must be a positive whole number.");
+      setFormError(
+        "Passenger capacity must be a positive whole number."
+      );
       return;
     }
 
@@ -196,8 +212,6 @@ export default function Buses() {
       capacity,
       company: formData.company,
       operator_id: formData.operator_id,
-      bus_status: formData.bus_status,
-      availability_status: formData.availability_status,
     };
 
     setSaving(true);
@@ -211,6 +225,10 @@ export default function Buses() {
 
         if (updateError) throw updateError;
       } else {
+        // Database defaults will set:
+        // bus_status = offline
+        // availability_status = available
+
         const { error: insertError } = await supabase
           .from("buses")
           .insert([busData]);
@@ -220,7 +238,7 @@ export default function Buses() {
 
       setShowForm(false);
       setEditingBus(null);
-      setFormData(emptyForm);
+      setFormData({ ...emptyForm });
 
       await loadBuses();
     } catch (err) {
@@ -233,7 +251,10 @@ export default function Buses() {
     }
   }
 
-  // Filter buses
+  // =====================================
+  // FILTER BUSES
+  // =====================================
+
   const filteredBuses = useMemo(() => {
     const term = search.trim().toLowerCase();
 
@@ -262,18 +283,30 @@ export default function Buses() {
 
       return matchesSearch && matchesStatus && matchesAvailability;
     });
-  }, [buses, profiles, search, statusFilter, availabilityFilter]);
+  }, [
+    buses,
+    profiles,
+    search,
+    statusFilter,
+    availabilityFilter,
+  ]);
 
-  // Summary counts
+  // =====================================
+  // SUMMARY COUNTS
+  // =====================================
+
   const busCounts = useMemo(
     () => ({
       total: buses.length,
+
       online: buses.filter(
         (bus) => (bus.bus_status || "").toLowerCase() === "online"
       ).length,
+
       offline: buses.filter(
         (bus) => (bus.bus_status || "").toLowerCase() === "offline"
       ).length,
+
       available: buses.filter(
         (bus) =>
           (bus.availability_status || "").toLowerCase() === "available"
@@ -298,9 +331,14 @@ export default function Buses() {
     ),
   ];
 
+  // =====================================
+  // UI
+  // =====================================
+
   return (
     <div className="buses-page">
       {/* PAGE HEADING */}
+
       <div className="buses-heading">
         <div>
           <h1>Bus Management</h1>
@@ -330,6 +368,7 @@ export default function Buses() {
       </div>
 
       {/* SUMMARY CARDS */}
+
       <div className="buses-summary-grid">
         <div className="buses-summary-card">
           <div className="buses-summary-icon blue">
@@ -373,6 +412,7 @@ export default function Buses() {
       </div>
 
       {/* BUS TABLE */}
+
       <div className="buses-table-card">
         <div className="buses-table-heading">
           <div>
@@ -386,6 +426,7 @@ export default function Buses() {
         </div>
 
         {/* FILTERS */}
+
         <div className="buses-toolbar">
           <div className="buses-search">
             <Search size={18} />
@@ -402,6 +443,7 @@ export default function Buses() {
             onChange={(e) => setStatusFilter(e.target.value)}
           >
             <option value="all">All Bus Statuses</option>
+
             {statusOptions.map((status) => (
               <option key={status} value={status}>
                 {formatStatus(status)}
@@ -414,6 +456,7 @@ export default function Buses() {
             onChange={(e) => setAvailabilityFilter(e.target.value)}
           >
             <option value="all">All Availability</option>
+
             {availabilityOptions.map((status) => (
               <option key={status} value={status}>
                 {formatStatus(status)}
@@ -423,6 +466,7 @@ export default function Buses() {
         </div>
 
         {/* ERROR */}
+
         {error && (
           <div className="buses-error">
             <strong>Unable to load buses.</strong>
@@ -432,6 +476,7 @@ export default function Buses() {
         )}
 
         {/* TABLE */}
+
         {!error && (
           <div className="buses-table-wrapper">
             <table className="buses-table">
@@ -468,6 +513,7 @@ export default function Buses() {
                           <div className="bus-table-icon">
                             <Bus size={19} />
                           </div>
+
                           <div>
                             <strong>{bus.bus_name}</strong>
                             <span>{bus.bus_type}</span>
@@ -524,6 +570,7 @@ export default function Buses() {
       </div>
 
       {/* ADD / EDIT BUS MODAL */}
+
       {showForm && (
         <div
           className="bus-modal-overlay"
@@ -624,6 +671,7 @@ export default function Buses() {
                     required
                   >
                     <option value="">Select company</option>
+
                     {companies.map((company) => (
                       <option
                         key={company.company_id}
@@ -649,6 +697,7 @@ export default function Buses() {
                     required
                   >
                     <option value="">Select operator</option>
+
                     {profiles.map((profile) => (
                       <option key={profile.id} value={profile.id}>
                         {profile.full_name || profile.email}
@@ -662,32 +711,6 @@ export default function Buses() {
                   {profiles.length === 0 && (
                     <small>No operator accounts available.</small>
                   )}
-                </div>
-
-                <div className="bus-form-field">
-                  <label htmlFor="bus_status">Bus Status</label>
-                  <select
-                    id="bus_status"
-                    name="bus_status"
-                    value={formData.bus_status}
-                    onChange={handleFormChange}
-                  >
-                    <option value="offline">Offline</option>
-                    <option value="online">Online</option>
-                  </select>
-                </div>
-
-                <div className="bus-form-field">
-                  <label htmlFor="availability_status">Availability</label>
-                  <select
-                    id="availability_status"
-                    name="availability_status"
-                    value={formData.availability_status}
-                    onChange={handleFormChange}
-                  >
-                    <option value="available">Available</option>
-                    <option value="unavailable">Unavailable</option>
-                  </select>
                 </div>
               </div>
 
@@ -717,6 +740,7 @@ export default function Buses() {
                   }
                 >
                   <Save size={17} />
+
                   {saving
                     ? "Saving..."
                     : editingBus
@@ -730,6 +754,7 @@ export default function Buses() {
       )}
 
       {/* BUS DETAILS MODAL */}
+
       {selectedBus && (
         <div
           className="bus-modal-overlay"
@@ -790,7 +815,9 @@ export default function Buses() {
 
               <div>
                 <span>Company</span>
-                <strong>{selectedBus.company || "Not specified"}</strong>
+                <strong>
+                  {selectedBus.company || "Not specified"}
+                </strong>
               </div>
 
               <div>
@@ -822,14 +849,13 @@ export default function Buses() {
                 <span>Date Registered</span>
                 <strong>
                   {selectedBus.created_at
-                    ? new Date(selectedBus.created_at).toLocaleDateString(
-                        "en-PH",
-                        {
-                          year: "numeric",
-                          month: "short",
-                          day: "numeric",
-                        }
-                      )
+                    ? new Date(
+                        selectedBus.created_at
+                      ).toLocaleDateString("en-PH", {
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                      })
                     : "Not available"}
                 </strong>
               </div>

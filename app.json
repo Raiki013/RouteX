@@ -3,7 +3,7 @@
   "expo": {
     "name": "RouteX",
     "slug": "RouteX",
-    "version": "1.0.4",
+    "version": "1.0.5",
     "scheme": "routex",
     "orientation": "portrait",
     "icon": "./assets/routex-logo.png",
