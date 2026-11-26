@@ -2368,15 +2368,17 @@ const styles = StyleSheet.create({
   },
 
   cancelButton: {
-    minHeight: 46,
-    justifyContent: "center",
-    alignItems: "center",
-    marginTop: 6,
-  },
+  minHeight: 46,
+  justifyContent: "center",
+  alignItems: "center",
+  marginTop: 6,
+  backgroundColor: C.red,
+  borderRadius: 14,
+},
 
   cancelButtonText: {
     fontSize: 13,
     fontWeight: "800",
-    color: C.red,
+    color: C.white,
   },
 });

@@ -21,13 +21,20 @@ import {
   createNativeStackNavigator,
 } from "@react-navigation/native-stack";
 
+import {
+  getFocusedRouteNameFromRoute,
+} from "@react-navigation/native";
+
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { supabase } from "../config/supabase";
 import AppHeader from "../components/AppHeader";
 
+// ==========================================
 // SCREENS
+// ==========================================
+
 import HomeScreen from "../screens/HomeScreen";
 import TrackingScreen from "../screens/TrackingScreen";
 import BookingScreen from "../screens/BookingScreen";
@@ -39,11 +46,22 @@ import NotificationsScreen from "../screens/NotificationsScreen";
 import PaymentScreen from "../screens/PaymentScreen";
 import TicketScreen from "../screens/TicketScreen";
 
+// OPERATOR SCREENS
+import BusManagementScreen from "../screens/BusManagementScreen";
+import OperatorDockingScreen from "../screens/OperatorDockingScreen";
+
+// CASHIER
 import CashierStack from "./CashierStack";
 
+// ==========================================
+// NAVIGATORS
+// ==========================================
+
 const Tab = createBottomTabNavigator();
+
 const BookingStackNavigator = createNativeStackNavigator();
-const RootStack = createNativeStackNavigator();
+const NotificationsStackNavigator = createNativeStackNavigator();
+const OperatorStackNavigator = createNativeStackNavigator();
 
 // ==========================================
 // ROUTEX COLOR PALETTE
@@ -98,6 +116,7 @@ const withTimeout = (promise, timeout = 15000) => {
 function BookingStack() {
   return (
     <BookingStackNavigator.Navigator
+      initialRouteName="BookingHome"
       screenOptions={{
         headerShown: false,
         animation: "slide_from_right",
@@ -117,7 +136,80 @@ function BookingStack() {
         name="TerminalBooking"
         component={TerminalBookingScreen}
       />
+
+      <BookingStackNavigator.Screen
+        name="Payment"
+        component={PaymentScreen}
+      />
+
+      <BookingStackNavigator.Screen
+        name="Ticket"
+        component={TicketScreen}
+      />
     </BookingStackNavigator.Navigator>
+  );
+}
+
+// ==========================================
+// NOTIFICATIONS STACK
+// ==========================================
+
+function NotificationsStack() {
+  return (
+    <NotificationsStackNavigator.Navigator
+      initialRouteName="NotificationsHome"
+      screenOptions={{
+        headerShown: false,
+        animation: "slide_from_right",
+      }}
+    >
+      <NotificationsStackNavigator.Screen
+        name="NotificationsHome"
+        component={NotificationsScreen}
+      />
+
+      <NotificationsStackNavigator.Screen
+        name="Payment"
+        component={PaymentScreen}
+      />
+
+      <NotificationsStackNavigator.Screen
+        name="Ticket"
+        component={TicketScreen}
+      />
+    </NotificationsStackNavigator.Navigator>
+  );
+}
+
+// ==========================================
+// OPERATOR STACK
+// ==========================================
+
+function OperatorStack() {
+  return (
+    <OperatorStackNavigator.Navigator
+      initialRouteName="TripManagement"
+      screenOptions={{
+        headerShown: false,
+        animation: "slide_from_right",
+      }}
+    >
+      <OperatorStackNavigator.Screen
+        name="TripManagement"
+        component={TripManagementScreen}
+      />
+
+      <OperatorStackNavigator.Screen
+        name="BusManagement"
+        component={BusManagementScreen}
+        options={{ headerShown: false }}
+      />
+
+      <OperatorStackNavigator.Screen
+        name="OperatorDocking"
+        component={OperatorDockingScreen}
+      />
+    </OperatorStackNavigator.Navigator>
   );
 }
 
@@ -196,6 +288,13 @@ function MainTabNavigator({ userLevel }) {
 
     header: () => <AppHeader />,
 
+    headerStyle: {
+      backgroundColor: COLORS.primary,
+    },
+
+    headerShadowVisible: false,
+    headerTransparent: false,
+
     tabBarActiveTintColor: COLORS.white,
     tabBarInactiveTintColor: "#CFE0FF",
 
@@ -215,7 +314,6 @@ function MainTabNavigator({ userLevel }) {
       includeFontPadding: false,
     },
 
-    // Every visible tab receives an equal share.
     tabBarItemStyle: {
       flex: 1,
       minWidth: 0,
@@ -242,7 +340,6 @@ function MainTabNavigator({ userLevel }) {
 
       backgroundColor: COLORS.primary,
 
-      // Convex blue surface (light top-left, shade bottom-right)
       experimental_backgroundImage:
         "linear-gradient(145deg, #4B87FF, #1F5FE0)",
 
@@ -251,7 +348,6 @@ function MainTabNavigator({ userLevel }) {
 
       borderRadius: 26,
 
-      // NEUMORPHIC RAISED BAR
       boxShadow:
         "8px 8px 18px rgba(0, 0, 0, 0.38), -4px -4px 12px rgba(0, 0, 0, 0.14), 2px 2px 4px rgba(0, 0, 0, 0.3), inset 1px 1px 2px rgba(255, 255, 255, 0.25), inset -1px -1px 2px rgba(10, 40, 120, 0.35)",
 
@@ -263,28 +359,43 @@ function MainTabNavigator({ userLevel }) {
 
   // ========================================
   // TAB OPTIONS
+  // HIDE TAB BAR ON PAYMENT AND TICKET
   // ========================================
 
-  const tabOptions = ({ route }) => ({
-    ...sharedScreenOptions,
+  const tabOptions = ({ route }) => {
+    const focusedRouteName =
+      getFocusedRouteNameFromRoute(route);
 
-    tabBarLabel: getTabLabel(route.name),
+    const hideTabBar = [
+      "Payment",
+      "Ticket",
+    ].includes(focusedRouteName);
 
-    tabBarIcon: ({ focused, color }) => (
-      <View
-        style={[
-          styles.tabIconContainer,
-          focused && styles.activeTabIconContainer,
-        ]}
-      >
-        <Ionicons
-          name={getTabIcon(route.name, focused)}
-          size={21}
-          color={color}
-        />
-      </View>
-    ),
-  });
+    return {
+      ...sharedScreenOptions,
+
+      tabBarStyle: hideTabBar
+        ? { display: "none" }
+        : sharedScreenOptions.tabBarStyle,
+
+      tabBarLabel: getTabLabel(route.name),
+
+      tabBarIcon: ({ focused, color }) => (
+        <View
+          style={[
+            styles.tabIconContainer,
+            focused && styles.activeTabIconContainer,
+          ]}
+        >
+          <Ionicons
+            name={getTabIcon(route.name, focused)}
+            size={21}
+            color={color}
+          />
+        </View>
+      ),
+    };
+  };
 
   // ========================================
   // CASHIER AND ADMIN
@@ -292,18 +403,35 @@ function MainTabNavigator({ userLevel }) {
 
   if (isCashier || isAdmin) {
     return (
-      <Tab.Navigator screenOptions={tabOptions}>
-
+      <Tab.Navigator
+        screenOptions={tabOptions}
+      >
         <Tab.Screen
-          name="Dashboard"
-          component={CashierStack}
-        />
+  name="Dashboard"
+  component={CashierStack}
+  options={({ route }) => {
+    const focusedRouteName =
+      getFocusedRouteNameFromRoute(route);
+
+    const hideTabBar = [
+      "CashierPayment",
+      "CashierPaymentScreen",
+      "Payment",
+      "Ticket",
+    ].includes(focusedRouteName);
+
+    return {
+      tabBarStyle: hideTabBar
+        ? { display: "none" }
+        : sharedScreenOptions.tabBarStyle,
+    };
+  }}
+/>
 
         <Tab.Screen
           name="Profile"
           component={ProfileScreen}
         />
-
       </Tab.Navigator>
     );
   }
@@ -313,8 +441,9 @@ function MainTabNavigator({ userLevel }) {
   // ========================================
 
   return (
-    <Tab.Navigator screenOptions={tabOptions}>
-
+    <Tab.Navigator
+      screenOptions={tabOptions}
+    >
       <Tab.Screen
         name="Home"
         component={HomeScreen}
@@ -322,7 +451,7 @@ function MainTabNavigator({ userLevel }) {
 
       <Tab.Screen
         name="Notifications"
-        component={NotificationsScreen}
+        component={NotificationsStack}
       />
 
       <Tab.Screen
@@ -333,7 +462,7 @@ function MainTabNavigator({ userLevel }) {
       {isOperator && (
         <Tab.Screen
           name="Trip Management"
-          component={TripManagementScreen}
+          component={OperatorStack}
         />
       )}
 
@@ -341,6 +470,13 @@ function MainTabNavigator({ userLevel }) {
         <Tab.Screen
           name="Booking"
           component={BookingStack}
+          listeners={({ navigation }) => ({
+            tabPress: () => {
+              navigation.navigate("Booking", {
+                screen: "BookingHome",
+              });
+            },
+          })}
         />
       )}
 
@@ -348,7 +484,6 @@ function MainTabNavigator({ userLevel }) {
         name="Profile"
         component={ProfileScreen}
       />
-
     </Tab.Navigator>
   );
 }
@@ -379,7 +514,9 @@ export default function BottomTabs({ navigation }) {
         supabase.auth.getUser()
       );
 
-      if (authError) throw authError;
+      if (authError) {
+        throw authError;
+      }
 
       if (!user) {
         navigation.replace("Login");
@@ -394,7 +531,9 @@ export default function BottomTabs({ navigation }) {
           .single()
       );
 
-      if (error) throw error;
+      if (error) {
+        throw error;
+      }
 
       if (!data?.user_level) {
         throw new Error("Account role not found.");
@@ -429,7 +568,6 @@ export default function BottomTabs({ navigation }) {
     return (
       <View style={styles.center}>
         <View style={styles.loadingCard}>
-
           <ActivityIndicator
             size="large"
             color={COLORS.primary}
@@ -442,7 +580,6 @@ export default function BottomTabs({ navigation }) {
           <Text style={styles.loadingText}>
             Checking your account...
           </Text>
-
         </View>
       </View>
     );
@@ -456,7 +593,6 @@ export default function BottomTabs({ navigation }) {
     return (
       <View style={styles.center}>
         <View style={styles.errorCard}>
-
           <View style={styles.errorIcon}>
             <Ionicons
               name="alert-circle-outline"
@@ -490,7 +626,6 @@ export default function BottomTabs({ navigation }) {
               Try Again
             </Text>
           </TouchableOpacity>
-
         </View>
       </View>
     );
@@ -511,7 +646,6 @@ export default function BottomTabs({ navigation }) {
     return (
       <View style={styles.center}>
         <View style={styles.errorCard}>
-
           <View style={styles.errorIcon}>
             <Ionicons
               name="alert-circle-outline"
@@ -527,52 +661,19 @@ export default function BottomTabs({ navigation }) {
           <Text style={styles.errorText}>
             Unsupported account role: {userLevel}
           </Text>
-
         </View>
       </View>
     );
   }
 
   // ========================================
-  // ROOT STACK
-  // ========================================
-  // Payment and Ticket are now outside the
-  // bottom tab navigator. They cannot affect
-  // the spacing of the visible navigation.
+  // RETURN MAIN TAB NAVIGATOR
   // ========================================
 
   return (
-    <RootStack.Navigator
-      initialRouteName="MainTabs"
-      screenOptions={{
-        headerShown: false,
-        animation: "slide_from_right",
-      }}
-    >
-
-      <RootStack.Screen name="MainTabs">
-        {() => (
-          <MainTabNavigator userLevel={userLevel} />
-        )}
-      </RootStack.Screen>
-
-      <RootStack.Screen
-        name="Payment"
-        component={PaymentScreen}
-        options={{
-          headerShown: false,
-        }}
-      />
-
-      <RootStack.Screen
-        name="Ticket"
-        component={TicketScreen}
-        options={{
-          headerShown: false,
-        }}
-      />
-
-    </RootStack.Navigator>
+    <MainTabNavigator
+      userLevel={userLevel}
+    />
   );
 }
 
@@ -582,10 +683,6 @@ export default function BottomTabs({ navigation }) {
 
 const styles = StyleSheet.create({
 
-  // ========================================
-  // LOADING AND ERROR BACKGROUND
-  // ========================================
-
   center: {
     flex: 1,
     backgroundColor: COLORS.background,
@@ -593,10 +690,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 25,
   },
-
-  // ========================================
-  // TAB ICONS
-  // ========================================
 
   tabIconContainer: {
     width: 42,
@@ -608,7 +701,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
-  // Active tab is pressed into the bar (concave)
   activeTabIconContainer: {
     backgroundColor: "#2A66E8",
 
@@ -620,10 +712,6 @@ const styles = StyleSheet.create({
     boxShadow:
       "inset 4px 4px 8px rgba(10, 40, 120, 0.55), inset -4px -4px 8px rgba(120, 165, 255, 0.55)",
   },
-
-  // ========================================
-  // LOADING CARD
-  // ========================================
 
   loadingCard: {
     width: "100%",
@@ -659,10 +747,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: 9,
   },
-
-  // ========================================
-  // ERROR CARD
-  // ========================================
 
   errorCard: {
     width: "100%",
@@ -717,10 +801,6 @@ const styles = StyleSheet.create({
 
     marginTop: 10,
   },
-
-  // ========================================
-  // RETRY BUTTON
-  // ========================================
 
   retryButton: {
     flexDirection: "row",

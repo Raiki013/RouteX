@@ -8,7 +8,11 @@ import {
   Image,
   ActivityIndicator,
   StyleSheet,
+  Alert,
 } from "react-native";
+
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Crypto from "expo-crypto";
 
 import * as SplashScreen from "expo-splash-screen";
 import * as Notifications from "expo-notifications";
@@ -49,6 +53,11 @@ import TrackingScreen from "./screens/TrackingScreen";
 const Stack = createNativeStackNavigator();
 
 const navigationRef = createNavigationContainerRef();
+
+const SESSION_KEY_PREFIX = "routex_active_session_";
+
+// SESSION CHECK INTERVAL
+const SESSION_CHECK_INTERVAL = 3000;
 
 // SCREENS THAT CAN BE OPENED FROM NOTIFICATIONS
 const ALLOWED_NOTIFICATION_SCREENS = [
@@ -97,6 +106,425 @@ export default function App() {
   // PASSWORD RECOVERY REFERENCES
   const pendingRecoveryRef = useRef(false);
   const processedRecoveryCodeRef = useRef(null);
+
+  // =====================================
+  // SINGLE SESSION REFERENCES
+  // =====================================
+
+  const sessionWatcherRef = useRef({
+    userId: null,
+    token: null,
+    channel: null,
+    interval: null,
+    ended: false,
+  });
+
+  const sessionGenerationRef = useRef(0);
+
+  // =====================================
+  // SESSION STORAGE KEY
+  // =====================================
+
+  function getSessionStorageKey(userId) {
+    return `${SESSION_KEY_PREFIX}${userId}`;
+  }
+
+  // =====================================
+  // CLEAR LOCAL SESSION TOKEN
+  // =====================================
+
+  async function clearLocalSession(userId) {
+    if (!userId) return;
+
+    try {
+      await AsyncStorage.removeItem(
+        getSessionStorageKey(userId)
+      );
+    } catch (error) {
+      console.log(
+        "CLEAR LOCAL SESSION ERROR:",
+        error.message
+      );
+    }
+  }
+
+  // =====================================
+  // STOP SESSION WATCHER
+  // =====================================
+
+  function stopSessionWatcher() {
+    const current = sessionWatcherRef.current;
+
+    if (current.interval) {
+      clearInterval(current.interval);
+    }
+
+    if (current.channel) {
+      supabase.removeChannel(current.channel);
+    }
+
+    sessionWatcherRef.current = {
+      userId: null,
+      token: null,
+      channel: null,
+      interval: null,
+      ended: false,
+    };
+  }
+
+  // =====================================
+  // VERIFY ACTIVE SESSION
+  // =====================================
+
+  async function verifyActiveSession(userId, localToken) {
+    try {
+      const { data, error } = await supabase
+        .from("user_sessions")
+        .select("session_token")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (error) {
+        console.log(
+          "SESSION VERIFY ERROR:",
+          error.message
+        );
+
+        return {
+          success: false,
+          networkError: true,
+        };
+      }
+
+      if (!data) {
+        return {
+          success: false,
+          missing: true,
+        };
+      }
+
+      return {
+        success: data.session_token === localToken,
+      };
+    } catch (error) {
+      console.log(
+        "SESSION VERIFY ERROR:",
+        error.message
+      );
+
+      return {
+        success: false,
+        networkError: true,
+      };
+    }
+  }
+
+  // =====================================
+  // CLAIM NEW ACTIVE SESSION
+  // =====================================
+
+  async function claimNewSession(userId) {
+    try {
+      const newToken = Crypto.randomUUID();
+
+      const { error } = await supabase.rpc(
+        "claim_user_session",
+        {
+          p_session_token: newToken,
+        }
+      );
+
+      if (error) {
+        throw error;
+      }
+
+      await AsyncStorage.setItem(
+        getSessionStorageKey(userId),
+        newToken
+      );
+
+      console.log("RouteX: Active session registered.");
+
+      return {
+        success: true,
+        token: newToken,
+      };
+    } catch (error) {
+      console.log(
+        "CLAIM SESSION ERROR:",
+        error.message
+      );
+
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+  }
+
+  // =====================================
+  // SESSION ENDED
+  // =====================================
+
+  async function handleSessionEnded(userId, generation) {
+    const current = sessionWatcherRef.current;
+
+    if (
+      current.userId !== userId ||
+      generation !== sessionGenerationRef.current ||
+      current.ended
+    ) {
+      return;
+    }
+
+    // Prevent duplicate alerts
+    current.ended = true;
+
+    console.log("RouteX: Session ended on this device.");
+
+    if (current.interval) {
+      clearInterval(current.interval);
+    }
+
+    if (current.channel) {
+      await supabase.removeChannel(current.channel);
+    }
+
+    // Remove this device's saved token
+    await clearLocalSession(userId);
+
+    // Sign out ONLY this device
+    await supabase.auth.signOut({
+      scope: "local",
+    });
+
+    // Show session ended alert
+    Alert.alert(
+      "Session Ended",
+      "Your account has been logged in on another device. You have been signed out for security reasons.",
+      [
+        {
+          text: "OK",
+          onPress: () => {
+            if (navigationRef.isReady()) {
+              navigationRef.resetRoot({
+                index: 0,
+                routes: [
+                  {
+                    name: "Login",
+                  },
+                ],
+              });
+            }
+          },
+        },
+      ],
+      {
+        cancelable: false,
+      }
+    );
+  }
+
+  // =====================================
+  // CHECK SESSION
+  // =====================================
+
+  async function checkActiveSession(
+    userId,
+    token,
+    generation
+  ) {
+    if (
+      generation !== sessionGenerationRef.current ||
+      sessionWatcherRef.current.ended
+    ) {
+      return;
+    }
+
+    const result = await verifyActiveSession(
+      userId,
+      token
+    );
+
+    // Do not sign out because of temporary network failure
+    if (result.networkError) {
+      return;
+    }
+
+    if (
+      !result.success &&
+      generation === sessionGenerationRef.current
+    ) {
+      await handleSessionEnded(
+        userId,
+        generation
+      );
+    }
+  }
+
+  // =====================================
+  // START SESSION WATCHER
+  // =====================================
+
+  async function startSessionWatcher(
+    userId,
+    token,
+    generation
+  ) {
+    if (generation !== sessionGenerationRef.current) {
+      return;
+    }
+
+    sessionWatcherRef.current = {
+      userId,
+      token,
+      channel: null,
+      interval: null,
+      ended: false,
+    };
+
+    // SUPABASE REALTIME LISTENER
+    const channel = supabase
+      .channel(
+        `routex-session-${userId}-${generation}`
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "user_sessions",
+          filter: `user_id=eq.${userId}`,
+        },
+        async (payload) => {
+          if (
+            generation !== sessionGenerationRef.current
+          ) {
+            return;
+          }
+
+          const newToken =
+            payload.new?.session_token;
+
+          if (!newToken || newToken !== token) {
+            await handleSessionEnded(
+              userId,
+              generation
+            );
+          }
+        }
+      )
+      .subscribe();
+
+    sessionWatcherRef.current.channel = channel;
+
+    // VERIFY IMMEDIATELY
+    await checkActiveSession(
+      userId,
+      token,
+      generation
+    );
+
+    // FALLBACK CHECK EVERY 3 SECONDS
+    if (
+      generation === sessionGenerationRef.current &&
+      !sessionWatcherRef.current.ended
+    ) {
+      sessionWatcherRef.current.interval = setInterval(
+        () => {
+          checkActiveSession(
+            userId,
+            token,
+            generation
+          );
+        },
+        SESSION_CHECK_INTERVAL
+      );
+    }
+  }
+
+  // =====================================
+  // INITIALIZE EXISTING SESSION
+  // =====================================
+
+  async function initializeExistingSession(userId) {
+    const generation = ++sessionGenerationRef.current;
+
+    stopSessionWatcher();
+
+    try {
+      let localToken = await AsyncStorage.getItem(
+        getSessionStorageKey(userId)
+      );
+
+      if (generation !== sessionGenerationRef.current) {
+        return false;
+      }
+
+      // FIRST LOGIN AFTER INSTALLING THIS FEATURE
+      if (!localToken) {
+        console.log(
+          "RouteX: No local session token. Registering this device."
+        );
+
+        const claim = await claimNewSession(userId);
+
+        if (!claim.success) {
+          return false;
+        }
+
+        localToken = claim.token;
+      } else {
+        // CHECK WHETHER THIS DEVICE STILL OWNS THE SESSION
+        const result = await verifyActiveSession(
+          userId,
+          localToken
+        );
+
+        if (generation !== sessionGenerationRef.current) {
+          return false;
+        }
+
+        if (result.missing) {
+          // Session record does not exist yet
+          const claim = await claimNewSession(userId);
+
+          if (!claim.success) {
+            return false;
+          }
+
+          localToken = claim.token;
+        } else if (!result.networkError && !result.success) {
+          // Another device already replaced this session
+          await handleSessionEnded(
+            userId,
+            generation
+          );
+
+          return false;
+        }
+      }
+
+      if (generation !== sessionGenerationRef.current) {
+        return false;
+      }
+
+      await startSessionWatcher(
+        userId,
+        localToken,
+        generation
+      );
+
+      return !sessionWatcherRef.current.ended;
+    } catch (error) {
+      console.log(
+        "INITIALIZE SESSION ERROR:",
+        error.message
+      );
+
+      return false;
+    }
+  }
 
   // =====================================
   // REGISTER PUSH TOKEN
@@ -267,7 +695,6 @@ export default function App() {
     pendingNotificationRouteRef.current = screen;
 
     if (navigationRef.isReady()) {
-
       // CASHIER SCREENS OPEN INSIDE DASHBOARD STACK
       const cashierScreens = [
         "CashierDashboard",
@@ -362,6 +789,18 @@ export default function App() {
 
           const userId = session.user.id;
 
+          // VERIFY OR RESTORE SINGLE DEVICE SESSION
+          const sessionValid =
+            await initializeExistingSession(userId);
+
+          if (!sessionValid) {
+            if (mounted) {
+              setInitialRoute("Login");
+            }
+
+            return;
+          }
+
           // REGISTER PUSH NOTIFICATION DEVICE
           registerUserDevice(userId);
 
@@ -429,24 +868,80 @@ export default function App() {
       (event, session) => {
         const userId = session?.user?.id;
 
-        if (userId) {
-          Promise.resolve().then(() => {
+        // HANDLE AUTH EVENTS OUTSIDE THE CALLBACK
+        setTimeout(async () => {
+          // NEW LOGIN
+          if (event === "SIGNED_IN" && userId) {
+            console.log(
+              "RouteX: New login detected. Registering active session."
+            );
+
+            // A new login always replaces the previous session
+            const generation =
+              ++sessionGenerationRef.current;
+
+            stopSessionWatcher();
+
+            const claim = await claimNewSession(userId);
+
+            if (!claim.success) {
+              console.log(
+                "RouteX: Could not register the active session."
+              );
+
+              await supabase.auth.signOut({
+                scope: "local",
+              });
+
+              Alert.alert(
+                "Login Error",
+                "Unable to register your active session. Please check your internet connection and try again."
+              );
+
+              return;
+            }
+
+            if (generation !== sessionGenerationRef.current) {
+              return;
+            }
+
+            await startSessionWatcher(
+              userId,
+              claim.token,
+              generation
+            );
+
             registerUserDevice(userId);
-          });
-        }
+          }
 
-        // CLEAR REGISTRATION STATE AFTER LOGOUT
-        if (event === "SIGNED_OUT") {
-          registeredUserRef.current = null;
-          registeringUserRef.current = null;
+          // USER SIGNED OUT
+          if (event === "SIGNED_OUT") {
+            console.log("RouteX: User signed out.");
 
-          console.log("RouteX: User signed out.");
-        }
+            sessionGenerationRef.current++;
+
+            const previousUserId =
+              sessionWatcherRef.current.userId;
+
+            stopSessionWatcher();
+
+            if (previousUserId) {
+              await clearLocalSession(previousUserId);
+            }
+
+            registeredUserRef.current = null;
+            registeringUserRef.current = null;
+          }
+        }, 0);
       }
     );
 
     return () => {
       subscription.unsubscribe();
+
+      sessionGenerationRef.current++;
+
+      stopSessionWatcher();
     };
   }, []);
 
@@ -547,7 +1042,7 @@ export default function App() {
             component={TripManagementScreen}
           />
 
-          {/* NEW BUS MANAGEMENT SCREEN */}
+          {/* BUS MANAGEMENT */}
           <Stack.Screen
             name="BusManagement"
             component={BusManagementScreen}

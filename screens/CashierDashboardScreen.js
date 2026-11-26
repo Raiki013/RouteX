@@ -1,4 +1,3 @@
-
 import React, { useCallback, useEffect, useState } from "react";
 
 import {
@@ -270,66 +269,117 @@ export default function CashierDashboardScreen({ navigation }) {
     navigation.navigate(screenName);
   };
 
+  // OPEN SELECTED BOOKING
+  const openBooking = (item) => {
+    navigation.navigate("CashierPayment", {
+      bookingId: item.booking_id,
+      bookingReference: item.booking_reference,
+    });
+  };
+
   // BOOKING ITEM
   const renderBooking = ({ item }) => {
-    const isPaid = item.payment_status === "paid";
+  const bookingStatus = String(item.booking_status || "").toLowerCase();
+  const paymentStatus = String(item.payment_status || "").toLowerCase();
 
-    return (
-      <View style={styles.bookingItem}>
-        <NeuView small style={styles.bookingIcon}>
-          <Ionicons
-            name={isPaid ? "checkmark-circle" : "time-outline"}
-            size={21}
-            color={isPaid ? COLORS.green : COLORS.orange}
-          />
-        </NeuView>
+  const isCancelled = bookingStatus === "cancelled";
+  const isPaid = paymentStatus === "paid";
 
-        <View style={styles.bookingInfo}>
-          <Text style={styles.bookingReference}>
-            {item.booking_reference || `Booking #${item.booking_id}`}
-          </Text>
+  const statusLabel = isCancelled
+    ? "CANCELLED"
+    : paymentStatus
+      ? paymentStatus.toUpperCase()
+      : "UNKNOWN";
 
-          <Text style={styles.bookingDate}>
-            {formatDate(item.created_at)}
-          </Text>
+  const statusStyle = isCancelled
+    ? styles.cancelledBadge
+    : isPaid
+      ? styles.paidBadge
+      : styles.pendingBadge;
 
-          <View
-            style={[
-              styles.statusBadge,
-              isPaid ? styles.paidBadge : styles.pendingBadge,
-            ]}
-          >
-            <Text
-              style={[
-                styles.statusText,
-                isPaid ? styles.paidText : styles.pendingText,
-              ]}
-            >
-              {String(item.payment_status || "unknown").toUpperCase()}
-            </Text>
-          </View>
-        </View>
+  const statusTextStyle = isCancelled
+    ? styles.cancelledText
+    : isPaid
+      ? styles.paidText
+      : styles.pendingText;
 
-        <View style={styles.bookingAmountContainer}>
-          <Text style={styles.bookingAmount}>
-            {formatAmount(item.total_amount)}
-          </Text>
+  return (
+    <TouchableOpacity
+      style={styles.bookingItem}
+      activeOpacity={0.7}
+      onPress={() => openBooking(item)}
+    >
+      <NeuView small style={styles.bookingIcon}>
+        <Ionicons
+          name={
+            isCancelled
+              ? "close-circle"
+              : isPaid
+                ? "checkmark-circle"
+                : "time-outline"
+          }
+          size={21}
+          color={
+            isCancelled
+              ? COLORS.red
+              : isPaid
+                ? COLORS.green
+                : COLORS.orange
+          }
+        />
+      </NeuView>
 
-          <Text style={styles.bookingMethod}>
-            {item.payment_method
-              ? String(item.payment_method).toUpperCase()
-              : "UNPAID"}
+      <View style={styles.bookingInfo}>
+        <Text style={styles.bookingReference}>
+          {item.booking_reference || `Booking #${item.booking_id}`}
+        </Text>
+
+        <Text style={styles.bookingDate}>
+          {formatDate(item.created_at)}
+        </Text>
+
+        <View style={[styles.statusBadge, statusStyle]}>
+          <Text style={[styles.statusText, statusTextStyle]}>
+            {statusLabel}
           </Text>
         </View>
       </View>
-    );
-  };
+
+      <View style={styles.bookingAmountContainer}>
+        <Text style={styles.bookingAmount}>
+          {formatAmount(item.total_amount)}
+        </Text>
+
+        <Text style={styles.bookingMethod}>
+          {isCancelled
+            ? "BOOKING CANCELLED"
+            : item.payment_method
+              ? String(item.payment_method).toUpperCase()
+              : "UNPAID"}
+        </Text>
+      </View>
+
+      <Ionicons
+        name="chevron-forward"
+        size={18}
+        color={COLORS.muted}
+        style={{ marginLeft: 8 }}
+      />
+    </TouchableOpacity>
+  );
+};
 
   // LOADING SCREEN
   if (loading) {
     return (
-      <SafeAreaView style={styles.loadingContainer} edges={["top", "left", "right"]}>
-        <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
+      <SafeAreaView
+        style={styles.loadingContainer}
+        edges={["top", "left", "right"]}
+      >
+        <StatusBar
+          barStyle="dark-content"
+          backgroundColor={COLORS.background}
+        />
 
         <NeuView small style={styles.loadingIcon}>
           <MaterialCommunityIcons
@@ -355,7 +405,7 @@ export default function CashierDashboardScreen({ navigation }) {
   return (
     <SafeAreaView
       style={styles.container}
-      edges={["top", "left", "right"]}
+      edges={["left", "right"]}
     >
       <StatusBar
         barStyle="dark-content"
@@ -574,7 +624,10 @@ export default function CashierDashboardScreen({ navigation }) {
             Recent Bookings
           </Text>
 
-          <TouchableOpacity onPress={onRefresh} disabled={refreshing}>
+          <TouchableOpacity
+            onPress={onRefresh}
+            disabled={refreshing}
+          >
             <Text style={styles.refreshText}>
               Refresh
             </Text>
@@ -636,12 +689,15 @@ export default function CashierDashboardScreen({ navigation }) {
       >
         <View style={styles.alertOverlay}>
           <NeuCard style={styles.alertBox}>
-            <NeuView small style={[
-              styles.alertIconContainer,
-              alertType === "warning"
-                ? styles.warningAlertIcon
-                : styles.errorAlertIcon,
-            ]}>
+            <NeuView
+              small
+              style={[
+                styles.alertIconContainer,
+                alertType === "warning"
+                  ? styles.warningAlertIcon
+                  : styles.errorAlertIcon,
+              ]}
+            >
               <Ionicons
                 name={
                   alertType === "warning"
@@ -716,7 +772,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 18,
     paddingTop: 15,
-    paddingBottom: 35,
+    paddingBottom: 135,
   },
 
   // HEADER
@@ -1172,4 +1228,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "900",
   },
+
+  cancelledBadge: {
+  backgroundColor: COLORS.redLight,
+},
+
+cancelledText: {
+  color: COLORS.red,
+},
 });

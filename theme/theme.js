@@ -1,10 +1,18 @@
-
 import React from "react";
 import { View, Pressable, StyleSheet } from "react-native";
 
 // =====================================
 // ROUTEX - BLUE SOFT NEUMORPHISM THEME
+// (lightweight version for mobile)
 // =====================================
+//
+// What changed vs. the heavy version:
+//  - Raised: 5 stacked shadow layers -> 2 layers (one dark, one light), smaller blur
+//  - Inset/pressed: inset boxShadow (expensive) -> flat color + 2px side borders
+//    (dark top/left, light bottom/right), which gives the same "pressed in" look
+//  - Gradient backgrounds are now opt-in (`gradient` prop) instead of on every surface
+//  - Style objects are precomputed once, so nothing is flattened or rebuilt per render
+//  - Background shifted slightly bluer; surface, inset and shadows retuned to match
 
 export const C = {
   blue: "#286DF6",
@@ -12,13 +20,13 @@ export const C = {
   lightBlue: "#9DC6FB",
   white: "#FFFFFF",
 
-  background: "#DDE6F4",
-  surface: "#EFF4FC",
-  inset: "#E1E9F6",
-  card: "#EFF4FC",
+  background: "#D3E1F8",
+  surface: "#E5EDFB",
+  inset: "#D6E3F7",
+  card: "#E5EDFB",
 
   lightShadow: "#FFFFFF",
-  darkShadow: "#C5D4E9",
+  darkShadow: "#BCCFEA",
 
   text: "#16346B",
   textSecondary: "#2F4F86",
@@ -36,56 +44,62 @@ export const C = {
   iconColor: "#FFFFFF",
 };
 
+const DARK = "#A3B9E0";
+const LIGHT = "#FFFFFF";
+
+// Two shadow layers only: that's all the neumorphic look needs.
 export const NEU = {
   raised: {
-    boxShadow:
-      "12px 12px 24px #B0C1DE, -12px -12px 24px #FFFFFF, 2px 2px 4px rgba(150,170,205,0.45), inset 1px 1px 2px #FFFFFF, inset -1px -1px 2px rgba(160,180,215,0.35)",
+    boxShadow: `6px 6px 12px ${DARK}, -6px -6px 12px ${LIGHT}`,
   },
   raisedSmall: {
-    boxShadow:
-      "6px 6px 12px #B0C1DE, -6px -6px 12px #FFFFFF, 1px 1px 3px rgba(150,170,205,0.45), inset 1px 1px 2px #FFFFFF, inset -1px -1px 2px rgba(160,180,215,0.35)",
+    boxShadow: `3px 3px 6px ${DARK}, -3px -3px 6px ${LIGHT}`,
   },
+  // Fake inset: no inset shadow, just opposing border colors.
   inset: {
-    boxShadow:
-      "inset 5px 5px 10px #B0C1DE, inset -5px -5px 10px #FFFFFF, 1px 1px 1px rgba(255,255,255,0.9)",
+    backgroundColor: C.inset,
+    borderWidth: 2,
+    borderTopColor: DARK,
+    borderLeftColor: DARK,
+    borderBottomColor: LIGHT,
+    borderRightColor: LIGHT,
   },
   pressed: {
-    boxShadow:
-      "inset 7px 7px 14px #B0C1DE, inset -7px -7px 14px #FFFFFF",
+    backgroundColor: C.inset,
+    borderWidth: 2,
+    borderTopColor: DARK,
+    borderLeftColor: DARK,
+    borderBottomColor: LIGHT,
+    borderRightColor: LIGHT,
   },
 };
 
+// Kept for compatibility. Only applied when you pass `gradient`.
 export const GRADIENT = {
-  raised: "linear-gradient(145deg, #FAFCFF, #E3EBF7)",
-  inset: "linear-gradient(145deg, #DAE3F1, #F3F7FD)",
+  raised: "linear-gradient(145deg, #F2F7FF, #D9E5F8)",
+  inset: "linear-gradient(145deg, #CFDDF3, #EAF1FD)",
+};
+
+const GRADIENT_STYLE = {
+  raised: { experimental_backgroundImage: GRADIENT.raised },
+  inset: { experimental_backgroundImage: GRADIENT.inset },
 };
 
 export const blueGlow = {
-  boxShadow: "4px 6px 12px #A9C0EC, -4px -4px 10px #FFFFFF",
+  boxShadow: `3px 4px 8px #A9C0EC, -3px -3px 8px ${LIGHT}`,
 };
 
 export const redGlow = {
-  boxShadow: "4px 6px 12px #E3B3BD, -4px -4px 10px #FFFFFF",
+  boxShadow: `3px 4px 8px #E3B3BD, -3px -3px 8px ${LIGHT}`,
 };
 
-const SURFACE_COLORS = [C.surface, C.card, C.inset];
-
-function surfaceGradient(flat, kind) {
-  const bg = flat.backgroundColor;
-  if (bg && !SURFACE_COLORS.includes(bg)) return null;
-  return { experimental_backgroundImage: GRADIENT[kind] };
-}
-
-export function NeuView({ children, style, small, inset, ...rest }) {
-  const flat = StyleSheet.flatten(style) || {};
-
+export function NeuView({ children, style, small, inset, gradient, ...rest }) {
   return (
     <View
       style={[
         base.neuBase,
         inset ? NEU.inset : small ? NEU.raisedSmall : NEU.raised,
-        inset && base.insetBase,
-        surfaceGradient(flat, inset ? "inset" : "raised"),
+        gradient && (inset ? GRADIENT_STYLE.inset : GRADIENT_STYLE.raised),
         style,
       ]}
       {...rest}
@@ -99,11 +113,10 @@ export function NeuTouchable({
   children,
   style,
   small,
-  activeOpacity,
+  gradient,
+  activeOpacity, // accepted but unused, kept so existing call sites don't break
   ...rest
 }) {
-  const flat = StyleSheet.flatten(style) || {};
-
   return (
     <Pressable
       style={({ pressed }) => {
@@ -112,7 +125,7 @@ export function NeuTouchable({
         return [
           base.neuBase,
           down ? NEU.pressed : small ? NEU.raisedSmall : NEU.raised,
-          surfaceGradient(flat, down ? "inset" : "raised"),
+          gradient && !down && GRADIENT_STYLE.raised,
           style,
         ];
       }}
@@ -123,9 +136,9 @@ export function NeuTouchable({
   );
 }
 
-export function NeuCard({ children, style }) {
+export function NeuCard({ children, style, ...rest }) {
   return (
-    <NeuView style={[base.neuCard, style]}>
+    <NeuView style={[base.neuCard, style]} {...rest}>
       {children}
     </NeuView>
   );
@@ -133,11 +146,7 @@ export function NeuCard({ children, style }) {
 
 // Blue icon container
 export function NeuIconBox({ children, style }) {
-  return (
-    <View style={[base.iconBox, style]}>
-      {children}
-    </View>
-  );
+  return <View style={[base.iconBox, style]}>{children}</View>;
 }
 
 const base = StyleSheet.create({
@@ -146,29 +155,17 @@ const base = StyleSheet.create({
     borderWidth: 0,
   },
 
-  insetBase: {
-    backgroundColor: C.inset,
-    borderWidth: 0,
-    elevation: 0,
-  },
-
   neuCard: {
     backgroundColor: C.card,
     borderRadius: 24,
   },
 
+  // Single cheap shadow instead of shadowColor + elevation combo
   iconBox: {
     backgroundColor: C.iconBackground,
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: C.blue,
-    shadowOffset: {
-      width: 3,
-      height: 4,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 5,
-    elevation: 4,
+    boxShadow: "2px 3px 6px rgba(40,109,246,0.3)",
   },
 });

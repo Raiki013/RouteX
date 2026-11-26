@@ -34,7 +34,7 @@ import {
 } from "../theme/theme";
 
 // ========================================
-// STATUS COLORS (semantic, kept distinct)
+// STATUS COLORS
 // ========================================
 
 const STATUS = {
@@ -47,10 +47,6 @@ const DEFAULT_REGION = {
   latitude: 16.6159,
   longitude: 120.3166,
 };
-
-// ========================================
-// FILTER OPTIONS
-// ========================================
 
 const BUS_TYPE_OPTIONS = [
   "Ordinary",
@@ -266,7 +262,7 @@ body {
   transform: scale(1.2);
 }
 
-/* PASSENGER LOCATION */
+/* PASSENGER'S OWN LOCATION */
 
 .passenger-marker {
   width: 22px;
@@ -277,6 +273,27 @@ body {
   box-shadow:
     0 0 0 7px rgba(40,109,246,0.20),
     0 2px 8px rgba(0,0,0,0.3);
+}
+
+/* PASSENGERS WHO MARKED / HAILED THE BUS */
+
+.hail-marker-container {
+  background: transparent !important;
+  border: none !important;
+}
+
+.hail-passenger-marker {
+  width: 46px;
+  height: 46px;
+  background: #FFFFFF;
+  border: 3px solid #F59E0B;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 27px;
+  box-shadow: 0 3px 12px rgba(0,0,0,0.30);
+  position: relative;
 }
 
 .leaflet-popup-content-wrapper {
@@ -321,6 +338,8 @@ L.tileLayer(
 
 let busMarkers = {};
 let currentLocationMarker = null;
+let hailPassengerMarkers = {};
+let hasCenteredHailPassengers = false;
 
 function sendToApp(data) {
   if (window.ReactNativeWebView) {
@@ -405,7 +424,7 @@ function updateBuses(buses, selectedBusId, currentUserId) {
 }
 
 /* ========================================
-   PASSENGER LOCATION
+   PASSENGER'S OWN LOCATION
 ======================================== */
 
 function updateCurrentLocation(latitude, longitude) {
@@ -433,6 +452,56 @@ function updateCurrentLocation(latitude, longitude) {
 
     currentLocationMarker.bindPopup("Your location");
   }
+}
+
+/* ========================================
+   PASSENGERS WHO HAILED THE BUS
+======================================== */
+
+function clearHailPassengerMarkers() {
+  Object.values(hailPassengerMarkers).forEach(marker => {
+    map.removeLayer(marker);
+  });
+
+  hailPassengerMarkers = {};
+}
+
+function updateHailPassengers(passengers) {
+  clearHailPassengerMarkers();
+
+  (passengers || []).forEach(passenger => {
+    const latitude = Number(passenger.latitude);
+    const longitude = Number(passenger.longitude);
+
+    if (
+      !Number.isFinite(latitude) ||
+      !Number.isFinite(longitude)
+    ) {
+      return;
+    }
+
+    const icon = L.divIcon({
+      className: "hail-marker-container",
+      html: '<div class="hail-passenger-marker">&#128075;</div>',
+      iconSize: [46, 46],
+      iconAnchor: [23, 46]
+    });
+
+    const marker = L.marker(
+      [latitude, longitude],
+      {
+        icon,
+        zIndexOffset: 2000
+      }
+    ).addTo(map);
+
+    marker.bindPopup(
+      "<b>👋 Passenger Waiting</b><br>" +
+      "This passenger has marked your bus."
+    );
+
+    hailPassengerMarkers[passenger.id] = marker;
+  });
 }
 
 /* ========================================
@@ -472,6 +541,10 @@ function handleMessage(event) {
 
     if (data.type === "CURRENT_LOCATION") {
       updateCurrentLocation(data.latitude, data.longitude);
+    }
+
+    if (data.type === "UPDATE_HAIL_PASSENGERS") {
+      updateHailPassengers(data.passengers || []);
     }
 
     if (data.type === "CENTER_MAP") {
@@ -519,6 +592,9 @@ export default function TrackingScreen() {
   const [buses, setBuses] = useState([]);
   const [selectedBusId, setSelectedBusId] = useState(null);
 
+  // Passenger locations that have marked the operator's active bus.
+  const [markedPassengers, setMarkedPassengers] = useState([]);
+
   const [currentLocation, setCurrentLocation] = useState(null);
 
   const [loading, setLoading] = useState(true);
@@ -532,7 +608,6 @@ export default function TrackingScreen() {
   const [destinationFilter, setDestinationFilter] = useState("");
   const [routeFilter, setRouteFilter] = useState("");
 
-  // These dropdown options are loaded from Supabase.
   const [companies, setCompanies] = useState([]);
   const [routeOptions, setRouteOptions] = useState([]);
   const [destinationOptions, setDestinationOptions] = useState([]);
@@ -615,6 +690,7 @@ export default function TrackingScreen() {
       const selectedRoute = routeOptions.find(
         route => normalizeText(route.route_name) === normalizeText(routeFilter)
       );
+
       const matchesRoute =
         !routeFilter ||
         String(bus.route_id || "") === String(selectedRoute?.route_id || "");
@@ -674,7 +750,11 @@ export default function TrackingScreen() {
       .order("company_name", { ascending: true });
 
     if (error) throw error;
-    if (mountedRef.current) setCompanies(data || []);
+
+    if (mountedRef.current) {
+      setCompanies(data || []);
+    }
+
     return data || [];
   }, []);
 
@@ -700,7 +780,6 @@ export default function TrackingScreen() {
           return;
         }
 
-        // Company -> terminals -> route_terminal_access -> bus_routes.
         const { data: terminals, error: terminalError } = await supabase
           .from("terminals")
           .select("terminal_id")
@@ -719,7 +798,9 @@ export default function TrackingScreen() {
 
           if (accessError) throw accessError;
 
-          const routeIds = [...new Set((accessRows || []).map(item => item.route_id))];
+          const routeIds = [
+            ...new Set((accessRows || []).map(item => item.route_id)),
+          ];
 
           if (routeIds.length) {
             const { data: routeRows, error: routeError } = await supabase
@@ -730,6 +811,7 @@ export default function TrackingScreen() {
               .order("route_name", { ascending: true });
 
             if (routeError) throw routeError;
+
             routes = routeRows || [];
           }
         }
@@ -741,6 +823,7 @@ export default function TrackingScreen() {
           .order("route_name", { ascending: true });
 
         if (routeError) throw routeError;
+
         routes = routeRows || [];
       }
 
@@ -755,6 +838,7 @@ export default function TrackingScreen() {
           .order("stop_order", { ascending: true });
 
         if (stopError) throw stopError;
+
         stops = stopRows || [];
       }
 
@@ -766,9 +850,11 @@ export default function TrackingScreen() {
       }
     } catch (error) {
       console.log("LOAD COMPANY ROUTES ERROR:", error.message);
+
       if (mountedRef.current) {
         setRouteOptions([]);
         setDestinationOptions([]);
+
         showAlert(
           "Filter Data Error",
           "Unable to load routes and destinations. Please check your Supabase table permissions and try again.",
@@ -776,7 +862,9 @@ export default function TrackingScreen() {
         );
       }
     } finally {
-      if (mountedRef.current) setFilterOptionsLoading(false);
+      if (mountedRef.current) {
+        setFilterOptionsLoading(false);
+      }
     }
   }, [showAlert]);
 
@@ -808,6 +896,7 @@ export default function TrackingScreen() {
 
     try {
       setFilterOptionsLoading(true);
+
       const { data, error } = await supabase
         .from("route_stops")
         .select("stop_id, route_id, stop_name, stop_order")
@@ -815,6 +904,7 @@ export default function TrackingScreen() {
         .order("stop_order", { ascending: true });
 
       if (error) throw error;
+
       if (mountedRef.current) {
         setDestinationOptions([
           ...new Set((data || []).map(stop => stop.stop_name).filter(Boolean)),
@@ -822,11 +912,18 @@ export default function TrackingScreen() {
       }
     } catch (error) {
       console.log("LOAD ROUTE STOPS ERROR:", error.message);
+
       if (mountedRef.current) {
-        showAlert("Route Stops Error", "Unable to load stops for this route.", "error");
+        showAlert(
+          "Route Stops Error",
+          "Unable to load stops for this route.",
+          "error"
+        );
       }
     } finally {
-      if (mountedRef.current) setFilterOptionsLoading(false);
+      if (mountedRef.current) {
+        setFilterOptionsLoading(false);
+      }
     }
   }, [companyFilter, routeOptions, loadCompanyRoutes, showAlert]);
 
@@ -1023,6 +1120,134 @@ export default function TrackingScreen() {
   }, []);
 
   // ========================================
+  // LOAD PASSENGERS WHO MARKED OPERATOR'S BUS
+  // ========================================
+
+    const loadMarkedPassengers = useCallback(async () => {
+  try {
+    console.log("\n========== HAILING DEBUG ==========");
+
+    if (!user?.id || userLevel !== "operator") {
+      console.log("STOP: User is missing or not an operator");
+      console.log("USER ID:", user?.id);
+      console.log("USER LEVEL:", userLevel);
+
+      if (mountedRef.current) {
+        setMarkedPassengers([]);
+      }
+
+      return [];
+    }
+
+    // STEP 1: Get operator's active trips
+    const { data: activeTrips, error: tripError } = await supabase
+      .from("bus_trips")
+      .select("trip_id, bus_id, operator_id, status")
+      .eq("operator_id", user.id)
+      .eq("status", "active");
+
+    console.log("STEP 1 - ACTIVE TRIPS:", activeTrips);
+    console.log("STEP 1 - TRIP ERROR:", tripError);
+
+    if (tripError) throw tripError;
+
+    if (!activeTrips?.length) {
+      console.log("NO ACTIVE TRIPS FOUND!");
+
+      if (mountedRef.current) {
+        setMarkedPassengers([]);
+      }
+
+      return [];
+    }
+
+    const tripIds = activeTrips.map(trip => trip.trip_id);
+
+    console.log("ACTIVE TRIP IDS:", tripIds);
+
+    // STEP 2: Get passenger marks
+    const { data, error } = await supabase
+      .from("passenger_marked_buses")
+      .select("*")
+      .in("trip_id", tripIds);
+
+    console.log("STEP 2 - PASSENGER RECORDS:", data);
+    console.log("STEP 2 - PASSENGER QUERY ERROR:", error);
+
+    if (error) throw error;
+
+    // STEP 3: Match passenger records with active trips
+    const activeTripLookup = new Map(
+      activeTrips.map(trip => [
+        String(trip.trip_id),
+        String(trip.bus_id),
+      ])
+    );
+
+    const validPassengers = (data || []).filter(passenger => {
+      const activeBusId = activeTripLookup.get(
+        String(passenger.trip_id)
+      );
+
+      const latitude =
+        passenger.latitude == null
+          ? NaN
+          : Number(passenger.latitude);
+
+      const longitude =
+        passenger.longitude == null
+          ? NaN
+          : Number(passenger.longitude);
+
+      const matchesTrip =
+        activeBusId &&
+        activeBusId === String(passenger.bus_id);
+
+      const hasValidCoordinates =
+        Number.isFinite(latitude) &&
+        Number.isFinite(longitude) &&
+        latitude >= -90 &&
+        latitude <= 90 &&
+        longitude >= -180 &&
+        longitude <= 180;
+
+      console.log("CHECKING PASSENGER:", {
+        passenger_id: passenger.passenger_id,
+        passenger_bus_id: passenger.bus_id,
+        passenger_trip_id: passenger.trip_id,
+        matching_active_bus_id: activeBusId,
+        latitude,
+        longitude,
+        matchesTrip,
+        hasValidCoordinates,
+      });
+
+      return matchesTrip && hasValidCoordinates;
+    });
+
+    console.log("STEP 3 - VALID PASSENGERS:", validPassengers);
+    console.log("TOTAL PASSENGER RECORDS:", data?.length || 0);
+    console.log("TOTAL VALID MARKERS:", validPassengers.length);
+    console.log("===================================\n");
+
+    if (mountedRef.current) {
+      setMarkedPassengers(validPassengers);
+    }
+
+    return validPassengers;
+
+  } catch (error) {
+    console.log("LOAD MARKED PASSENGERS ERROR:", error);
+
+    if (mountedRef.current) {
+      setMarkedPassengers([]);
+    }
+
+    return [];
+  }
+}, [user?.id, userLevel]);
+
+  // ========================================
   // LOAD TRACKING DATA
   // ========================================
 
@@ -1040,7 +1265,7 @@ export default function TrackingScreen() {
     }
   }, [loadLiveBuses]);
 
-  // ========================================
+    // ========================================
   // LOCATION SERVICES PROMPT
   // ========================================
 
@@ -1241,12 +1466,20 @@ export default function TrackingScreen() {
       currentUserId: user?.id,
     });
 
-    // Show "Your location" only on the passenger screen
+    // Show the passenger's own location on the passenger screen.
     if (userLevel === "user" && currentLocation) {
       sendMapMessage({
         type: "CURRENT_LOCATION",
         latitude: currentLocation.latitude,
         longitude: currentLocation.longitude,
+      });
+    }
+
+    // Show marked passenger locations only on the operator's map.
+    if (userLevel === "operator") {
+      sendMapMessage({
+        type: "UPDATE_HAIL_PASSENGERS",
+        passengers: markedPassengers,
       });
     }
   }, [
@@ -1255,6 +1488,7 @@ export default function TrackingScreen() {
     currentLocation,
     user?.id,
     userLevel,
+    markedPassengers,
     sendMapMessage,
   ]);
 
@@ -1305,7 +1539,11 @@ export default function TrackingScreen() {
 
   const handleRefresh = useCallback(async () => {
     await loadTrackingData();
-  }, [loadTrackingData]);
+
+    if (userLevel === "operator") {
+      await loadMarkedPassengers();
+    }
+  }, [loadTrackingData, loadMarkedPassengers, userLevel]);
 
   const clearFilters = useCallback(() => {
     setBusTypeFilter("");
@@ -1505,7 +1743,7 @@ export default function TrackingScreen() {
   ]);
 
   // ========================================
-  // REALTIME
+  // REALTIME: BUS LOCATIONS, TRIPS AND BUSES
   // ========================================
 
   useEffect(() => {
@@ -1539,6 +1777,10 @@ export default function TrackingScreen() {
       () => {
         if (isActive) {
           loadLiveBuses();
+
+          if (userLevel === "operator") {
+            loadMarkedPassengers();
+          }
         }
       }
     );
@@ -1569,10 +1811,70 @@ export default function TrackingScreen() {
       isActive = false;
       supabase.removeChannel(channel);
     };
-  }, [loadLiveBuses, user?.id]);
+  }, [
+    loadLiveBuses,
+    loadMarkedPassengers,
+    user?.id,
+    userLevel,
+  ]);
 
   // ========================================
-  // AUTOMATIC BACKUP REFRESH
+  // REALTIME: PASSENGER HAIL MARKERS
+  // ========================================
+
+  useEffect(() => {
+    if (!user?.id || userLevel !== "operator") {
+      setMarkedPassengers([]);
+      return;
+    }
+
+    let isActive = true;
+
+    const refreshPassengers = async () => {
+      if (!isActive) return;
+
+      await loadMarkedPassengers();
+    };
+
+    // Load existing passenger marks immediately.
+    refreshPassengers();
+
+    // Listen for passenger mark insertions, updates and deletions.
+    const channel = supabase
+      .channel(`operator-hail-map-${user.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "passenger_marked_buses",
+        },
+        () => {
+          refreshPassengers();
+        }
+      )
+      .subscribe((status, error) => {
+        console.log("HAIL MAP REALTIME STATUS:", status);
+
+        if (error) {
+          console.log("HAIL MAP REALTIME ERROR:", error);
+        }
+      });
+
+    // Backup refresh in case Realtime does not deliver an event.
+    const interval = setInterval(() => {
+      refreshPassengers();
+    }, 5000);
+
+    return () => {
+      isActive = false;
+      clearInterval(interval);
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id, userLevel, loadMarkedPassengers]);
+
+  // ========================================
+  // AUTOMATIC BACKUP REFRESH FOR BUSES
   // ========================================
 
   useEffect(() => {
@@ -1623,6 +1925,10 @@ export default function TrackingScreen() {
 
           loadTrackingData();
 
+          if (userLevel === "operator") {
+            loadMarkedPassengers();
+          }
+
           try {
             const servicesEnabled =
               await Location.hasServicesEnabledAsync();
@@ -1654,10 +1960,15 @@ export default function TrackingScreen() {
     return () => {
       subscription.remove();
     };
-  }, [loadTrackingData, startPassengerLocationTracking]);
+  }, [
+    loadTrackingData,
+    loadMarkedPassengers,
+    startPassengerLocationTracking,
+    userLevel,
+  ]);
 
   // ========================================
-  // UPDATE MAP
+  // UPDATE MAP WHEN DATA CHANGES
   // ========================================
 
   useEffect(() => {
@@ -1721,7 +2032,7 @@ export default function TrackingScreen() {
     );
   }
 
-  // ========================================
+    // ========================================
   // MAIN SCREEN
   // ========================================
 
@@ -2099,6 +2410,7 @@ export default function TrackingScreen() {
               {filterOptionsLoading && (
                 <View style={styles.filterLoadingRow}>
                   <ActivityIndicator size="small" color={C.blue} />
+
                   <Text style={styles.filterLoadingText}>
                     Loading companies, routes and stops...
                   </Text>
@@ -2679,10 +2991,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 16,
     right: 16,
-
-    // Keep the bus information above the bottom tab navigation
     bottom: 85,
-
     borderRadius: 24,
     padding: 16,
     zIndex: 10,

@@ -3,7 +3,7 @@
   "expo": {
     "name": "RouteX",
     "slug": "RouteX",
-    "version": "1.0.0",
+    "version": "1.0.4",
     "scheme": "routex",
     "orientation": "portrait",
     "icon": "./assets/routex-logo.png",
@@ -19,7 +19,7 @@
     },
 
     "android": {
-      "package": "com.anonymous.RouteX",
+      "package": "com.anonymous.RouteX.dev",
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/routex-logo.png",
@@ -34,7 +34,8 @@
         "android.permission.RECEIVE_BOOT_COMPLETED",
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_LOCATION",
-        "android.permission.POST_NOTIFICATIONS"
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.REQUEST_INSTALL_PACKAGES"
       ]
     },
 

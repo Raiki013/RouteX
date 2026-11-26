@@ -23,7 +23,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "../config/supabase";
 
 import {
-  C,
   NeuView,
   NeuTouchable,
   NeuCard,
@@ -34,7 +33,7 @@ import {
 // ==========================================
 
 const COLORS = {
-  background: "#DDE6F4",
+  background: "#EFF4FC",
   surface: "#EFF4FC",
   inset: "#E1E9F6",
 
@@ -132,6 +131,10 @@ export default function CashierPaymentScreen({
     }
   };
 
+  // ========================================
+  // ALERT ICON
+  // ========================================
+
   const getAlertIcon = () => {
     switch (alertConfig.type) {
       case "success":
@@ -144,6 +147,10 @@ export default function CashierPaymentScreen({
         return "information-circle";
     }
   };
+
+  // ========================================
+  // ALERT COLORS
+  // ========================================
 
   const getAlertColor = () => {
     switch (alertConfig.type) {
@@ -169,6 +176,20 @@ export default function CashierPaymentScreen({
       default:
         return "#E5EDFF";
     }
+  };
+
+  // ========================================
+  // CONFIRMATION BUTTON COLOR
+  // ========================================
+
+  const getAlertConfirmColor = () => {
+    if (
+      alertConfig.title === "Confirm Cash Payment"
+    ) {
+      return COLORS.green;
+    }
+
+    return getAlertColor();
   };
 
   // ========================================
@@ -287,7 +308,6 @@ export default function CashierPaymentScreen({
           throw new Error("Booking not found.");
         }
 
-        // Load passenger records separately
         const {
           data: passengerRows,
           error: passengerError,
@@ -500,538 +520,533 @@ export default function CashierPaymentScreen({
   // ========================================
 
   return (
-    <SafeAreaView
-      style={styles.screen}
-      edges={["top", "left", "right"]}
-    >
+    <View style={styles.screen}>
       <StatusBar
         backgroundColor={COLORS.background}
         barStyle="dark-content"
+        translucent={false}
       />
 
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
+      <SafeAreaView
+        style={styles.safeArea}
+        edges={["left", "right"]}
       >
-        {/* HEADER */}
+        <ScrollView
+          style={styles.container}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* HEADER */}
 
-        <View style={styles.header}>
-          <NeuTouchable
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Ionicons
-              name="arrow-back"
-              size={22}
-              color={COLORS.dark}
-            />
-          </NeuTouchable>
-
-          <View style={styles.headerInfo}>
-            <Text style={styles.title}>
-              Cashier Payment
-            </Text>
-
-            <Text style={styles.subtitle}>
-              Booking verification and fare collection
-            </Text>
-          </View>
-        </View>
-
-        {/* SEARCH CARD */}
-
-        <NeuCard style={styles.searchCard}>
-          <View style={styles.sectionHeading}>
-            <View style={styles.headingIcon}>
-              <Ionicons
-                name="search-outline"
-                size={20}
-                color={COLORS.primary}
-              />
-            </View>
-
-            <Text style={styles.sectionTitle}>
-              Find Booking
-            </Text>
-          </View>
-
-          <Text style={styles.label}>
-            Booking Reference
-          </Text>
-
-          <View style={styles.searchRow}>
-            <NeuView inset style={styles.inputWrapper}>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter RX booking reference"
-                placeholderTextColor={COLORS.muted}
-                autoCapitalize="characters"
-                value={reference}
-                onChangeText={setReference}
-              />
-            </NeuView>
-
-            <TouchableOpacity
-              style={styles.searchButton}
-              onPress={findBooking}
-              disabled={loading}
-              activeOpacity={0.85}
+          <View style={styles.header}>
+            <NeuTouchable
+              style={styles.backButton}
+              onPress={() => navigation.goBack()}
             >
-              {loading ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <Ionicons
-                  name="search"
-                  size={21}
-                  color="#FFFFFF"
-                />
-              )}
-            </TouchableOpacity>
-          </View>
-
-          {scannedReference && (
-            <View style={styles.scannedNotice}>
               <Ionicons
-                name="qr-code-outline"
-                size={17}
-                color={COLORS.green}
+                name="arrow-back"
+                size={22}
+                color={COLORS.dark}
               />
+            </NeuTouchable>
 
-              <Text style={styles.scannedText}>
-                Booking reference received from QR scan.
+            <View style={styles.headerInfo}>
+              <Text style={styles.title}>
+                Cashier Payment
+              </Text>
+
+              <Text style={styles.subtitle}>
+                Booking verification and fare collection
               </Text>
             </View>
-          )}
-        </NeuCard>
+          </View>
 
-        {/* LOADING */}
+          {/* SEARCH CARD */}
 
-        {loading && (
-          <NeuCard style={styles.loadingCard}>
-            <ActivityIndicator
-              size="large"
-              color={COLORS.primary}
-            />
-
-            <Text style={styles.loadingText}>
-              Retrieving passenger booking...
-            </Text>
-          </NeuCard>
-        )}
-
-        {/* BOOKING INFORMATION */}
-
-        {booking && !loading && (
-          <NeuCard style={styles.bookingCard}>
-            {/* CARD HEADER */}
-
-            <View style={styles.cardHeader}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>
-                  Booking Information
-                </Text>
-
-                <Text style={styles.cardSubtitle}>
-                  Verify the passenger's reservation.
-                </Text>
-              </View>
-
-              <NeuView small style={styles.headerIcon}>
+          <NeuCard style={styles.searchCard}>
+            <View style={styles.sectionHeading}>
+              <View style={styles.headingIcon}>
                 <Ionicons
-                  name="receipt-outline"
-                  size={24}
+                  name="search-outline"
+                  size={20}
                   color={COLORS.primary}
                 />
-              </NeuView>
+              </View>
+
+              <Text style={styles.sectionTitle}>
+                Find Booking
+              </Text>
             </View>
 
-            <View style={styles.divider} />
-
-            {/* BOOKING REFERENCE */}
-
-            <Text style={styles.detailLabel}>
+            <Text style={styles.label}>
               Booking Reference
             </Text>
 
-            <Text style={styles.detailValue}>
-              {booking.booking_reference}
-            </Text>
-
-            {/* BUS ID */}
-
-            <Text style={styles.detailLabel}>
-              Bus ID
-            </Text>
-
-            <Text style={styles.detailValue}>
-              {booking.bus_id ?? "Not available"}
-            </Text>
-
-            {/* PASSENGER FARE BREAKDOWN */}
-
-            <View style={styles.passengerSection}>
-              <View style={styles.passengerHeader}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.passengerTitle}>
-                    Passenger Fare Breakdown
-                  </Text>
-
-                  <Text style={styles.passengerSubtitle}>
-                    Passenger types and applied discounts
-                  </Text>
-                </View>
-
-                <Ionicons
-                  name="people-outline"
-                  size={24}
-                  color={COLORS.primary}
+            <View style={styles.searchRow}>
+              <NeuView inset style={styles.inputWrapper}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter RX booking reference"
+                  placeholderTextColor={COLORS.muted}
+                  autoCapitalize="characters"
+                  value={reference}
+                  onChangeText={setReference}
                 />
-              </View>
+              </NeuView>
 
-              {passengers.length > 0 ? (
-                passengers.map((passenger) => (
-                  <NeuCard
-                    key={passenger.booking_passenger_id}
-                    style={styles.passengerCard}
-                  >
-                    <View style={styles.passengerTop}>
-                      <Text style={styles.passengerName}>
-                        Passenger {passenger.passenger_number}
-                      </Text>
-
-                      <View
-                        style={[
-                          styles.passengerBadge,
-                          {
-                            backgroundColor:
-                              getPassengerTypeColor(
-                                passenger.passenger_type
-                              ) + "18",
-                          },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.passengerBadgeText,
-                            {
-                              color: getPassengerTypeColor(
-                                passenger.passenger_type
-                              ),
-                            },
-                          ]}
-                        >
-                          {formatPassengerType(
-                            passenger.passenger_type
-                          )}
-                        </Text>
-                      </View>
-                    </View>
-
-                    <View style={styles.passengerFareRow}>
-                      <Text style={styles.passengerLabel}>
-                        Regular Fare
-                      </Text>
-
-                      <Text style={styles.passengerValue}>
-                        ₱{Number(
-                          passenger.regular_fare || 0
-                        ).toFixed(2)}
-                      </Text>
-                    </View>
-
-                    <View style={styles.passengerFareRow}>
-                      <Text style={styles.passengerLabel}>
-                        Discount (
-                        {formatDiscountRate(
-                          passenger.discount_rate
-                        )}
-                        )
-                      </Text>
-
-                      <Text style={styles.discountValue}>
-                        -₱{Number(
-                          passenger.discount_amount || 0
-                        ).toFixed(2)}
-                      </Text>
-                    </View>
-
-                    <View style={styles.passengerDivider} />
-
-                    <View style={styles.passengerFareRow}>
-                      <Text style={styles.passengerFinalLabel}>
-                        Final Fare
-                      </Text>
-
-                      <Text style={styles.passengerFinalValue}>
-                        ₱{Number(
-                          passenger.final_fare || 0
-                        ).toFixed(2)}
-                      </Text>
-                    </View>
-                  </NeuCard>
-                ))
-              ) : (
-                <NeuView
-                  inset
-                  style={styles.noPassengerBox}
-                >
+              <TouchableOpacity
+                style={styles.searchButton}
+                onPress={findBooking}
+                disabled={loading}
+                activeOpacity={0.85}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
                   <Ionicons
-                    name="information-circle-outline"
-                    size={20}
-                    color={COLORS.orange}
+                    name="search"
+                    size={21}
+                    color="#FFFFFF"
                   />
-
-                  <Text style={styles.noPassengerText}>
-                    No individual passenger discount records were found.
-                  </Text>
-                </NeuView>
-              )}
+                )}
+              </TouchableOpacity>
             </View>
 
-            {/* BOOKING STATUS */}
-
-            <Text style={styles.detailLabel}>
-              Booking Status
-            </Text>
-
-            <Text
-              style={[
-                styles.statusValue,
-                {
-                  color: getStatusColor(
-                    booking.booking_status
-                  ),
-                },
-              ]}
-            >
-              {String(booking.booking_status).toUpperCase()}
-            </Text>
-
-            {/* PAYMENT STATUS */}
-
-            <Text style={styles.detailLabel}>
-              Payment Status
-            </Text>
-
-            <Text
-              style={[
-                styles.statusValue,
-                {
-                  color: getStatusColor(
-                    booking.payment_status
-                  ),
-                },
-              ]}
-            >
-              {String(booking.payment_status).toUpperCase()}
-            </Text>
-
-            {/* TOTAL AMOUNT */}
-
-            <NeuView inset style={styles.amountCard}>
-              <Text style={styles.amountLabel}>
-                TOTAL FARE TO COLLECT
-              </Text>
-
-              <Text style={styles.amount}>
-                ₱{Number(booking.total_amount).toFixed(2)}
-              </Text>
-            </NeuView>
-
-            {/* EXPIRED BOOKING */}
-
-            {isExpired && (
-              <NeuView
-                inset
-                style={styles.warningBox}
-              >
+            {scannedReference && (
+              <View style={styles.scannedNotice}>
                 <Ionicons
-                  name="alert-circle"
-                  size={21}
-                  color={COLORS.red}
-                />
-
-                <Text style={styles.warningText}>
-                  This booking has expired. Payment cannot be processed.
-                </Text>
-              </NeuView>
-            )}
-
-            {/* PENDING PAYMENT */}
-
-            {isPendingUnpaid && !isExpired && (
-              <View style={styles.paymentSection}>
-                <NeuView
-                  inset
-                  style={styles.pendingNotice}
-                >
-                  <Ionicons
-                    name="cash-outline"
-                    size={23}
-                    color={COLORS.orange}
-                  />
-
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.pendingTitle}>
-                      Cash Payment Pending
-                    </Text>
-
-                    <Text style={styles.pendingDescription}>
-                      Collect the cash fare before confirming this payment.
-                    </Text>
-                  </View>
-                </NeuView>
-
-                <TouchableOpacity
-                  style={[
-                    styles.confirmButton,
-                    processing && styles.disabledButton,
-                  ]}
-                  onPress={confirmPayment}
-                  disabled={processing}
-                  activeOpacity={0.85}
-                >
-                  {processing ? (
-                    <ActivityIndicator color="#FFFFFF" />
-                  ) : (
-                    <>
-                      <Ionicons
-                        name="checkmark-circle-outline"
-                        size={21}
-                        color="#FFFFFF"
-                      />
-
-                      <Text style={styles.confirmText}>
-                        Confirm Cash Payment
-                      </Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {/* ALREADY PAID */}
-
-            {isAlreadyPaid && !ticket && (
-              <NeuView
-                inset
-                style={styles.paidNotice}
-              >
-                <Ionicons
-                  name="checkmark-circle"
-                  size={27}
+                  name="qr-code-outline"
+                  size={17}
                   color={COLORS.green}
                 />
 
+                <Text style={styles.scannedText}>
+                  Booking reference received from QR scan.
+                </Text>
+              </View>
+            )}
+          </NeuCard>
+
+          {/* LOADING */}
+
+          {loading && (
+            <NeuCard style={styles.loadingCard}>
+              <ActivityIndicator
+                size="large"
+                color={COLORS.primary}
+              />
+
+              <Text style={styles.loadingText}>
+                Retrieving passenger booking...
+              </Text>
+            </NeuCard>
+          )}
+
+          {/* BOOKING INFORMATION */}
+
+          {booking && !loading && (
+            <NeuCard style={styles.bookingCard}>
+              <View style={styles.cardHeader}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.paidTitle}>
-                    Already Paid
+                  <Text style={styles.cardTitle}>
+                    Booking Information
                   </Text>
 
-                  <Text style={styles.paidDescription}>
-                    This booking has already been paid. Duplicate payment is not allowed.
+                  <Text style={styles.cardSubtitle}>
+                    Verify the passenger's reservation.
                   </Text>
                 </View>
+
+                <NeuView small style={styles.headerIcon}>
+                  <Ionicons
+                    name="receipt-outline"
+                    size={24}
+                    color={COLORS.primary}
+                  />
+                </NeuView>
+              </View>
+
+              <View style={styles.divider} />
+
+              <Text style={styles.detailLabel}>
+                Booking Reference
+              </Text>
+
+              <Text style={styles.detailValue}>
+                {booking.booking_reference}
+              </Text>
+
+              <Text style={styles.detailLabel}>
+                Bus ID
+              </Text>
+
+              <Text style={styles.detailValue}>
+                {booking.bus_id ?? "Not available"}
+              </Text>
+
+              {/* PASSENGER FARE BREAKDOWN */}
+
+              <View style={styles.passengerSection}>
+                <View style={styles.passengerHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.passengerTitle}>
+                      Passenger Fare Breakdown
+                    </Text>
+
+                    <Text style={styles.passengerSubtitle}>
+                      Passenger types and applied discounts
+                    </Text>
+                  </View>
+
+                  <Ionicons
+                    name="people-outline"
+                    size={24}
+                    color={COLORS.primary}
+                  />
+                </View>
+
+                {passengers.length > 0 ? (
+                  passengers.map((passenger) => (
+                    <NeuCard
+                      key={passenger.booking_passenger_id}
+                      style={styles.passengerCard}
+                    >
+                      <View style={styles.passengerTop}>
+                        <Text style={styles.passengerName}>
+                          Passenger {passenger.passenger_number}
+                        </Text>
+
+                        <View
+                          style={[
+                            styles.passengerBadge,
+                            {
+                              backgroundColor:
+                                getPassengerTypeColor(
+                                  passenger.passenger_type
+                                ) + "18",
+                            },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.passengerBadgeText,
+                              {
+                                color: getPassengerTypeColor(
+                                  passenger.passenger_type
+                                ),
+                              },
+                            ]}
+                          >
+                            {formatPassengerType(
+                              passenger.passenger_type
+                            )}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View style={styles.passengerFareRow}>
+                        <Text style={styles.passengerLabel}>
+                          Regular Fare
+                        </Text>
+
+                        <Text style={styles.passengerValue}>
+                          ₱{Number(
+                            passenger.regular_fare || 0
+                          ).toFixed(2)}
+                        </Text>
+                      </View>
+
+                      <View style={styles.passengerFareRow}>
+                        <Text style={styles.passengerLabel}>
+                          Discount (
+                          {formatDiscountRate(
+                            passenger.discount_rate
+                          )}
+                          )
+                        </Text>
+
+                        <Text style={styles.discountValue}>
+                          -₱{Number(
+                            passenger.discount_amount || 0
+                          ).toFixed(2)}
+                        </Text>
+                      </View>
+
+                      <View style={styles.passengerDivider} />
+
+                      <View style={styles.passengerFareRow}>
+                        <Text style={styles.passengerFinalLabel}>
+                          Final Fare
+                        </Text>
+
+                        <Text style={styles.passengerFinalValue}>
+                          ₱{Number(
+                            passenger.final_fare || 0
+                          ).toFixed(2)}
+                        </Text>
+                      </View>
+                    </NeuCard>
+                  ))
+                ) : (
+                  <NeuView
+                    inset
+                    style={styles.noPassengerBox}
+                  >
+                    <Ionicons
+                      name="information-circle-outline"
+                      size={20}
+                      color={COLORS.orange}
+                    />
+
+                    <Text style={styles.noPassengerText}>
+                      No individual passenger discount records were found.
+                    </Text>
+                  </NeuView>
+                )}
+              </View>
+
+              {/* BOOKING STATUS */}
+
+              <Text style={styles.detailLabel}>
+                Booking Status
+              </Text>
+
+              <Text
+                style={[
+                  styles.statusValue,
+                  {
+                    color: getStatusColor(
+                      booking.booking_status
+                    ),
+                  },
+                ]}
+              >
+                {String(booking.booking_status).toUpperCase()}
+              </Text>
+
+              {/* PAYMENT STATUS */}
+
+              <Text style={styles.detailLabel}>
+                Payment Status
+              </Text>
+
+              <Text
+                style={[
+                  styles.statusValue,
+                  {
+                    color: getStatusColor(
+                      booking.payment_status
+                    ),
+                  },
+                ]}
+              >
+                {String(booking.payment_status).toUpperCase()}
+              </Text>
+
+              {/* TOTAL AMOUNT */}
+
+              <NeuView inset style={styles.amountCard}>
+                <Text style={styles.amountLabel}>
+                  TOTAL FARE TO COLLECT
+                </Text>
+
+                <Text style={styles.amount}>
+                  ₱{Number(booking.total_amount).toFixed(2)}
+                </Text>
               </NeuView>
-            )}
 
-            {/* OTHER BOOKING STATUS */}
+              {/* EXPIRED BOOKING */}
 
-            {!isPendingUnpaid &&
-              !isAlreadyPaid &&
-              !isExpired && (
+              {isExpired && (
                 <NeuView
                   inset
                   style={styles.warningBox}
                 >
                   <Ionicons
-                    name="alert-circle-outline"
-                    size={22}
+                    name="alert-circle"
+                    size={21}
                     color={COLORS.red}
                   />
 
                   <Text style={styles.warningText}>
-                    This booking cannot be processed for payment because its current status is not pending and unpaid.
+                    This booking has expired. Payment cannot be processed.
                   </Text>
                 </NeuView>
               )}
 
-            {/* GENERATED TICKET */}
+              {/* PENDING PAYMENT */}
 
-            {ticket && (
-              <NeuCard style={styles.ticket}>
-                <View style={styles.ticketIcon}>
-                  <Ionicons
-                    name="checkmark-circle"
-                    size={43}
-                    color={COLORS.green}
-                  />
+              {isPendingUnpaid && !isExpired && (
+                <View style={styles.paymentSection}>
+                  <NeuView
+                    inset
+                    style={styles.pendingNotice}
+                  >
+                    <Ionicons
+                      name="cash-outline"
+                      size={23}
+                      color={COLORS.orange}
+                    />
+
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.pendingTitle}>
+                        Cash Payment Pending
+                      </Text>
+
+                      <Text style={styles.pendingDescription}>
+                        Collect the cash fare before confirming this payment.
+                      </Text>
+                    </View>
+                  </NeuView>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.confirmButton,
+                      processing && styles.disabledButton,
+                    ]}
+                    onPress={confirmPayment}
+                    disabled={processing}
+                    activeOpacity={0.85}
+                  >
+                    {processing ? (
+                      <ActivityIndicator color="#FFFFFF" />
+                    ) : (
+                      <>
+                        <Ionicons
+                          name="checkmark-circle-outline"
+                          size={21}
+                          color="#FFFFFF"
+                        />
+
+                        <Text style={styles.confirmText}>
+                          Confirm Cash Payment
+                        </Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
                 </View>
+              )}
 
-                <Text style={styles.ticketTitle}>
-                  BOARDING TICKET GENERATED
-                </Text>
+              {/* ALREADY PAID */}
 
-                <Text style={styles.ticketCode}>
-                  {ticket.ticket_code}
-                </Text>
-
-                <View style={styles.divider} />
-
-                <Text style={styles.ticketDetail}>
-                  Reference: {booking.booking_reference}
-                </Text>
-
-                <Text style={styles.ticketDetail}>
-                  Payment: CASH
-                </Text>
-
-                <Text style={styles.ticketDetail}>
-                  Amount: ₱
-                  {Number(booking.total_amount).toFixed(2)}
-                </Text>
-
-                <View style={styles.paidBadge}>
+              {isAlreadyPaid && !ticket && (
+                <NeuView
+                  inset
+                  style={styles.paidNotice}
+                >
                   <Ionicons
                     name="checkmark-circle"
-                    size={15}
+                    size={27}
                     color={COLORS.green}
                   />
 
-                  <Text style={styles.paid}>
-                    PAID · CONFIRMED
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.paidTitle}>
+                      Already Paid
+                    </Text>
+
+                    <Text style={styles.paidDescription}>
+                      This booking has already been paid. Duplicate payment is not allowed.
+                    </Text>
+                  </View>
+                </NeuView>
+              )}
+
+              {/* OTHER BOOKING STATUS */}
+
+              {!isPendingUnpaid &&
+                !isAlreadyPaid &&
+                !isExpired && (
+                  <NeuView
+                    inset
+                    style={styles.warningBox}
+                  >
+                    <Ionicons
+                      name="alert-circle-outline"
+                      size={22}
+                      color={COLORS.red}
+                    />
+
+                    <Text style={styles.warningText}>
+                      This booking cannot be processed for payment because its current status is not pending and unpaid.
+                    </Text>
+                  </NeuView>
+                )}
+
+              {/* GENERATED TICKET */}
+
+              {ticket && (
+                <NeuCard style={styles.ticket}>
+                  <View style={styles.ticketIcon}>
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={43}
+                      color={COLORS.green}
+                    />
+                  </View>
+
+                  <Text style={styles.ticketTitle}>
+                    BOARDING TICKET GENERATED
                   </Text>
-                </View>
-              </NeuCard>
-            )}
-          </NeuCard>
-        )}
 
-        {/* SCAN ANOTHER BOOKING */}
+                  <Text style={styles.ticketCode}>
+                    {ticket.ticket_code}
+                  </Text>
 
-        {booking && !loading && (
-          <NeuTouchable
-            style={styles.scanAgainButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Ionicons
-              name="qr-code-outline"
-              size={20}
-              color={COLORS.primary}
-            />
+                  <View style={styles.divider} />
 
-            <Text style={styles.scanAgainText}>
-              Scan Another Booking
-            </Text>
-          </NeuTouchable>
-        )}
-      </ScrollView>
+                  <Text style={styles.ticketDetail}>
+                    Reference: {booking.booking_reference}
+                  </Text>
 
-      {/* ================================== */}
+                  <Text style={styles.ticketDetail}>
+                    Payment: CASH
+                  </Text>
+
+                  <Text style={styles.ticketDetail}>
+                    Amount: ₱
+                    {Number(booking.total_amount).toFixed(2)}
+                  </Text>
+
+                  <View style={styles.paidBadge}>
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={15}
+                      color={COLORS.green}
+                    />
+
+                    <Text style={styles.paid}>
+                      PAID · CONFIRMED
+                    </Text>
+                  </View>
+                </NeuCard>
+              )}
+            </NeuCard>
+          )}
+
+          {/* SCAN ANOTHER BOOKING */}
+
+          {booking && !loading && (
+            <NeuTouchable
+              style={styles.scanAgainButton}
+              onPress={() => navigation.goBack()}
+            >
+              <Ionicons
+                name="qr-code-outline"
+                size={20}
+                color={COLORS.primary}
+              />
+
+              <Text style={styles.scanAgainText}>
+                Scan Another Booking
+              </Text>
+            </NeuTouchable>
+          )}
+        </ScrollView>
+      </SafeAreaView>
+
       {/* CUSTOM ALERT MODAL */}
-      {/* ================================== */}
 
       <Modal
         visible={alertConfig.visible}
@@ -1081,8 +1096,8 @@ export default function CashierPaymentScreen({
                 style={[
                   styles.alertConfirmButton,
                   {
-                    backgroundColor: getAlertColor(),
-                    flex: alertConfig.cancelText ? 1 : undefined,
+                    backgroundColor: getAlertConfirmColor(),
+                    flex: 1,
                   },
                 ]}
                 onPress={confirmAlert}
@@ -1096,7 +1111,7 @@ export default function CashierPaymentScreen({
           </NeuCard>
         </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -1110,14 +1125,20 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
 
+  safeArea: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+
   container: {
     flex: 1,
+    backgroundColor: COLORS.background,
   },
 
   content: {
     paddingHorizontal: 18,
     paddingTop: 12,
-    paddingBottom: 35,
+    paddingBottom: 85,
   },
 
   // HEADER
@@ -1674,13 +1695,13 @@ const styles = StyleSheet.create({
   },
 
   alertConfirmButton: {
-    flex: 1,
-    minHeight: 47,
-    paddingHorizontal: 14,
-    borderRadius: 13,
-    justifyContent: "center",
-    alignItems: "center",
-  },
+  width: "100%",
+  minHeight: 50,
+  paddingHorizontal: 14,
+  borderRadius: 13,
+  justifyContent: "center",
+  alignItems: "center",
+},
 
   alertConfirmText: {
     color: COLORS.white,
@@ -1690,16 +1711,17 @@ const styles = StyleSheet.create({
   },
 
   alertCancelButton: {
-    flex: 1,
-    minHeight: 47,
-    borderRadius: 13,
-    justifyContent: "center",
-    alignItems: "center",
-  },
+  flex: 1,
+  minHeight: 47,
+  borderRadius: 13,
+  backgroundColor: COLORS.red,
+  justifyContent: "center",
+  alignItems: "center",
+},
 
-  alertCancelText: {
-    color: COLORS.dark,
-    fontSize: 12,
-    fontWeight: "800",
-  },
+alertCancelText: {
+  color: COLORS.white,
+  fontSize: 12,
+  fontWeight: "900",
+},
 });

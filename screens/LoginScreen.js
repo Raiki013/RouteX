@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from "react";
 
 import {
@@ -20,6 +21,7 @@ import * as Linking from "expo-linking";
 
 import { supabase } from "../config/supabase";
 import { registerPushToken } from "../services/pushNotifications";
+
 import {
   C,
   NeuView,
@@ -28,9 +30,9 @@ import {
   blueGlow,
 } from "../theme/theme";
 
-// ========================================
-// CUSTOM ALERT
-// ========================================
+// =====================================
+// CUSTOM SWEET ALERT
+// =====================================
 
 function SweetAlert({
   visible,
@@ -75,14 +77,20 @@ function SweetAlert({
           </NeuView>
 
           <Text style={styles.alertTitle}>{title}</Text>
+
           <Text style={styles.alertMessage}>{message}</Text>
 
           <TouchableOpacity
-            style={[styles.alertButton, { backgroundColor: color }]}
+            style={[
+              styles.alertButton,
+              { backgroundColor: color },
+            ]}
             onPress={onConfirm}
             activeOpacity={0.85}
           >
-            <Text style={styles.alertButtonText}>{confirmText}</Text>
+            <Text style={styles.alertButtonText}>
+              {confirmText}
+            </Text>
           </TouchableOpacity>
         </NeuView>
       </View>
@@ -90,9 +98,9 @@ function SweetAlert({
   );
 }
 
-// ========================================
+// =====================================
 // LOGIN SCREEN
-// ========================================
+// =====================================
 
 export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState("");
@@ -100,6 +108,7 @@ export default function LoginScreen({ navigation }) {
 
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
+
   const [resetCooldown, setResetCooldown] = useState(0);
 
   const [alertConfig, setAlertConfig] = useState({
@@ -109,9 +118,9 @@ export default function LoginScreen({ navigation }) {
     type: "info",
   });
 
-  // ========================================
+  // =====================================
   // ALERT FUNCTIONS
-  // ========================================
+  // =====================================
 
   const showAlert = (title, message, type = "info") => {
     setAlertConfig({
@@ -123,62 +132,74 @@ export default function LoginScreen({ navigation }) {
   };
 
   const closeAlert = () => {
-    setAlertConfig((prev) => ({
-      ...prev,
+    setAlertConfig((previous) => ({
+      ...previous,
       visible: false,
     }));
   };
 
-  // ========================================
-  // PASSWORD RESET COUNTDOWN
-  // ========================================
+  // =====================================
+  // FORGOT PASSWORD COUNTDOWN
+  // =====================================
 
   useEffect(() => {
     if (resetCooldown <= 0) return;
 
     const timer = setTimeout(() => {
-      setResetCooldown((prev) => Math.max(0, prev - 1));
+      setResetCooldown((previous) =>
+        Math.max(previous - 1, 0)
+      );
     }, 1000);
 
     return () => clearTimeout(timer);
   }, [resetCooldown]);
 
-  // ========================================
+  // =====================================
   // LOGIN
-  // ========================================
+  // =====================================
 
   const handleLogin = async () => {
-    if (loading) return;
-
     if (!email.trim() || !password) {
       showAlert(
-        "Missing Fields",
+        "Missing Information",
         "Please enter your email and password.",
         "warning"
       );
       return;
     }
 
-    setLoading(true);
-
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password,
-      });
+      setLoading(true);
+
+      const { data, error } =
+        await supabase.auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        });
 
       if (error) {
-        showAlert("Login Failed", error.message, "error");
+        showAlert(
+          "Login Failed",
+          error.message,
+          "error"
+        );
         return;
       }
 
       if (data.user) {
+        // Register push notification token.
+        // Keep this because LoginScreen handles push registration.
         try {
           await registerPushToken(data.user.id);
         } catch (pushError) {
-          console.log("Push registration failed:", pushError.message);
+          console.log(
+            "Push notification registration error:",
+            pushError
+          );
         }
 
+        // App.js handles single-session claiming
+        // and monitoring according to your current setup.
         navigation.replace("MainTabs");
       }
     } catch (error) {
@@ -186,7 +207,7 @@ export default function LoginScreen({ navigation }) {
 
       showAlert(
         "Error",
-        "Something went wrong. Please try again.",
+        "Something went wrong while logging in.",
         "error"
       );
     } finally {
@@ -194,57 +215,60 @@ export default function LoginScreen({ navigation }) {
     }
   };
 
-  // ========================================
+  // =====================================
   // FORGOT PASSWORD
-  // ========================================
+  // =====================================
 
   const handleForgotPassword = async () => {
     const cleanEmail = email.trim().toLowerCase();
 
-    if (loading) return;
-
     if (!cleanEmail) {
       showAlert(
-        "Email Required",
+        "Forgot Password",
         "Please enter your email address first.",
         "warning"
       );
       return;
     }
 
+    if (loading) return;
+
     if (resetCooldown > 0) {
       showAlert(
         "Please Wait",
-        `Please wait ${resetCooldown} seconds before requesting another reset email.`,
+        `You can request another password reset email in ${resetCooldown} seconds.`,
         "warning"
       );
       return;
     }
 
-    setLoading(true);
-
     try {
-      const redirectUrl = Linking.createURL("reset-password");
+      setLoading(true);
 
-      const { data, error } = await supabase.auth.resetPasswordForEmail(
-        cleanEmail,
-        {
-          redirectTo: redirectUrl,
-        }
-      );
+      const redirectTo = Linking.createURL("reset-password");
+
+      const { error } =
+        await supabase.auth.resetPasswordForEmail(
+          cleanEmail,
+          {
+            redirectTo,
+          }
+        );
 
       if (error) {
-        console.log("RESET PASSWORD ERROR:", error);
+        const errorMessage =
+          error.message?.toLowerCase() || "";
 
         if (
-          error.code === "over_email_send_rate_limit" ||
+          errorMessage.includes("over_email_send_rate_limit") ||
+          errorMessage.includes("rate limit") ||
           error.status === 429
         ) {
           setResetCooldown(60);
 
           showAlert(
             "Too Many Requests",
-            "You have requested too many password reset emails. Please wait before trying again. If you already received a reset email, check your inbox and spam folder.",
+            "Please wait 60 seconds before requesting another password reset email.",
             "warning"
           );
 
@@ -252,29 +276,27 @@ export default function LoginScreen({ navigation }) {
         }
 
         showAlert(
-          "Request Failed",
-          "We couldn't send your password reset email. Please try again later.",
+          "Error",
+          error.message,
           "error"
         );
 
         return;
       }
 
-      console.log("RESET PASSWORD SUCCESS:", data);
-
       setResetCooldown(60);
 
       showAlert(
-        "Email Sent!",
-        "If an account exists for this email, you will receive a password reset link. Please check your inbox and spam folder.",
+        "Email Sent",
+        "Password reset instructions have been sent to your email.",
         "success"
       );
     } catch (error) {
-      console.log("FORGOT PASSWORD EXCEPTION:", error);
+      console.log("Forgot password error:", error);
 
       showAlert(
         "Error",
-        "Something went wrong. Please try again later.",
+        "Unable to send password reset email.",
         "error"
       );
     } finally {
@@ -282,101 +304,111 @@ export default function LoginScreen({ navigation }) {
     }
   };
 
-  // ========================================
+  // =====================================
   // UI
-  // ========================================
+  // =====================================
 
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      behavior={
+        Platform.OS === "ios" ? "padding" : undefined
+      }
     >
-      <StatusBar backgroundColor={C.background} barStyle="dark-content" />
+      <StatusBar
+        backgroundColor={C.background}
+        barStyle="dark-content"
+      />
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* HEADER */}
+        <View style={styles.content}>
 
-        <View style={styles.topHeader}>
-          <NeuView style={styles.logoContainer}>
-            <Image
-              source={require("../assets/routex-logo-blue.png")}
-              style={styles.logo}
-              resizeMode="contain"
-            />
-          </NeuView>
+          {/* LOGO AND HEADER */}
 
-          <Text style={styles.appName}>RouteX</Text>
+          <View style={styles.header}>
+            <NeuView style={styles.logoContainer}>
+              <Image
+                source={require("../assets/routex-logo-blue.png")}
+                style={styles.logo}
+                resizeMode="contain"
+              />
+            </NeuView>
 
-          <Text style={styles.headerSubtitle}>YOUR JOURNEY, CONNECTED.</Text>
-        </View>
-
-        {/* LOGIN CARD */}
-
-        <NeuCard style={styles.card}>
-          <View style={styles.welcomeContainer}>
-            <Text style={styles.greeting}>SIGN IN</Text>
-
-            <Text style={styles.title}>Welcome Back!</Text>
+            <Text style={styles.appName}>RouteX</Text>
 
             <Text style={styles.subtitle}>
-              Sign in to continue your journey with RouteX.
+              YOUR JOURNEY, CONNECTED.
             </Text>
           </View>
 
-          {/* EMAIL */}
+          {/* LOGIN CARD */}
 
-          <Text style={styles.inputLabel}>Email Address</Text>
+          <NeuCard style={styles.card}>
 
-          <NeuView inset style={styles.inputBox}>
-            <Ionicons
-              name="mail-outline"
-              size={20}
-              color={C.blue}
-              style={styles.inputIcon}
-            />
+            <Text style={styles.heading}>
+              Welcome Back!
+            </Text>
 
-            <TextInput
-              placeholder="Enter your email"
-              placeholderTextColor={C.muted}
-              style={styles.input}
-              value={email}
-              onChangeText={setEmail}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              autoCorrect={false}
-              returnKeyType="next"
-            />
-          </NeuView>
+            <Text style={styles.description}>
+              Sign in to continue your journey with RouteX.
+            </Text>
 
-          {/* PASSWORD */}
+            {/* EMAIL */}
 
-          <Text style={styles.inputLabel}>Password</Text>
+            <Text style={styles.label}>
+              Email Address
+            </Text>
 
-          <NeuView inset style={styles.inputBox}>
-            <Ionicons
-              name="lock-closed-outline"
-              size={20}
-              color={C.blue}
-              style={styles.inputIcon}
-            />
+            <NeuView inset style={styles.inputContainer}>
+              <Ionicons
+                name="mail-outline"
+                size={20}
+                color={C.secondary}
+              />
 
-            <TextInput
-              placeholder="Enter your password"
-              placeholderTextColor={C.muted}
-              secureTextEntry={!showPass}
-              style={styles.input}
-              value={password}
-              onChangeText={setPassword}
-              autoCapitalize="none"
-              returnKeyType="done"
-              onSubmitEditing={handleLogin}
-            />
+              <TextInput
+                style={styles.input}
+                placeholder="Enter your email"
+                placeholderTextColor={C.secondary}
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                editable={!loading}
+              />
+            </NeuView>
 
-            <NeuTouchable
+            {/* PASSWORD */}
+
+            <Text style={styles.label}>
+              Password
+            </Text>
+
+            <NeuView inset style={styles.inputContainer}>
+              <Ionicons
+                name="lock-closed-outline"
+                size={20}
+                color={C.secondary}
+              />
+
+              <TextInput
+                style={styles.input}
+                placeholder="Enter your password"
+                placeholderTextColor={C.secondary}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPass}
+                autoCapitalize="none"
+                autoCorrect={false}
+                editable={!loading}
+              />
+
+              <NeuTouchable
               small
               onPress={() => setShowPass(!showPass)}
               style={styles.eyeButton}
@@ -389,78 +421,77 @@ export default function LoginScreen({ navigation }) {
             </NeuTouchable>
           </NeuView>
 
-          {/* FORGOT PASSWORD */}
+            {/* FORGOT PASSWORD */}
 
-          <View style={styles.forgotPasswordContainer}>
             <TouchableOpacity
+              style={styles.forgotButton}
               onPress={handleForgotPassword}
-              disabled={loading || resetCooldown > 0}
+              disabled={loading}
               activeOpacity={0.7}
             >
-              <Text
-                style={[
-                  styles.forgotPasswordText,
-                  (loading || resetCooldown > 0) && {
-                    opacity: 0.5,
-                  },
-                ]}
-              >
+              <Text style={styles.forgotText}>
                 {resetCooldown > 0
-                  ? `Try Again in ${resetCooldown}s`
+                  ? `Try again in ${resetCooldown}s`
                   : "Forgot Password?"}
               </Text>
             </TouchableOpacity>
-          </View>
 
-          {/* LOGIN BUTTON */}
+            {/* LOGIN BUTTON */}
 
-          <TouchableOpacity
-            style={[styles.loginButton, loading && styles.buttonDisabled]}
-            onPress={handleLogin}
-            disabled={loading}
-            activeOpacity={0.85}
-          >
-            {loading ? (
-              <ActivityIndicator color={C.white} />
-            ) : (
-              <View style={styles.buttonContent}>
-                <Text style={styles.buttonText}>Login</Text>
-
-                <Ionicons name="arrow-forward" size={19} color={C.white} />
-              </View>
-            )}
-          </TouchableOpacity>
-
-          {/* SIGNUP */}
-
-          <View style={styles.signupContainer}>
-            <Text style={styles.signupText}>Don't have an account?</Text>
-
-            <TouchableOpacity
-              onPress={() => navigation.navigate("Signup")}
-              activeOpacity={0.7}
+            <NeuTouchable
+              style={[
+                styles.loginButton,
+                loading && styles.disabledButton,
+              ]}
+              onPress={handleLogin}
+              disabled={loading}
             >
-              <Text style={styles.signupLink}>Sign Up</Text>
-            </TouchableOpacity>
+              {loading ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.loginButtonText}>
+                  LOGIN
+                </Text>
+              )}
+            </NeuTouchable>
+
+            {/* SIGN UP */}
+
+            <View style={styles.signupContainer}>
+              <Text style={styles.signupText}>
+                Don't have an account?{" "}
+              </Text>
+
+              <TouchableOpacity
+                onPress={() => navigation.navigate("Signup")}
+                disabled={loading}
+              >
+                <Text style={styles.signupLink}>
+                  Sign Up
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+          </NeuCard>
+
+          {/* FOOTER */}
+
+          <View style={styles.footerContainer}>
+            <Ionicons
+              name="shield-checkmark-outline"
+              size={14}
+              color={C.secondary}
+            />
+
+            <Text style={styles.footer}>
+              Secure access to your RouteX account
+            </Text>
           </View>
-        </NeuCard>
 
-        {/* FOOTER */}
-
-        <View style={styles.footer}>
-          <Ionicons
-            name="shield-checkmark-outline"
-            size={16}
-            color={C.muted}
-          />
-
-          <Text style={styles.footerText}>
-            Secure login powered by Supabase
-          </Text>
         </View>
       </ScrollView>
 
-      {/* ALERT */}
+      {/* SWEET ALERT */}
 
       <SweetAlert
         visible={alertConfig.visible}
@@ -473,13 +504,11 @@ export default function LoginScreen({ navigation }) {
   );
 }
 
-// ========================================
+// =====================================
 // STYLES
-// ========================================
+// =====================================
 
 const styles = StyleSheet.create({
-  // MAIN BACKGROUND
-
   container: {
     flex: 1,
     backgroundColor: C.background,
@@ -488,15 +517,20 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     justifyContent: "center",
-    padding: 22,
+  },
+
+  content: {
+    flex: 1,
+    justifyContent: "center",
+    paddingHorizontal: 22,
     paddingVertical: 35,
   },
 
   // HEADER
 
-  topHeader: {
+  header: {
     alignItems: "center",
-    marginBottom: 32,
+    marginBottom: 30,
   },
 
   logoContainer: {
@@ -505,7 +539,7 @@ const styles = StyleSheet.create({
     borderRadius: 56,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 18,
+    marginBottom: 15,
   },
 
   logo: {
@@ -520,83 +554,62 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
 
-  headerSubtitle: {
-    fontSize: 9,
-    fontWeight: "900",
-    color: C.textSecondary,
-    letterSpacing: 2.5,
-    marginTop: 7,
+  subtitle: {
+    fontSize: 11,
+    color: C.secondary,
+    marginTop: 6,
+    letterSpacing: 2,
+    fontWeight: "700",
   },
 
-  // MAIN CARD
+  // LOGIN CARD
 
   card: {
     borderRadius: 28,
     padding: 24,
   },
 
-  welcomeContainer: {
-    marginBottom: 24,
-    alignItems: "center",
-  },
-
-  greeting: {
-    color: C.blue,
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 1.5,
-  },
-
-  title: {
+  heading: {
     fontSize: 26,
     fontWeight: "900",
     color: C.text,
-    textAlign: "center",
-    marginTop: 5,
   },
 
-  subtitle: {
-    fontSize: 12,
-    color: C.textSecondary,
-    textAlign: "center",
-    marginTop: 8,
-    lineHeight: 19,
+  description: {
+    fontSize: 13,
+    color: C.secondary,
+    marginTop: 7,
+    marginBottom: 18,
+    lineHeight: 20,
   },
 
   // INPUTS
 
-  inputLabel: {
-    fontSize: 12,
-    fontWeight: "900",
+  label: {
+    fontSize: 13,
+    fontWeight: "800",
     color: C.text,
-    marginBottom: 10,
-    marginTop: 5,
+    marginBottom: 9,
+    marginTop: 17,
   },
 
-  inputBox: {
+  inputContainer: {
+    height: 56,
+    borderRadius: 16,
     flexDirection: "row",
     alignItems: "center",
-    borderRadius: 16,
-    height: 56,
     paddingHorizontal: 15,
-    marginBottom: 20,
-  },
-
-  inputIcon: {
-    marginRight: 12,
   },
 
   input: {
     flex: 1,
+    marginLeft: 12,
     fontSize: 14,
-    fontWeight: "600",
     color: C.text,
-    height: "100%",
     paddingVertical: 0,
-    backgroundColor: "transparent",
   },
 
-  eyeButton: {
+   eyeButton: {
     width: 36,
     height: 36,
     borderRadius: 12,
@@ -606,89 +619,82 @@ const styles = StyleSheet.create({
 
   // FORGOT PASSWORD
 
-  forgotPasswordContainer: {
-    alignItems: "flex-end",
-    marginTop: -5,
-    marginBottom: 20,
+  forgotButton: {
+    alignSelf: "flex-end",
+    marginTop: 15,
+    paddingVertical: 4,
   },
 
-  forgotPasswordText: {
-    fontSize: 12,
-    fontWeight: "900",
+  forgotText: {
     color: C.blue,
+    fontSize: 13,
+    fontWeight: "800",
   },
 
   // LOGIN BUTTON
 
   loginButton: {
-    backgroundColor: C.blue,
     height: 56,
     borderRadius: 16,
+    backgroundColor: C.blue,
     justifyContent: "center",
     alignItems: "center",
-    marginTop: 5,
+    marginTop: 25,
     ...blueGlow,
   },
 
-  buttonDisabled: {
-    opacity: 0.65,
+  disabledButton: {
+    opacity: 0.6,
   },
 
-  buttonContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 12,
-  },
-
-  buttonText: {
+  loginButtonText: {
+    color: "#FFFFFF",
     fontSize: 15,
     fontWeight: "900",
-    color: C.white,
+    letterSpacing: 1.5,
   },
 
-  // SIGNUP
+  // SIGN UP
 
   signupContainer: {
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    marginTop: 26,
+    marginTop: 25,
   },
 
   signupText: {
-    fontSize: 12,
-    color: C.textSecondary,
+    color: C.secondary,
+    fontSize: 13,
   },
 
   signupLink: {
-    fontSize: 12,
-    fontWeight: "900",
     color: C.blue,
-    marginLeft: 5,
+    fontSize: 13,
+    fontWeight: "900",
   },
 
   // FOOTER
 
-  footer: {
+  footerContainer: {
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
     marginTop: 30,
-    gap: 8,
+    gap: 7,
   },
 
-  footerText: {
+  footer: {
+    color: C.secondary,
     fontSize: 11,
-    color: C.muted,
     fontWeight: "600",
   },
 
-  // ALERT MODAL
+  // SWEET ALERT
 
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(22, 52, 107, 0.45)",
+    backgroundColor: "rgba(0,0,0,0.45)",
     justifyContent: "center",
     alignItems: "center",
     padding: 25,
@@ -696,16 +702,16 @@ const styles = StyleSheet.create({
 
   alertBox: {
     width: "100%",
-    maxWidth: 360,
-    borderRadius: 26,
-    padding: 24,
+    maxWidth: 350,
+    borderRadius: 24,
+    padding: 25,
     alignItems: "center",
   },
 
   alertIcon: {
-    width: 85,
-    height: 85,
-    borderRadius: 43,
+    width: 75,
+    height: 75,
+    borderRadius: 38,
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 15,
@@ -719,25 +725,25 @@ const styles = StyleSheet.create({
   },
 
   alertMessage: {
-    fontSize: 13,
-    color: C.textSecondary,
+    fontSize: 14,
+    color: C.secondary,
     textAlign: "center",
     lineHeight: 21,
     marginTop: 10,
+    marginBottom: 22,
   },
 
   alertButton: {
     width: "100%",
-    padding: 14,
+    height: 48,
     borderRadius: 14,
+    justifyContent: "center",
     alignItems: "center",
-    marginTop: 23,
-    ...blueGlow,
   },
 
   alertButtonText: {
-    color: C.white,
-    fontWeight: "900",
+    color: "#FFFFFF",
     fontSize: 14,
+    fontWeight: "900",
   },
 });

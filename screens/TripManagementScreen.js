@@ -1,4 +1,3 @@
-
 import React, { useCallback, useState } from "react";
 
 import {
@@ -254,24 +253,11 @@ export default function TripManagementScreen({ navigation }) {
   };
 
   // =====================================
-  // OPEN BUS DOCKING
+  // OPEN BUS MANAGEMENT
   // =====================================
 
-  const openBusDocking = (bus) => {
-    const trip = getBusTrip(bus.bus_id);
-
-    if (!trip) {
-      showAlert(
-        "No Trip Available",
-        "This bus has no planned or active trip. Please create or select a trip first.",
-        "warning"
-      );
-
-      return;
-    }
-
-    navigation.navigate("OperatorDocking", {
-      tripId: trip.trip_id,
+  const openBusManagement = (bus) => {
+    navigation.navigate("BusManagement", {
       busId: bus.bus_id,
     });
   };
@@ -418,7 +404,7 @@ export default function TripManagementScreen({ navigation }) {
             </Text>
 
             <Text style={styles.sectionSubtitle}>
-              Tap a bus to open its docking page
+              Tap a bus to manage trips and docking
             </Text>
           </View>
 
@@ -448,22 +434,22 @@ export default function TripManagementScreen({ navigation }) {
             </NeuView>
 
             <Text style={styles.emptyTitle}>
-              No Buses Found
+              No Buses Assigned
             </Text>
 
             <Text style={styles.emptyText}>
-              No buses are currently assigned to your account.
-              Please check the operator_id column in your buses table.
+              There are currently no buses assigned to your
+              operator account. Please contact your
+              administrator.
             </Text>
 
             <NeuTouchable
-              small
               style={styles.emptyRefreshButton}
               onPress={() => loadData(true)}
             >
               <Ionicons
                 name="refresh"
-                size={16}
+                size={17}
                 color={C.blue}
               />
 
@@ -475,175 +461,173 @@ export default function TripManagementScreen({ navigation }) {
         ) : (
           buses.map((bus) => {
             const trip = getBusTrip(bus.bus_id);
-
-            const statusStyle = getStatusStyle(
-              bus.bus_status
-            );
+            const statusStyle = getStatusStyle(bus.bus_status);
 
             return (
-              <NeuTouchable
-                key={String(bus.bus_id)}
-                style={styles.busCard}
-                onPress={() => openBusDocking(bus)}
+              <View
+                key={bus.bus_id}
+                style={styles.busCardWrapper}
               >
-                {/* BUS INFORMATION */}
+                <NeuTouchable
+                  style={styles.busCard}
+                  onPress={() => openBusManagement(bus)}
+                >
+                  {/* BUS HEADER */}
 
-                <View style={styles.busTopRow}>
-                  <NeuView
-                    inset
-                    style={styles.busIcon}
-                  >
-                    <Ionicons
-                      name="bus"
-                      size={25}
-                      color={C.blue}
-                    />
-                  </NeuView>
-
-                  <View style={styles.busInfo}>
-                    <Text
-                      style={styles.busName}
-                      numberOfLines={1}
+                  <View style={styles.busTopRow}>
+                    <NeuView
+                      inset
+                      style={styles.busIcon}
                     >
-                      {bus.bus_name || "Unnamed Bus"}
-                    </Text>
-
-                    <Text style={styles.plate}>
-                      {bus.plate_number || "No plate number"}
-                    </Text>
-                  </View>
-
-                  <View
-                    style={[
-                      styles.statusBadge,
-                      statusStyle.badge,
-                    ]}
-                  >
-                    <View
-                      style={[
-                        styles.statusDot,
-                        statusStyle.dot,
-                      ]}
-                    />
-
-                    <Text
-                      style={[
-                        styles.statusText,
-                        statusStyle.text,
-                      ]}
-                    >
-                      {(bus.bus_status || "offline").replace(
-                        /_/g,
-                        " "
-                      )}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* BUS DETAILS */}
-
-                <View style={styles.detailsRow}>
-                  <View style={styles.detailItem}>
-                    <Ionicons
-                      name="car-outline"
-                      size={16}
-                      color={C.secondary}
-                    />
-
-                    <Text style={styles.detailText}>
-                      {bus.bus_type || "Bus"}
-                    </Text>
-                  </View>
-
-                  <View style={styles.detailItem}>
-                    <Ionicons
-                      name="people-outline"
-                      size={16}
-                      color={C.secondary}
-                    />
-
-                    <Text style={styles.detailText}>
-                      {bus.capacity ?? "N/A"} seats
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={styles.divider} />
-
-                {/* TRIP INFORMATION */}
-
-                {trip ? (
-                  <View style={styles.tripRow}>
-                    <View style={styles.tripIcon}>
                       <Ionicons
-                        name={
-                          trip.status === "active"
-                            ? "navigate"
-                            : "calendar-outline"
-                        }
-                        size={17}
+                        name="bus"
+                        size={25}
                         color={C.blue}
                       />
-                    </View>
+                    </NeuView>
 
-                    <View style={styles.tripInfo}>
-                      <Text style={styles.tripLabel}>
-                        {trip.status === "active"
-                          ? "CURRENT TRIP"
-                          : "PLANNED TRIP"}
-                      </Text>
-
+                    <View style={styles.busInfo}>
                       <Text
-                        style={styles.destination}
+                        style={styles.busName}
                         numberOfLines={1}
                       >
-                        {trip.destination || "No destination"}
+                        {bus.bus_name || "Unnamed Bus"}
                       </Text>
+
+                      <Text style={styles.plate}>
+                        {bus.plate_number || "No plate number"}
+                      </Text>
+                    </View>
+
+                    <View
+                      style={[
+                        styles.statusBadge,
+                        statusStyle.badge,
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.statusDot,
+                          statusStyle.dot,
+                        ]}
+                      />
 
                       <Text
                         style={[
-                          styles.tripStatus,
-                          trip.status === "active"
-                            ? styles.activeText
-                            : styles.plannedText,
+                          styles.statusText,
+                          statusStyle.text,
                         ]}
                       >
-                        {trip.status === "active"
-                          ? "● In Transit"
-                          : "● Scheduled"}
+                        {bus.bus_status || "offline"}
                       </Text>
                     </View>
                   </View>
-                ) : (
-                  <View style={styles.noTripRow}>
-                    <Ionicons
-                      name="information-circle-outline"
-                      size={18}
-                      color={C.muted}
-                    />
 
-                    <Text style={styles.noTripText}>
-                      No active or planned trip
+                  {/* BUS DETAILS */}
+
+                  <View style={styles.detailsRow}>
+                    <View style={styles.detailItem}>
+                      <Ionicons
+                        name="bus-outline"
+                        size={16}
+                        color={C.secondary}
+                      />
+
+                      <Text style={styles.detailText}>
+                        {bus.bus_type || "N/A"}
+                      </Text>
+                    </View>
+
+                    <View style={styles.detailItem}>
+                      <Ionicons
+                        name="people-outline"
+                        size={16}
+                        color={C.secondary}
+                      />
+
+                      <Text style={styles.detailText}>
+                        {bus.capacity ?? "N/A"} seats
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.divider} />
+
+                  {/* TRIP INFORMATION */}
+
+                  {trip ? (
+                    <View style={styles.tripRow}>
+                      <View style={styles.tripIcon}>
+                        <Ionicons
+                          name={
+                            trip.status === "active"
+                              ? "navigate"
+                              : "calendar-outline"
+                          }
+                          size={17}
+                          color={C.blue}
+                        />
+                      </View>
+
+                      <View style={styles.tripInfo}>
+                        <Text style={styles.tripLabel}>
+                          {trip.status === "active"
+                            ? "CURRENT TRIP"
+                            : "PLANNED TRIP"}
+                        </Text>
+
+                        <Text
+                          style={styles.destination}
+                          numberOfLines={1}
+                        >
+                          {trip.destination || "No destination"}
+                        </Text>
+
+                        <Text
+                          style={[
+                            styles.tripStatus,
+                            trip.status === "active"
+                              ? styles.activeText
+                              : styles.plannedText,
+                          ]}
+                        >
+                          {trip.status === "active"
+                            ? "● In Transit"
+                            : "● Scheduled"}
+                        </Text>
+                      </View>
+                    </View>
+                  ) : (
+                    <View style={styles.noTripRow}>
+                      <Ionicons
+                        name="information-circle-outline"
+                        size={18}
+                        color={C.muted}
+                      />
+
+                      <Text style={styles.noTripText}>
+                        No active or planned trip
+                      </Text>
+                    </View>
+                  )}
+
+                  {/* MANAGE ACTION */}
+
+                  <View style={styles.manageRow}>
+                    <Text style={styles.manageText}>
+                      Manage bus and trips
                     </Text>
+
+                    <View style={styles.manageIcon}>
+                      <Ionicons
+                        name="arrow-forward"
+                        size={17}
+                        color={C.white}
+                      />
+                    </View>
                   </View>
-                )}
-
-                {/* MANAGE ACTION */}
-
-                <View style={styles.manageRow}>
-                  <Text style={styles.manageText}>
-                    Manage bus docking
-                  </Text>
-
-                  <View style={styles.manageIcon}>
-                    <Ionicons
-                      name="arrow-forward"
-                      size={17}
-                      color={C.white}
-                    />
-                  </View>
-                </View>
-              </NeuTouchable>
+                </NeuTouchable>
+              </View>
             );
           })
         )}
@@ -884,11 +868,15 @@ const styles = StyleSheet.create({
 
   // BUS CARD
 
+  busCardWrapper: {
+    marginBottom: 18,
+  },
+
   busCard: {
     backgroundColor: C.surface,
     borderRadius: 23,
     padding: 18,
-    marginBottom: 19,
+    marginBottom: 9,
   },
 
   busTopRow: {

@@ -1,5 +1,5 @@
-
 import React, { useCallback, useRef, useState } from "react";
+
 import {
   View,
   Text,
@@ -49,7 +49,6 @@ const COLORS = {
   muted: C.muted,
   white: C.white,
 
-  // Preserve bus availability colors
   green: "#16A34A",
   lightGreen: "#ECFDF3",
   greenBorder: "#BBF7D0",
@@ -468,7 +467,6 @@ export default function BusManagementScreen({ navigation, route }) {
       }
     } finally {
       if (!silent) setLoading(false);
-
       setRefreshing(false);
     }
   };
@@ -549,19 +547,12 @@ export default function BusManagementScreen({ navigation, route }) {
 
   // ==========================================
   // UPDATE AVAILABILITY
+  // Availability can be changed even during
+  // an active trip.
   // ==========================================
 
   const updateAvailability = async (status) => {
     if (!bus || !user || saving) return;
-
-    if (bus.bus_status === "in_transit") {
-      showAlert(
-        "Bus In Transit",
-        "You cannot change passenger availability while this bus is in transit.",
-        "warning"
-      );
-      return;
-    }
 
     const messages = {
       available: {
@@ -586,7 +577,9 @@ export default function BusManagementScreen({ navigation, route }) {
 
       const { data, error } = await supabase
         .from("buses")
-        .update({ availability_status: status })
+        .update({
+          availability_status: status,
+        })
         .eq("bus_id", bus.bus_id)
         .eq("operator_id", user.id)
         .select()
@@ -598,7 +591,10 @@ export default function BusManagementScreen({ navigation, route }) {
         throw new Error("Unable to update bus availability.");
       }
 
-      setBus(data);
+      setBus((previous) => ({
+        ...previous,
+        ...data,
+      }));
 
       const message = messages[status];
 
@@ -781,17 +777,16 @@ export default function BusManagementScreen({ navigation, route }) {
           .eq("docking_id", dockingId);
 
         if (restoreDockingError) {
-          console.log(
-            "RESTORE DOCKING ERROR:",
-            restoreDockingError
-          );
+          console.log("RESTORE DOCKING ERROR:", restoreDockingError);
         }
       }
 
       if (busStatusUpdated) {
         const { error: restoreBusError } = await supabase
           .from("buses")
-          .update({ bus_status: previousBusStatus || "offline" })
+          .update({
+            bus_status: previousBusStatus || "offline",
+          })
           .eq("bus_id", currentBus.bus_id)
           .eq("operator_id", user.id);
 
@@ -1152,9 +1147,44 @@ export default function BusManagementScreen({ navigation, route }) {
   // ==========================================
 
   return (
-    <>
+    <View style={styles.container}>
+      {/* FIXED HEADER */}
+
+      <View style={styles.header}>
+        <NeuTouchable
+          small
+          style={styles.headerButton}
+          onPress={() => navigation.goBack()}
+        >
+          <Ionicons
+            name="arrow-back"
+            size={22}
+            color={COLORS.primary}
+          />
+        </NeuTouchable>
+
+        <View style={{ flex: 1 }}>
+          <Text style={styles.eyebrow}>ROUTEX OPERATOR</Text>
+          <Text style={styles.title}>Bus Management</Text>
+        </View>
+
+        <NeuTouchable
+          small
+          style={styles.headerButton}
+          onPress={onRefresh}
+        >
+          <Ionicons
+            name="refresh"
+            size={21}
+            color={COLORS.primary}
+          />
+        </NeuTouchable>
+      </View>
+
+      {/* SCROLLABLE CONTENT */}
+
       <ScrollView
-        style={styles.container}
+        style={styles.scrollArea}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
@@ -1167,39 +1197,6 @@ export default function BusManagementScreen({ navigation, route }) {
           />
         }
       >
-        {/* HEADER */}
-
-        <View style={styles.header}>
-          <NeuTouchable
-            small
-            style={styles.headerButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Ionicons
-              name="arrow-back"
-              size={22}
-              color={COLORS.primary}
-            />
-          </NeuTouchable>
-
-          <View style={{ flex: 1 }}>
-            <Text style={styles.eyebrow}>ROUTEX OPERATOR</Text>
-            <Text style={styles.title}>Bus Management</Text>
-          </View>
-
-          <NeuTouchable
-            small
-            style={styles.headerButton}
-            onPress={onRefresh}
-          >
-            <Ionicons
-              name="refresh"
-              size={21}
-              color={COLORS.primary}
-            />
-          </NeuTouchable>
-        </View>
-
         {/* BUS INFORMATION */}
 
         <NeuCard style={styles.busCard}>
@@ -1327,13 +1324,10 @@ export default function BusManagementScreen({ navigation, route }) {
                     styles.availabilityOption,
                     option.normalStyle,
                     active && option.selectedStyle,
+                    saving && styles.disabledButton,
                   ]}
-                  disabled={
-                    saving || bus.bus_status === "in_transit"
-                  }
-                  onPress={() =>
-                    updateAvailability(option.value)
-                  }
+                  disabled={saving}
+                  onPress={() => updateAvailability(option.value)}
                 >
                   <Ionicons
                     name={option.icon}
@@ -1440,28 +1434,28 @@ export default function BusManagementScreen({ navigation, route }) {
               </NeuView>
 
               {currentTrip.status === "planned" && (
-                  <NeuTouchable
-                    style={styles.dockingButton}
-                    disabled={saving}
-                    onPress={openDocking}
-                  >
-                    <Ionicons
-                      name="business-outline"
-                      size={20}
-                      color={COLORS.white}
-                    />
+                <NeuTouchable
+                  style={styles.dockingButton}
+                  disabled={saving}
+                  onPress={openDocking}
+                >
+                  <Ionicons
+                    name="business-outline"
+                    size={20}
+                    color={COLORS.white}
+                  />
 
-                    <Text style={styles.dockingButtonText}>
-                      Continue to Operator Docking
-                    </Text>
+                  <Text style={styles.dockingButtonText}>
+                    Continue to Operator Docking
+                  </Text>
 
-                    <Ionicons
-                      name="chevron-forward"
-                      size={17}
-                      color={COLORS.white}
-                    />
-                  </NeuTouchable>
-                )}
+                  <Ionicons
+                    name="chevron-forward"
+                    size={17}
+                    color={COLORS.white}
+                  />
+                </NeuTouchable>
+              )}
 
               {currentTrip.status === "active" && (
                 <TouchableOpacity
@@ -1792,8 +1786,10 @@ export default function BusManagementScreen({ navigation, route }) {
           </NeuCard>
         )}
 
-        <View style={{ height: 35 }} />
+        <View style={{ height: 100 }} />
       </ScrollView>
+
+      {/* CUSTOM ALERT */}
 
       <CustomAlert
         visible={alertData.visible}
@@ -1803,7 +1799,7 @@ export default function BusManagementScreen({ navigation, route }) {
         buttonText={alertData.buttonText}
         onClose={closeAlert}
       />
-    </>
+    </View>
   );
 }
 
@@ -1812,16 +1808,18 @@ export default function BusManagementScreen({ navigation, route }) {
 // ==========================================
 
 const styles = StyleSheet.create({
-  // SCREEN
-
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
   },
 
+  scrollArea: {
+    flex: 1,
+  },
+
   content: {
     paddingHorizontal: 18,
-    paddingTop: 40,
+    paddingTop: 10,
     paddingBottom: 35,
   },
 
@@ -1840,13 +1838,16 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
-  // HEADER
-
   header: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    marginBottom: 22,
+    paddingHorizontal: 18,
+    paddingTop: 12,
+    paddingBottom: 14,
+    backgroundColor: COLORS.background,
+    zIndex: 10,
+    elevation: 2,
   },
 
   headerButton: {
@@ -1871,8 +1872,6 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     color: COLORS.text,
   },
-
-  // BUS INFORMATION
 
   busCard: {
     backgroundColor: COLORS.surface,
@@ -1961,8 +1960,6 @@ const styles = StyleSheet.create({
     textTransform: "capitalize",
   },
 
-  // SECTION CARDS
-
   card: {
     backgroundColor: COLORS.surface,
     borderRadius: 22,
@@ -1997,8 +1994,6 @@ const styles = StyleSheet.create({
     color: COLORS.secondary,
     marginTop: 4,
   },
-
-  // AVAILABILITY - PRESERVED COLORS
 
   availabilityOptions: {
     flexDirection: "row",
@@ -2086,8 +2081,6 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
   },
 
-  // TRIP INFORMATION
-
   tripInfoBox: {
     backgroundColor: COLORS.inset,
     borderRadius: 15,
@@ -2174,16 +2167,12 @@ const styles = StyleSheet.create({
     lineHeight: 17,
   },
 
-  // INPUT LABELS
-
   inputLabel: {
     color: COLORS.text,
     fontSize: 12,
     fontWeight: "800",
     marginBottom: 9,
   },
-
-  // DROPDOWNS
 
   dropdown: {
     minHeight: 54,
@@ -2256,8 +2245,6 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
 
-  // LOADING AND WARNING
-
   loadingBox: {
     minHeight: 51,
     flexDirection: "row",
@@ -2294,8 +2281,6 @@ const styles = StyleSheet.create({
     color: "#92400E",
   },
 
-  // PRIMARY BUTTON
-
   primaryButton: {
     minHeight: 53,
     borderRadius: 15,
@@ -2318,8 +2303,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
 
-  // SECONDARY BUTTON
-
   secondaryButton: {
     minHeight: 52,
     borderRadius: 14,
@@ -2337,29 +2320,25 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
 
-  // DOCKING BUTTON
-
   dockingButton: {
-  minHeight: 51,
-  borderRadius: 14,
-  backgroundColor: COLORS.primary,
-  flexDirection: "row",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: 9,
-  marginTop: 13,
-  paddingHorizontal: 12,
-},
+    minHeight: 51,
+    borderRadius: 14,
+    backgroundColor: COLORS.primary,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 9,
+    marginTop: 13,
+    paddingHorizontal: 12,
+  },
 
   dockingButtonText: {
-  color: COLORS.white,
-  fontWeight: "800",
-  fontSize: 12,
-  flex: 1,
-  textAlign: "center",
-},
-
-  // END TRIP
+    color: COLORS.white,
+    fontWeight: "800",
+    fontSize: 12,
+    flex: 1,
+    textAlign: "center",
+  },
 
   endTripButton: {
     height: 53,
@@ -2383,8 +2362,6 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
 
-  // INFORMATION
-
   infoBox: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -2402,13 +2379,9 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
 
-  // DISABLED
-
   disabledButton: {
     opacity: 0.5,
   },
-
-  // EMPTY STATE
 
   emptyTitle: {
     fontSize: 18,

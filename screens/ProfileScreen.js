@@ -1,3 +1,4 @@
+
 import { useState, useCallback } from "react";
 
 import {
@@ -16,11 +17,16 @@ import {
 
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
+
 import * as ImagePicker from "expo-image-picker";
 import * as Notifications from "expo-notifications";
 import * as Location from "expo-location";
+import * as Application from "expo-application";
 
 import { supabase } from "../config/supabase";
+
+import AppUpdater from "../components/AppUpdater";
+
 import {
   C,
   NeuView,
@@ -46,10 +52,14 @@ export default function ProfileScreen({ navigation }) {
   const [locationOn, setLocationOn] = useState(true);
 
   const [modalVisible, setModalVisible] = useState(false);
+
   const [modalContent, setModalContent] = useState({
     title: "",
     body: "",
   });
+
+  const appVersion =
+    Application.nativeApplicationVersion || "Unknown";
 
   // =====================================
   // LOAD USER PROFILE
@@ -89,23 +99,39 @@ export default function ProfileScreen({ navigation }) {
 
       setUser({
         id: authUser.id,
+
         fullName:
           profile?.full_name ||
           authUser.user_metadata?.full_name ||
           authUser.user_metadata?.name ||
           "User",
+
         email: profile?.email || authUser.email || "—",
+
         userLevel: profile?.user_level || "user",
-        phone: authUser.phone || authUser.user_metadata?.phone || "—",
+
+        phone:
+          authUser.phone ||
+          authUser.user_metadata?.phone ||
+          "—",
+
         avatarUrl: profile?.avatar_url || null,
       });
 
-      setNotificationsOn(profile?.notifications_enabled ?? true);
-      setLocationOn(profile?.location_enabled ?? true);
+      setNotificationsOn(
+        profile?.notifications_enabled ?? true
+      );
+
+      setLocationOn(
+        profile?.location_enabled ?? true
+      );
     } catch (error) {
       console.log("PROFILE LOAD ERROR:", error.message);
 
-      Alert.alert("Error", "Unable to load your account information.");
+      Alert.alert(
+        "Error",
+        "Unable to load your account information."
+      );
     } finally {
       setLoading(false);
     }
@@ -158,12 +184,16 @@ export default function ProfileScreen({ navigation }) {
     switch (user?.userLevel?.toLowerCase()) {
       case "admin":
         return "Administrator";
+
       case "cashier":
         return "Cashier";
+
       case "operator":
         return "Bus Operator";
+
       case "user":
         return "Passenger";
+
       default:
         return "Unknown Role";
     }
@@ -183,15 +213,17 @@ export default function ProfileScreen({ navigation }) {
           "Permission Required",
           "Please allow RouteX to access your photo library to choose a profile picture."
         );
+
         return;
       }
 
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ["images"],
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
-      });
+      const result =
+        await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ["images"],
+          allowsEditing: true,
+          aspect: [1, 1],
+          quality: 0.8,
+        });
 
       if (result.canceled || !result.assets?.length) {
         return;
@@ -207,6 +239,7 @@ export default function ProfileScreen({ navigation }) {
           "Image Too Large",
           "Please select an image smaller than 5 MB."
         );
+
         return;
       }
 
@@ -216,13 +249,23 @@ export default function ProfileScreen({ navigation }) {
       const blob = await response.blob();
 
       const extension =
-        selectedImage.uri.split(".").pop()?.split("?")[0]?.toLowerCase() ||
-        "jpg";
+        selectedImage.uri
+          .split(".")
+          .pop()
+          ?.split("?")[0]
+          ?.toLowerCase() || "jpg";
 
-      const allowedExtensions = ["jpg", "jpeg", "png", "webp"];
+      const allowedExtensions = [
+        "jpg",
+        "jpeg",
+        "png",
+        "webp",
+      ];
 
       if (!allowedExtensions.includes(extension)) {
-        throw new Error("Please select a JPG, PNG, or WEBP image.");
+        throw new Error(
+          "Please select a JPG, PNG, or WEBP image."
+        );
       }
 
       const contentType =
@@ -233,7 +276,8 @@ export default function ProfileScreen({ navigation }) {
           ? "image/webp"
           : "image/jpeg");
 
-      const fileName = `${user.id}/${Date.now()}.${extension}`;
+      const fileName =
+        `${user.id}/${Date.now()}.${extension}`;
 
       const { error: uploadError } = await supabase.storage
         .from(BUCKET_NAME)
@@ -263,13 +307,17 @@ export default function ProfileScreen({ navigation }) {
         avatarUrl: photoUrl,
       }));
 
-      Alert.alert("Success", "Your profile picture has been updated.");
+      Alert.alert(
+        "Success",
+        "Your profile picture has been updated."
+      );
     } catch (error) {
       console.log("PROFILE PHOTO ERROR:", error.message);
 
       Alert.alert(
         "Upload Failed",
-        error.message || "Unable to upload your profile picture."
+        error.message ||
+          "Unable to upload your profile picture."
       );
     } finally {
       setUploadingPhoto(false);
@@ -287,10 +335,14 @@ export default function ProfileScreen({ navigation }) {
       "Remove Profile Picture",
       "Are you sure you want to remove your profile picture?",
       [
-        { text: "Cancel", style: "cancel" },
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
         {
           text: "Remove",
           style: "destructive",
+
           onPress: async () => {
             try {
               setUploadingPhoto(true);
@@ -312,9 +364,15 @@ export default function ProfileScreen({ navigation }) {
                 "Your profile picture has been removed."
               );
             } catch (error) {
-              console.log("REMOVE PHOTO ERROR:", error.message);
+              console.log(
+                "REMOVE PHOTO ERROR:",
+                error.message
+              );
 
-              Alert.alert("Error", "Unable to remove your profile picture.");
+              Alert.alert(
+                "Error",
+                "Unable to remove your profile picture."
+              );
             } finally {
               setUploadingPhoto(false);
             }
@@ -331,12 +389,15 @@ export default function ProfileScreen({ navigation }) {
   const handleNotificationToggle = async (value) => {
     try {
       if (value) {
-        const currentPermission = await Notifications.getPermissionsAsync();
+        const currentPermission =
+          await Notifications.getPermissionsAsync();
 
         let finalStatus = currentPermission.status;
 
         if (finalStatus !== "granted") {
-          const requested = await Notifications.requestPermissionsAsync();
+          const requested =
+            await Notifications.requestPermissionsAsync();
+
           finalStatus = requested.status;
         }
 
@@ -345,16 +406,27 @@ export default function ProfileScreen({ navigation }) {
             "Notification Permission",
             "Please enable notifications in your phone settings to receive RouteX notifications."
           );
+
           return;
         }
       }
 
-      await savePreference("notifications_enabled", value);
+      await savePreference(
+        "notifications_enabled",
+        value
+      );
+
       setNotificationsOn(value);
     } catch (error) {
-      console.log("NOTIFICATION ERROR:", error.message);
+      console.log(
+        "NOTIFICATION ERROR:",
+        error.message
+      );
 
-      Alert.alert("Error", "Unable to update notification settings.");
+      Alert.alert(
+        "Error",
+        "Unable to update notification settings."
+      );
     }
   };
 
@@ -373,6 +445,7 @@ export default function ProfileScreen({ navigation }) {
         if (finalStatus !== "granted") {
           const requested =
             await Location.requestForegroundPermissionsAsync();
+
           finalStatus = requested.status;
         }
 
@@ -381,16 +454,27 @@ export default function ProfileScreen({ navigation }) {
             "Location Permission",
             "Please allow RouteX to access your location in your phone settings."
           );
+
           return;
         }
       }
 
-      await savePreference("location_enabled", value);
+      await savePreference(
+        "location_enabled",
+        value
+      );
+
       setLocationOn(value);
     } catch (error) {
-      console.log("LOCATION ERROR:", error.message);
+      console.log(
+        "LOCATION ERROR:",
+        error.message
+      );
 
-      Alert.alert("Error", "Unable to update location settings.");
+      Alert.alert(
+        "Error",
+        "Unable to update location settings."
+      );
     }
   };
 
@@ -400,7 +484,11 @@ export default function ProfileScreen({ navigation }) {
 
   const openGCashSettings = () => {
     if (user?.userLevel !== "operator") {
-      Alert.alert("Access Denied", "Only bus operators can configure GCash.");
+      Alert.alert(
+        "Access Denied",
+        "Only bus operators can configure GCash."
+      );
+
       return;
     }
 
@@ -412,34 +500,48 @@ export default function ProfileScreen({ navigation }) {
   // =====================================
 
   const handleLogout = () => {
-    Alert.alert("Log Out", "Are you sure you want to log out?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Log Out",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            setLoggingOut(true);
-
-            const { error } = await supabase.auth.signOut();
-
-            if (error) throw error;
-
-            setUser(null);
-            navigation.replace("Login");
-          } catch (error) {
-            console.log("LOGOUT ERROR:", error.message);
-
-            Alert.alert(
-              "Logout Failed",
-              "Unable to log out. Please try again."
-            );
-          } finally {
-            setLoggingOut(false);
-          }
+    Alert.alert(
+      "Log Out",
+      "Are you sure you want to log out?",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
         },
-      },
-    ]);
+        {
+          text: "Log Out",
+          style: "destructive",
+
+          onPress: async () => {
+            try {
+              setLoggingOut(true);
+
+              const { error } =
+                await supabase.auth.signOut({
+                  scope: "local",
+                });
+              if (error) throw error;
+
+              setUser(null);
+
+              navigation.replace("Login");
+            } catch (error) {
+              console.log(
+                "LOGOUT ERROR:",
+                error.message
+              );
+
+              Alert.alert(
+                "Logout Failed",
+                "Unable to log out. Please try again."
+              );
+            } finally {
+              setLoggingOut(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   // =====================================
@@ -450,6 +552,7 @@ export default function ProfileScreen({ navigation }) {
     if (type === "terms") {
       setModalContent({
         title: "Terms & Conditions",
+
         body:
           "Welcome to RouteX.\n\n" +
           "By using this app, you agree to the following terms:\n\n" +
@@ -473,6 +576,7 @@ export default function ProfileScreen({ navigation }) {
     } else {
       setModalContent({
         title: "Privacy Policy",
+
         body:
           "Your privacy is important to us.\n\n" +
           "1. Data Collection\n" +
@@ -508,10 +612,17 @@ export default function ProfileScreen({ navigation }) {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <StatusBar barStyle="dark-content" backgroundColor={C.background} />
+        <StatusBar
+          barStyle="dark-content"
+          backgroundColor={C.background}
+        />
 
         <NeuView style={styles.loadingLogo}>
-          <Ionicons name="person" size={36} color={C.blue} />
+          <Ionicons
+            name="person"
+            size={36}
+            color={C.blue}
+          />
         </NeuView>
 
         <ActivityIndicator
@@ -520,7 +631,9 @@ export default function ProfileScreen({ navigation }) {
           style={{ marginTop: 20 }}
         />
 
-        <Text style={styles.loadingText}>Loading profile...</Text>
+        <Text style={styles.loadingText}>
+          Loading profile...
+        </Text>
       </View>
     );
   }
@@ -531,7 +644,10 @@ export default function ProfileScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={C.background} />
+      <StatusBar
+        barStyle="dark-content"
+        backgroundColor={C.background}
+      />
 
       <ScrollView
         contentContainerStyle={styles.content}
@@ -540,8 +656,14 @@ export default function ProfileScreen({ navigation }) {
         {/* PAGE HEADER */}
 
         <View style={styles.pageHeader}>
-          <Text style={styles.greeting}>ACCOUNT</Text>
-          <Text style={styles.pageTitle}>My Profile</Text>
+          <Text style={styles.greeting}>
+            ACCOUNT
+          </Text>
+
+          <Text style={styles.pageTitle}>
+            My Profile
+          </Text>
+
           <Text style={styles.pageSubtitle}>
             Manage your account and preferences
           </Text>
@@ -572,21 +694,38 @@ export default function ProfileScreen({ navigation }) {
                 activeOpacity={0.8}
               >
                 {uploadingPhoto ? (
-                  <ActivityIndicator color={C.white} size="small" />
+                  <ActivityIndicator
+                    color={C.white}
+                    size="small"
+                  />
                 ) : (
-                  <Ionicons name="camera" size={17} color={C.white} />
+                  <Ionicons
+                    name="camera"
+                    size={17}
+                    color={C.white}
+                  />
                 )}
               </TouchableOpacity>
             </NeuView>
 
-            <Text style={styles.name}>{user?.fullName || "User"}</Text>
+            <Text style={styles.name}>
+              {user?.fullName || "User"}
+            </Text>
 
-            <Text style={styles.email}>{user?.email || "—"}</Text>
+            <Text style={styles.email}>
+              {user?.email || "—"}
+            </Text>
 
             <NeuView inset style={styles.roleBadge}>
-              <Ionicons name="checkmark-circle" size={15} color={C.blue} />
+              <Ionicons
+                name="checkmark-circle"
+                size={15}
+                color={C.blue}
+              />
 
-              <Text style={styles.roleBadgeText}>{getUserRole()}</Text>
+              <Text style={styles.roleBadgeText}>
+                {getUserRole()}
+              </Text>
             </NeuView>
 
             <View style={styles.photoActions}>
@@ -596,9 +735,15 @@ export default function ProfileScreen({ navigation }) {
                 onPress={handleChangePhoto}
                 disabled={uploadingPhoto}
               >
-                <Ionicons name="camera-outline" size={15} color={C.blue} />
+                <Ionicons
+                  name="camera-outline"
+                  size={15}
+                  color={C.blue}
+                />
 
-                <Text style={styles.photoActionText}>Change Photo</Text>
+                <Text style={styles.photoActionText}>
+                  Change Photo
+                </Text>
               </NeuTouchable>
 
               {user?.avatarUrl && (
@@ -608,9 +753,15 @@ export default function ProfileScreen({ navigation }) {
                   disabled={uploadingPhoto}
                   activeOpacity={0.8}
                 >
-                  <Ionicons name="trash-outline" size={15} color={C.danger} />
+                  <Ionicons
+                    name="trash-outline"
+                    size={15}
+                    color={C.danger}
+                  />
 
-                  <Text style={styles.removePhotoText}>Remove</Text>
+                  <Text style={styles.removePhotoText}>
+                    Remove
+                  </Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -620,7 +771,9 @@ export default function ProfileScreen({ navigation }) {
         {/* ACCOUNT INFORMATION */}
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Account Information</Text>
+          <Text style={styles.sectionTitle}>
+            Account Information
+          </Text>
 
           <NeuCard style={styles.card}>
             <View style={styles.cardContent}>
@@ -661,7 +814,9 @@ export default function ProfileScreen({ navigation }) {
 
         {user?.userLevel === "operator" && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Operator Settings</Text>
+            <Text style={styles.sectionTitle}>
+              Operator Settings
+            </Text>
 
             <NeuCard style={styles.card}>
               <View style={styles.cardContent}>
@@ -679,7 +834,9 @@ export default function ProfileScreen({ navigation }) {
         {/* APP SETTINGS */}
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>App Settings</Text>
+          <Text style={styles.sectionTitle}>
+            App Settings
+          </Text>
 
           <NeuCard style={styles.card}>
             <View style={styles.cardContent}>
@@ -707,7 +864,9 @@ export default function ProfileScreen({ navigation }) {
         {/* MORE */}
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>More</Text>
+          <Text style={styles.sectionTitle}>
+            More
+          </Text>
 
           <NeuCard style={styles.card}>
             <View style={styles.cardContent}>
@@ -730,13 +889,20 @@ export default function ProfileScreen({ navigation }) {
               <LinkRow
                 icon="information-circle-outline"
                 label="About RouteX"
+                description={`Version ${appVersion}`}
                 onPress={() =>
                   Alert.alert(
                     "RouteX",
-                    "Smart Bus Booking & Tracking\nVersion 2.1.0"
+                    `Smart Bus Booking & Tracking\nVersion ${appVersion}`
                   )
                 }
               />
+
+              <Divider />
+
+              {/* GITHUB APP UPDATER */}
+
+              <AppUpdater />
             </View>
           </NeuCard>
         </View>
@@ -753,9 +919,15 @@ export default function ProfileScreen({ navigation }) {
             <ActivityIndicator color={C.white} />
           ) : (
             <>
-              <Ionicons name="log-out-outline" size={20} color={C.white} />
+              <Ionicons
+                name="log-out-outline"
+                size={20}
+                color={C.white}
+              />
 
-              <Text style={styles.logoutText}>Log Out</Text>
+              <Text style={styles.logoutText}>
+                Log Out
+              </Text>
             </>
           )}
         </TouchableOpacity>
@@ -764,8 +936,14 @@ export default function ProfileScreen({ navigation }) {
 
         <View style={styles.footer}>
           <View style={styles.footerLine} />
-          <Text style={styles.footerText}>RouteX</Text>
-          <Text style={styles.footerSubtitle}>Version 2.1.0</Text>
+
+          <Text style={styles.footerText}>
+            RouteX
+          </Text>
+
+          <Text style={styles.footerSubtitle}>
+            Version {appVersion}
+          </Text>
         </View>
       </ScrollView>
 
@@ -794,7 +972,9 @@ export default function ProfileScreen({ navigation }) {
                   />
                 </NeuView>
 
-                <Text style={styles.modalTitle}>{modalContent.title}</Text>
+                <Text style={styles.modalTitle}>
+                  {modalContent.title}
+                </Text>
               </View>
 
               <NeuView inset style={styles.modalScrollBox}>
@@ -802,7 +982,9 @@ export default function ProfileScreen({ navigation }) {
                   style={styles.modalScroll}
                   showsVerticalScrollIndicator={false}
                 >
-                  <Text style={styles.modalText}>{modalContent.body}</Text>
+                  <Text style={styles.modalText}>
+                    {modalContent.body}
+                  </Text>
                 </ScrollView>
               </NeuView>
 
@@ -811,7 +993,9 @@ export default function ProfileScreen({ navigation }) {
                 style={styles.modalButton}
                 activeOpacity={0.85}
               >
-                <Text style={styles.modalButtonText}>Close</Text>
+                <Text style={styles.modalButtonText}>
+                  Close
+                </Text>
               </TouchableOpacity>
             </View>
           </NeuView>
@@ -830,12 +1014,21 @@ function InfoRow({ icon, label, value }) {
     <View style={styles.row}>
       <View style={styles.rowLeft}>
         <NeuView small style={styles.iconBox}>
-          <Ionicons name={icon} size={19} color={C.blue} />
+          <Ionicons
+            name={icon}
+            size={19}
+            color={C.blue}
+          />
         </NeuView>
 
         <View style={styles.infoText}>
-          <Text style={styles.rowLabel}>{label}</Text>
-          <Text style={styles.rowValue}>{value}</Text>
+          <Text style={styles.rowLabel}>
+            {label}
+          </Text>
+
+          <Text style={styles.rowValue}>
+            {value}
+          </Text>
         </View>
       </View>
     </View>
@@ -846,24 +1039,42 @@ function InfoRow({ icon, label, value }) {
 // TOGGLE ROW
 // =====================================
 
-function ToggleRow({ icon, label, description, value, onToggle }) {
+function ToggleRow({
+  icon,
+  label,
+  description,
+  value,
+  onToggle,
+}) {
   return (
     <View style={styles.row}>
       <View style={styles.rowLeft}>
         <NeuView small style={styles.iconBox}>
-          <Ionicons name={icon} size={19} color={C.blue} />
+          <Ionicons
+            name={icon}
+            size={19}
+            color={C.blue}
+          />
         </NeuView>
 
         <View style={styles.infoText}>
-          <Text style={styles.rowLabel}>{label}</Text>
-          <Text style={styles.rowValue}>{description}</Text>
+          <Text style={styles.rowLabel}>
+            {label}
+          </Text>
+
+          <Text style={styles.rowValue}>
+            {description}
+          </Text>
         </View>
       </View>
 
       <Switch
         value={value}
         onValueChange={onToggle}
-        trackColor={{ false: "#B9C9E0", true: C.lightBlue }}
+        trackColor={{
+          false: "#B9C9E0",
+          true: C.lightBlue,
+        }}
         thumbColor={value ? C.blue : C.white}
       />
     </View>
@@ -874,7 +1085,12 @@ function ToggleRow({ icon, label, description, value, onToggle }) {
 // LINK ROW
 // =====================================
 
-function LinkRow({ icon, label, description, onPress }) {
+function LinkRow({
+  icon,
+  label,
+  description,
+  onPress,
+}) {
   return (
     <TouchableOpacity
       style={styles.row}
@@ -883,19 +1099,31 @@ function LinkRow({ icon, label, description, onPress }) {
     >
       <View style={styles.rowLeft}>
         <NeuView small style={styles.iconBox}>
-          <Ionicons name={icon} size={19} color={C.blue} />
+          <Ionicons
+            name={icon}
+            size={19}
+            color={C.blue}
+          />
         </NeuView>
 
         <View style={styles.infoText}>
-          <Text style={styles.rowLabel}>{label}</Text>
+          <Text style={styles.rowLabel}>
+            {label}
+          </Text>
 
           {description ? (
-            <Text style={styles.rowValue}>{description}</Text>
+            <Text style={styles.rowValue}>
+              {description}
+            </Text>
           ) : null}
         </View>
       </View>
 
-      <Ionicons name="chevron-forward" size={19} color={C.muted} />
+      <Ionicons
+        name="chevron-forward"
+        size={19}
+        color={C.muted}
+      />
     </TouchableOpacity>
   );
 }

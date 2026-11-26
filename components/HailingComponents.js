@@ -336,6 +336,48 @@ export function PassengerHailButton({ bus, user }) {
     passengerPositionRef.current = null;
   }, []);
 
+  const uploadPassengerLocation = useCallback(
+  async (coords) => {
+    const activeMark = markedBusRef.current;
+
+    if (
+      !activeMark?.id ||
+      !user?.id ||
+      !coords ||
+      !Number.isFinite(Number(coords.latitude)) ||
+      !Number.isFinite(Number(coords.longitude)) ||
+      AppState.currentState !== "active"
+    ) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from("passenger_marked_buses")
+        .update({
+          latitude: Number(coords.latitude),
+          longitude: Number(coords.longitude),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", activeMark.id)
+        .eq("passenger_id", user.id);
+
+      if (error) {
+        console.log(
+          "UPLOAD PASSENGER LOCATION ERROR:",
+          error.message
+        );
+      }
+    } catch (error) {
+      console.log(
+        "PASSENGER LOCATION UPLOAD ERROR:",
+        error?.message || error
+      );
+    }
+  },
+  [user?.id]
+);
+
   // ========================================
   // START PASSENGER GPS
   // ========================================
@@ -381,10 +423,12 @@ export function PassengerHailButton({ bus, user }) {
             accuracy: Location.Accuracy.BestForNavigation,
           });
 
-        passengerPositionRef.current = current.coords;
+          passengerPositionRef.current = current.coords;
 
-        // Check immediately after receiving the first GPS position.
-        checkBusDistanceRef.current?.();
+          // Upload only if the passenger has already marked this bus.
+          await uploadPassengerLocation(current.coords);
+
+          checkBusDistanceRef.current?.();
 
         // Start continuous foreground GPS updates.
         if (!locationWatcherRef.current) {
@@ -404,6 +448,8 @@ export function PassengerHailButton({ bus, user }) {
               (position) => {
                 passengerPositionRef.current =
                   position.coords;
+
+                uploadPassengerLocation(position.coords);
 
                 console.log(
                   "PASSENGER GPS UPDATED:",
@@ -557,6 +603,16 @@ export function PassengerHailButton({ bus, user }) {
       }
 
       setMarkedBus(data);
+
+      // Make the mark available to the GPS upload function.
+      markedBusRef.current = data;
+
+      // Upload the initial GPS position immediately.
+      if (passengerPositionRef.current) {
+        await uploadPassengerLocation(
+          passengerPositionRef.current
+        );
+      }
 
       markedBusRef.current = data;
 
@@ -949,6 +1005,7 @@ export function PassengerHailButton({ bus, user }) {
     markedBus?.id,
     startPassengerLocation,
     stopPassengerLocation,
+    uploadPassengerLocation,
   ]);
 
   // ========================================

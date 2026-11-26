@@ -936,7 +936,7 @@ export default function OperatorDockingScreen({ navigation, route }) {
   return (
     <SafeAreaView
       style={styles.container}
-      edges={["top", "left", "right"]}
+      edges={["left", "right"]}
     >
       {/* HEADER */}
 
@@ -1798,7 +1798,7 @@ export default function OperatorDockingScreen({ navigation, route }) {
           </>
         )}
 
-        <View style={{ height: 35 }} />
+        <View style={{ height: 100 }} />
       </ScrollView>
 
       {/* DEPARTURE TIME PICKER */}
@@ -2012,7 +2012,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 18,
-    paddingTop: 12,
+    paddingTop: 10,
     paddingBottom: 14,
     backgroundColor: COLORS.background,
   },

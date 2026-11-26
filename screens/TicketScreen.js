@@ -186,14 +186,23 @@ export default function TicketScreen({ route, navigation }) {
   const isBoarded =
     booking?.boarding_status === "boarded";
 
+  // SHARED STATUS BAR SETTINGS
+  const renderStatusBar = () => (
+    <StatusBar
+      barStyle="light-content"
+      backgroundColor={COLORS.primary}
+      translucent={false}
+    />
+  );
+
   // LOADING
   if (loading) {
     return (
-      <SafeAreaView style={styles.centerContainer} edges={["top", "left", "right"]}>
-        <StatusBar
-          barStyle="dark-content"
-          backgroundColor={COLORS.background}
-        />
+      <SafeAreaView
+        style={styles.centerContainer}
+        edges={["left", "right"]}
+      >
+        {renderStatusBar()}
 
         <ActivityIndicator
           size="large"
@@ -210,11 +219,11 @@ export default function TicketScreen({ route, navigation }) {
   // ERROR
   if (errorMessage) {
     return (
-      <SafeAreaView style={styles.centerContainer} edges={["top", "left", "right"]}>
-        <StatusBar
-          barStyle="dark-content"
-          backgroundColor={COLORS.background}
-        />
+      <SafeAreaView
+        style={styles.centerContainer}
+        edges={["left", "right"]}
+      >
+        {renderStatusBar()}
 
         <NeuView style={styles.errorIcon}>
           <Ionicons
@@ -253,11 +262,11 @@ export default function TicketScreen({ route, navigation }) {
   // PAYMENT PENDING
   if (!isPaid) {
     return (
-      <SafeAreaView style={styles.centerContainer} edges={["top", "left", "right"]}>
-        <StatusBar
-          barStyle="dark-content"
-          backgroundColor={COLORS.background}
-        />
+      <SafeAreaView
+        style={styles.centerContainer}
+        edges={["left", "right"]}
+      >
+        {renderStatusBar()}
 
         <NeuView style={styles.pendingIcon}>
           <Ionicons
@@ -295,11 +304,11 @@ export default function TicketScreen({ route, navigation }) {
   }
 
   return (
-    <SafeAreaView style={styles.screen} edges={["top", "left", "right"]}>
-      <StatusBar
-        barStyle="dark-content"
-        backgroundColor={COLORS.background}
-      />
+    <SafeAreaView
+      style={styles.screen}
+      edges={["left", "right"]}
+    >
+      {renderStatusBar()}
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -354,14 +363,19 @@ export default function TicketScreen({ route, navigation }) {
               </View>
             </View>
 
-            <NeuView inset style={[
-              styles.paidBadge,
-              isBoarded && styles.boardedBadge,
-            ]}>
-              <Text style={[
-                styles.paidText,
-                isBoarded && styles.boardedText,
-              ]}>
+            <NeuView
+              inset
+              style={[
+                styles.paidBadge,
+                isBoarded && styles.boardedBadge,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.paidText,
+                  isBoarded && styles.boardedText,
+                ]}
+              >
                 {isBoarded ? "BOARDED" : "PAID"}
               </Text>
             </NeuView>
@@ -519,7 +533,7 @@ const styles = StyleSheet.create({
 
   scrollContent: {
     padding: 18,
-    paddingBottom: 35,
+    paddingBottom: 75,
   },
 
   centerContainer: {

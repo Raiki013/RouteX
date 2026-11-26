@@ -365,17 +365,21 @@ export default function PaymentScreen({ route, navigation }) {
   const statusConfig = getStatusConfig();
 
   // =====================================
+  // SHARED STATUS BAR
+  // =====================================
+  // =====================================
   // LOADING
   // =====================================
   if (loading) {
     return (
       <SafeAreaView
         style={styles.center}
-        edges={["top", "left", "right"]}
+        edges={["left", "right"]}
       >
         <StatusBar
-          barStyle="dark-content"
-          backgroundColor={COLORS.background}
+          barStyle="light-content"
+          backgroundColor={COLORS.primary}
+          translucent={false}
         />
 
         <ActivityIndicator
@@ -397,11 +401,12 @@ export default function PaymentScreen({ route, navigation }) {
     return (
       <SafeAreaView
         style={styles.center}
-        edges={["top", "left", "right"]}
+        edges={["left", "right"]}
       >
         <StatusBar
-          barStyle="dark-content"
-          backgroundColor={COLORS.background}
+          barStyle="light-content"
+          backgroundColor={COLORS.primary}
+          translucent={false}
         />
 
         <NeuView style={styles.emptyIcon}>
@@ -438,11 +443,12 @@ export default function PaymentScreen({ route, navigation }) {
   return (
     <SafeAreaView
       style={styles.screen}
-      edges={["top", "left", "right"]}
+      edges={["left", "right"]}
     >
       <StatusBar
-        barStyle="dark-content"
-        backgroundColor={COLORS.background}
+        barStyle="light-content"
+        backgroundColor={COLORS.primary}
+        translucent={false}
       />
 
       {/* CANCELLATION CONFIRMATION MODAL */}
@@ -877,27 +883,29 @@ export default function PaymentScreen({ route, navigation }) {
         )}
 
         {/* BACK TO HOME - BLUE BUTTON */}
-        <TouchableOpacity
-          style={styles.homeButton}
-          onPress={() => {
-            if (navigation.canGoBack()) {
-              navigation.goBack();
-            } else {
-              navigation.replace("MainTabs");
-            }
-          }}
-          activeOpacity={0.8}
-        >
-          <Ionicons
-            name="home-outline"
-            size={18}
-            color="#FFFFFF"
-          />
+          <TouchableOpacity
+            style={styles.homeButton}
+            onPress={() => {
+              const parentNavigation = navigation.getParent();
 
-          <Text style={styles.homeButtonText}>
-            Back to Home
-          </Text>
-        </TouchableOpacity>
+              if (parentNavigation) {
+                parentNavigation.navigate("Home");
+              } else {
+                navigation.navigate("Home");
+              }
+            }}
+            activeOpacity={0.8}
+          >
+            <Ionicons
+              name="home-outline"
+              size={18}
+              color="#FFFFFF"
+            />
+
+            <Text style={styles.homeButtonText}>
+              Back to Home
+            </Text>
+          </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );

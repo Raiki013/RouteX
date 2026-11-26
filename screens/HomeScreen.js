@@ -464,16 +464,57 @@ export default function HomeScreen({ navigation }) {
   // NAVIGATION
   // =====================================
 
-  const openBooking = () => navigation.navigate("Booking");
-  const openTracking = () => navigation.navigate("Live Tracking");
-  const openNotifications = () => navigation.navigate("Notifications");
-  const openTripManagement = () => navigation.navigate("TripManagement");
-  const openScanner = () => navigation.navigate("OperatorTicketScanner");
-  const openTrip = () => navigation.navigate("Live Tracking");
-  const openPayment = (bookingId) =>
-    navigation.navigate("Payment", { bookingId });
-  const openTicket = (bookingId) =>
-    navigation.navigate("Ticket", { bookingId });
+  // =====================================
+// NAVIGATION
+// =====================================
+
+const openBooking = () => {
+  navigation.navigate("Booking");
+};
+
+const openTracking = () => {
+  navigation.navigate("Live Tracking");
+};
+
+const openNotifications = () => {
+  navigation.navigate("Notifications");
+};
+
+const openTripManagement = () => {
+  navigation.navigate("TripManagement");
+};
+
+const openScanner = () => {
+  navigation.navigate("OperatorTicketScanner");
+};
+
+const openTrip = () => {
+  navigation.navigate("Live Tracking");
+};
+
+const openPayment = (bookingId) => {
+  navigation.navigate("Booking", {
+    screen: "Payment",
+    params: { bookingId },
+  });
+};
+
+// FIXED: Navigate through the Booking tab's nested stack
+const openTicket = (bookingId) => {
+  if (!bookingId) {
+    showAlert(
+      "Ticket unavailable",
+      "The booking ID could not be found.",
+      "error"
+    );
+    return;
+  }
+
+  navigation.navigate("Booking", {
+    screen: "Ticket",
+    params: { bookingId },
+  });
+};
 
   // =====================================
   // FORMAT BOOKING DATE
@@ -930,6 +971,8 @@ export default function HomeScreen({ navigation }) {
                     icon: "ticket-outline",
                     value: bookings.length,
                     label: "Bookings",
+                    color: "#2563EB",
+                    background: "#DBEAFE",
                   },
                   {
                     icon: "checkmark-done-outline",
@@ -937,6 +980,8 @@ export default function HomeScreen({ navigation }) {
                       (b) => b.booking_status?.toLowerCase() === "confirmed"
                     ).length,
                     label: "Confirmed",
+                    color: "#16A34A",
+                    background: "#DCFCE7",
                   },
                   {
                     icon: "hourglass-outline",
@@ -946,19 +991,33 @@ export default function HomeScreen({ navigation }) {
                       )
                     ).length,
                     label: "Pending",
+                    color: "#D97706",
+                    background: "#FEF3C7",
                   },
                 ].map((stat) => (
                   <NeuView key={stat.label} style={styles.statCard}>
-                    <NeuView inset style={styles.statIcon}>
-                      <Ionicons name={stat.icon} size={18} color={C.blue} />
+                    <NeuView
+                      inset
+                      style={[
+                        styles.statIcon,
+                        { backgroundColor: stat.background },
+                      ]}
+                    >
+                      <Ionicons
+                        name={stat.icon}
+                        size={18}
+                        color={stat.color}
+                      />
                     </NeuView>
 
-                    <Text style={styles.statValue}>{stat.value}</Text>
+                    <Text style={[styles.statValue, { color: stat.color }]}>
+                      {stat.value}
+                    </Text>
+
                     <Text style={styles.statLabel}>{stat.label}</Text>
                   </NeuView>
                 ))}
               </View>
-
               {/* MY BOOKINGS */}
 
               <View style={styles.sectionHeader}>
